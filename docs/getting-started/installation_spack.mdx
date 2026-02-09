@@ -1,0 +1,18 @@
+1. Install Spack package manager. Spack v0.23 is recommended, new releases are not tested.
+```bash
+git clone https://github.com/spack/spack.git -b v0.22.3
+cd spack
+. share/spack/setup-env.sh
+echo ". ${PWD}/share/spack/setup-env.sh" >> ~/.bashrc
+```
+
+2. Add IOWarp repository:
+```bash
+git clone https://github.com/iowarp/iowarp-install.git
+spack repo add iowarp-install/iowarp-spack
+```
+
+3. Install IOWarp:
+```bash
+spack install iowarp
+```
