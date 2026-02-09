@@ -1,38 +1,21 @@
-# IOWarp.ai - Context Engineering Platform for AI Agents
+# IOWarp Technical Documentation
+> Technical reference for the IOWarp context orchestration platform
 
-## About
-IOWarp is a context engineering platform for autonomous AI agents in scientific computing.
-Built at Gnosis Research Center, Illinois Institute of Technology.
-Funded by NSF Award #2411318 ($5M, 2024-2029).
+## What is IOWarp?
+IOWarp is a context orchestration platform for agentic AI in scientific computing. It provides a high-performance runtime (Chimaera), SDK, and agent toolkit (CLIO Kit) for bridging AI agents with HPC infrastructure.
 
-## Key Facts
-- 7.5x performance improvement in scientific workflows
-- 15 Model Context Protocol (MCP) servers with 150+ tools
-- Deployed at 3 national laboratories (LLNL, ANL, NERSC)
-- Open source: Apache 2.0 license
+## Documentation Sections
+- Getting Started: Installation, Quick Start
+- CLIO Kit: 16 MCP servers, 150+ tools for scientific computing
+- SDK Reference: IPC, Runtime Modules, Context Transfer Engine, Context Assimilation Engine
+- API Reference: Python API (CEE), Agent API, Storage API
+- Deployment: Configuration, HPC Clusters, Performance Tuning
 
-## Main Sections
-- Platform: https://www.iowarp.ai/platform
-- Research: https://www.iowarp.ai/research
-- Documentation: https://www.iowarp.ai/docs/intro
-- News & Updates: https://www.iowarp.ai/news
-
-## RSS Feeds
-- RSS: https://www.iowarp.ai/news/rss.xml
-- Atom: https://www.iowarp.ai/news/atom.xml
-- JSON: https://www.iowarp.ai/news/feed.json
-
-## GitHub
-- Organization: https://github.com/iowarp
-- Core Platform: https://github.com/iowarp/iowarp
-- MCP Servers: https://github.com/iowarp/iowarp-mcps
-- ClaudIO Agent: https://github.com/iowarp/claudio
-- Discussions: https://github.com/orgs/iowarp/discussions
-
-## Contact
-- Email: grc@illinoistech.edu
-- Zulip Chat: https://iowarp.zulipchat.com
-- PI: Dr. Anthony Kougkas (akougkas@illinoistech.edu)
+## Key URLs
+- Documentation: https://docs.iowarp.ai
+- Website: https://iowarp.ai
+- CLIO Kit Showcase: https://toolkit.iowarp.ai
+- GitHub: https://github.com/iowarp
 
 ## License
-Apache 2.0 - https://github.com/iowarp/iowarp/blob/main/LICENSE
+BSD 3-Clause

@@ -1,3 +1,9 @@
+---
+sidebar_position: 3
+title: Performance Tuning
+description: Optimize IOWarp performance through worker threads, data placement, and storage tier configuration.
+---
+
 # Performance Tuning
 
 ## Overview

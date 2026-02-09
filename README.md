@@ -1,8 +1,8 @@
 # IOWarp Documentation
 
-Technical documentation for the [IOWarp](https://iowarp.ai) context engineering platform.
+Technical documentation for the [IOWarp](https://iowarp.ai) context orchestration platform, served at **[docs.iowarp.ai](https://docs.iowarp.ai)**.
 
-**Live site**: [docs.iowarp.ai](https://docs.iowarp.ai)
+Built with [Docusaurus 3](https://docusaurus.io/) and deployed via GitHub Pages.
 
 ## Development
 
@@ -10,34 +10,38 @@ Technical documentation for the [IOWarp](https://iowarp.ai) context engineering 
 # Install dependencies
 npm install
 
-# Start dev server
+# Start dev server (http://localhost:4000)
 npm start
 
 # Build for production
 npm run build
+
+# Serve production build locally
+npm run serve
 ```
 
 ## Structure
 
 ```
-docs/                          # Documentation markdown files
-  getting-started/             # Installation and quick start
-  deployment/                  # HPC cluster deployment
-  agent-toolkit/               # CLIO Kit MCP servers
-  sdk/                         # IOWarp SDK (Hermes, Chimaera, CLIO Transfer)
-  api/                         # Python and Storage API reference
-  faq/                         # Troubleshooting
-static/                        # Static assets
-docusaurus.config.ts           # Site configuration
-sidebars.ts                    # Sidebar navigation
+docs/
+├── intro.md                  # Welcome & overview
+├── getting-started/          # Installation, quick start
+├── clio-kit/                 # MCP servers reference
+├── sdk/                      # IPC, runtime modules, CTE, CAE
+├── api/                      # Python API, agent API, storage API
+├── deployment/               # Configuration, HPC, performance
+├── faq.md                    # FAQ & troubleshooting
+└── tutorials.md              # Step-by-step guides
 ```
 
 ## Related Sites
 
-- [iowarp.ai](https://iowarp.ai) — Main project website (Astro)
-- [toolkit.iowarp.ai](https://toolkit.iowarp.ai) — CLIO Kit MCP server showcase (Docusaurus)
-- [docs.iowarp.ai](https://docs.iowarp.ai) — This site (Docusaurus)
+| Site | URL | Repository |
+|------|-----|-----------|
+| IOWarp Website | [iowarp.ai](https://iowarp.ai) | [iowarp/iowarp.github.io](https://github.com/iowarp/iowarp.github.io) |
+| CLIO Kit Showcase | [toolkit.iowarp.ai](https://toolkit.iowarp.ai) | [iowarp/clio-kit](https://github.com/iowarp/clio-kit) |
+| Documentation | [docs.iowarp.ai](https://docs.iowarp.ai) | [iowarp/docs](https://github.com/iowarp/docs) |
 
 ## License
 
-BSD 3-Clause License. See [LICENSE](LICENSE).
+BSD 3-Clause — [Gnosis Research Center](https://grc.iit.edu/), Illinois Institute of Technology

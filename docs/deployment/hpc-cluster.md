@@ -1,3 +1,9 @@
+---
+sidebar_position: 2
+title: HPC Cluster
+description: Deploying IOWarp on HPC clusters with Spack and containers.
+---
+
 # HPC Cluster Deployment
 
 ## Spack (Manual)

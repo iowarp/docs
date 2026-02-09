@@ -1,47 +1,49 @@
+---
+slug: /intro
+sidebar_position: 1
+title: Welcome
+description: IOWarp is a context orchestration platform for agentic AI in scientific computing.
+---
+
 # Welcome to IOWarp Documentation
 
-*IOWarp is a context orchestration platform for agentic AI in scientific computing.*
+**IOWarp** is a context orchestration platform for agentic AI in scientific computing. It provides a high-performance runtime, SDK, and agent toolkit that bridges AI agents with HPC infrastructure, scientific data formats, and research workflows.
 
-## Getting Started
+## Who is this for?
 
-### For Researchers
-- [Installation Guide](./getting-started/installation.mdx)
-- [Quick Start Tutorial](./getting-started/quick-start.md)
-- [View Research Demos](https://iowarp.ai/research/demos/#earthscope)
+| Audience | Start here |
+|----------|-----------|
+| **Researchers** | [Installation Guide](./getting-started/installation) → [Quick Start](./getting-started/quick-start) |
+| **HPC Practitioners** | [Deployment Guide](./deployment/hpc-cluster) → [Configuration](./deployment/configuration) |
+| **Developers** | [SDK Reference](./sdk/interprocess) → [Python API](./api/python) |
+| **AI Researchers** | [CLIO Kit MCP Servers](./clio-kit/mcp-servers) → [Platform Overview](https://iowarp.ai/platform/) |
 
-### For HPC Practitioners
-- [Deployment Guide](./deployment/hpc-cluster.md)
-- [Configuration Reference](./deployment/configuration.md)
-- [Performance Tuning](./deployment/performance.md)
+## Architecture Overview
 
-### For Developers
-- [Platform Architecture](https://iowarp.ai/platform/)
-- [Python API Reference](./api/python-api.md)
-- [Storage API](./api/storage.md)
-- [Agents API](./api/agents.md)
+IOWarp consists of three layers:
 
-### For AI Researchers
-- [Context Engineering Overview](https://iowarp.ai/platform/)
-- [Scientific MCPs](./agent-toolkit/mcp)
-- [CLIO Agent Framework](https://iowarp.ai/platform/clio-agent/)
+1. **CLIO Agent** — The orchestration intelligence. Coordinates AI agents with scientific workflows through context engineering.
+2. **CLIO Kit** — 16 MCP servers with 150+ tools for scientific computing (HDF5, Slurm, ParaView, Pandas, ArXiv, and more).
+3. **IOWarp Runtime** (Chimaera) — High-performance distributed task execution framework with the Context Transfer Engine (CTE) and Context Assimilation Engine (CAE).
 
-<!--
-### Tutorials (Coming in Future Releases)
-- [Seismology Tutorial](./tutorials/seismology.md)
-- [Context Engineering Tutorial](./tutorials/context-engineering.md)
-- [MCP Development Tutorial](./tutorials/index.md)
--->
+## Key Capabilities
+
+- **Context Transfer Engine (CTE)** — Intelligent data buffering with multi-tier storage, automatic data placement, and zero-copy transfers
+- **Context Assimilation Engine (CAE)** — Transform and adapt data across formats and domains
+- **MCP Integration** — Model Context Protocol servers for seamless AI agent connectivity
+- **HPC-Native** — Built for Slurm clusters, POSIX/MPI-IO, and distributed scientific workflows
 
 ## Quick Links
 
 - [GitHub Organization](https://github.com/iowarp)
 - [Zulip Chat](https://iowarp.zulipchat.com)
 - [Research Publications](https://iowarp.ai/research/)
-- [News & Updates](https://iowarp.ai/news/)
+- [CLIO Kit (toolkit.iowarp.ai)](https://toolkit.iowarp.ai)
+- [IOWarp Website (iowarp.ai)](https://iowarp.ai)
 
 ## Need Help?
 
-- **Community Support** - [Join Zulip Chat](https://iowarp.zulipchat.com)
-- **Bug Reports** - [GitHub Issues](https://github.com/iowarp/iowarp/issues)
-- **Feature Requests** - [GitHub Discussions](https://github.com/orgs/iowarp/discussions)
-- **Email** - grc@illinoistech.edu
+- **Community** — [Zulip Chat](https://iowarp.zulipchat.com)
+- **Bug Reports** — [GitHub Issues](https://github.com/iowarp/iowarp/issues)
+- **Feature Requests** — [GitHub Discussions](https://github.com/orgs/iowarp/discussions)
+- **Email** — grc@illinoistech.edu

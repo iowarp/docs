@@ -1,83 +1,55 @@
 import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
 
 const sidebars: SidebarsConfig = {
-  tutorialSidebar: [
+  docsSidebar: [
     'intro',
     {
       type: 'category',
       label: 'Getting Started',
+      collapsed: false,
       items: [
         'getting-started/installation',
         'getting-started/quick-start',
-      ],
-    },
-    // Tutorials reserved for future releases
-    // {
-    //   type: 'category',
-    //   label: 'Tutorials',
-    //   items: [
-    //     'tutorials/index',
-    //   ],
-    // },
-    // Demos moved to Research section
-    // {
-    //   type: 'category',
-    //   label: 'Demos',
-    //   items: [
-    //     'demos/lammps-molecular-dynamics',
-    //     'demos/paraview-flow-visualization',
-    //     'demos/earthscope-seismology',
-    //   ],
-    // },
-    {
-      type: 'category',
-      label: 'Deployment',
-      items: [
-        'deployment/hpc-cluster',
-        'deployment/configuration',
-        'deployment/performance',
-        'deployment/monitoring',
       ],
     },
     {
       type: 'category',
       label: 'CLIO Kit',
       items: [
-        'agent-toolkit/mcp',
-        // Future sections (placeholders)
-        // 'agent-toolkit/bash',
-        // 'agent-toolkit/script',
-        // 'agent-toolkit/skills',
-        // 'agent-toolkit/plugins',
-        // 'agent-toolkit/extensions',
+        'clio-kit/mcp-servers',
       ],
     },
     {
       type: 'category',
-      label: 'IOWarp SDK',
+      label: 'SDK Reference',
       items: [
         'sdk/interprocess',
-        'sdk/runtime_modules',
-        'sdk/context_transfer',
-        'sdk/context_assimilation',
+        'sdk/runtime-modules',
+        'sdk/context-transfer',
+        'sdk/context-assimilation',
       ],
     },
     {
       type: 'category',
       label: 'API Reference',
       items: [
-        'api/python-api',
-        'api/storage',
+        'api/python',
         'api/agents',
+        'api/storage',
       ],
     },
     {
       type: 'category',
-      label: 'FAQ',
+      label: 'Deployment',
       items: [
-        'faq/index',
+        'deployment/configuration',
+        'deployment/hpc-cluster',
+        'deployment/performance',
+        'deployment/monitoring',
       ],
     },
+    'faq',
+    'tutorials',
   ],
 };
 

@@ -1,31 +1,106 @@
+---
+sidebar_position: 1
+title: Installation
+description: Install IOWarp via Docker, native build, or Spack package manager.
+---
+
 # Installation
 
-## Installation Methods
+Choose the installation method that best fits your environment.
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
-import InstallationNative from './installation_native.mdx';
-import InstallationDocker from './installation_docker.mdx';
-import InstallationSpack from './installation_spack.mdx';
 
 <Tabs>
-<TabItem value="native" label="Native Install" default>
+<TabItem value="docker" label="🐳 Docker (Recommended)" default>
 
-<InstallationNative />
+Pull and run the IOWarp Docker image:
+
+```bash
+docker pull iowarp/iowarp:latest
+```
+
+Run the container:
+
+```bash
+docker run -d -p 5555:5555 --shm-size=8g --ipc=shareable --name iowarp iowarp/iowarp:latest
+```
+
+### Using Docker Compose
+
+Create a `docker-compose.yml`:
+
+```yaml
+services:
+  iowarp-runtime:
+    image: iowarp/iowarp:latest
+    container_name: iowarp-runtime
+    volumes:
+      - ./wrp_conf.yaml:/etc/iowarp/wrp_conf.yaml:ro
+    ports:
+      - "5555:5555"
+    shm_size: 8g
+    mem_limit: 8g
+    ipc: shareable
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+```
+
+Start the service:
+
+```bash
+docker-compose up -d
+```
+
+:::info
+Shared memory (`shm_size`) and shareable IPC are required for CTE operations. See the [Configuration Reference](../deployment/configuration) for details.
+:::
 
 </TabItem>
-<TabItem value="docker" label="Docker">
+<TabItem value="native" label="⚡ Native Install">
 
-<InstallationDocker />
+Use the standalone installer script:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/iowarp/iowarp-install/main/install.sh | bash
+```
+
+This will:
+- Clone and build IOWarp core with all submodules
+- Install the IOWarp CLIO Kit
+- Set up the complete IOWarp environment
 
 </TabItem>
-<TabItem value="spack" label="Spack">
+<TabItem value="spack" label="📦 Spack">
 
-<InstallationSpack />
+1. Install Spack (v0.23 recommended):
+
+```bash
+git clone https://github.com/spack/spack.git -b v0.22.3
+cd spack
+. share/spack/setup-env.sh
+echo ". ${PWD}/share/spack/setup-env.sh" >> ~/.bashrc
+```
+
+2. Add the IOWarp repository:
+
+```bash
+git clone https://github.com/iowarp/iowarp-install.git
+spack repo add iowarp-install/iowarp-spack
+```
+
+3. Install IOWarp:
+
+```bash
+spack install iowarp
+```
 
 </TabItem>
 </Tabs>
 
 ## Next Steps
 
-- [Quick Start Tutorial](./quick-start.md)
+- [Quick Start Tutorial](./quick-start) — Run your first benchmark
+- [Configuration Reference](../deployment/configuration) — Customize your deployment
+- [CLIO Kit](../clio-kit/mcp-servers) — Explore MCP servers for AI agents

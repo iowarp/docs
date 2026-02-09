@@ -1,3 +1,9 @@
+---
+sidebar_position: 1
+title: Configuration
+description: Complete configuration reference for IOWarp runtime and CTE deployments.
+---
+
 # Configuration Reference
 
 This document describes how to configure IOWarp deployments.

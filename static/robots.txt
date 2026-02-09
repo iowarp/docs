@@ -1,22 +1,19 @@
 User-agent: *
 Allow: /
-Sitemap: https://www.iowarp.ai/sitemap.xml
-Sitemap: https://www.iowarp.ai/news-sitemap.xml
 
-# Optimize crawling
-Disallow: /build/
-Disallow: /node_modules/
-Disallow: /.docusaurus/
-Disallow: /*.json$
+User-agent: GPTBot
+Allow: /
 
-# Allow important paths
-Allow: /docs/
-Allow: /platform/
-Allow: /research/
-Allow: /community
-Allow: /news/
-Allow: /news/rss.xml
-Allow: /news/atom.xml
+User-agent: Claude-Web
+Allow: /
 
-# Crawl delay (be nice to servers)
-Crawl-delay: 1
+User-agent: Anthropic-AI
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+Sitemap: https://docs.iowarp.ai/sitemap.xml
