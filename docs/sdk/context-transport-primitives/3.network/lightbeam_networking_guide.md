@@ -1,36 +1,51 @@
-# HSHM Lightbeam Networking Guide
+# Lightbeam Networking Guide
 
 ## Overview
 
-Lightbeam is HSHM's high-performance networking abstraction layer that provides a unified interface for distributed data transfer. The current implementation supports ZeroMQ as the transport mechanism, with a two-phase messaging protocol that separates metadata from bulk data transfers.
+Lightbeam is HSHM's high-performance networking abstraction layer that provides a unified `Transport` interface for distributed data transfer. It supports three transport backends — ZeroMQ, POSIX TCP/Unix sockets, and shared memory — with a two-phase messaging protocol that separates metadata from bulk data transfers.
 
 ## Core Concepts
+
+### Unified Transport Interface
+
+All transport backends implement a single `Transport` base class with `Send()` and `Recv()` methods. You create transports through `TransportFactory::Get()` and interact with them identically regardless of the underlying mechanism.
 
 ### Two-Phase Messaging Protocol
 
 Lightbeam uses a two-phase approach to message transmission:
 
-1. **Metadata Phase**: Sends message metadata including bulk descriptors
-2. **Bulk Data Phase**: Transfers the actual data payloads
+1. **Metadata Phase**: Sends message metadata (serialized via cereal or LocalSerialize) including bulk descriptors with sizes and flags
+2. **Bulk Data Phase**: Transfers the actual data payloads for bulks marked `BULK_XFER`
 
-This separation allows receivers to:
-- Inspect message metadata before allocating buffers
-- Allocate appropriately sized buffers based on incoming data sizes
-- Handle multiple data chunks efficiently
+The `Recv()` method handles both phases automatically: it deserializes metadata, allocates receive buffers from send descriptors, and receives bulk data in a single call.
 
 ### Transport Types
 
-Currently supported transport:
-
 ```cpp
-#include <hermes_shm/lightbeam/zmq_transport.h>
+#include <hermes_shm/lightbeam/transport_factory_impl.h>
 
 namespace hshm::lbm {
-    enum class Transport {
-        kZeroMq      // ZeroMQ messaging
+    enum class TransportType {
+        kZeroMq,   // ZeroMQ (DEALER/ROUTER pattern)
+        kSocket,   // POSIX TCP or Unix domain sockets
+        kShm       // Shared memory ring buffer
+    };
+
+    enum class TransportMode {
+        kClient,   // Initiates connections
+        kServer    // Listens for connections
     };
 }
 ```
+
+**Compile-time flags:**
+
+| Flag | Description |
+|------|-------------|
+| `HSHM_ENABLE_LIGHTBEAM` | Master switch for all lightbeam transports |
+| `HSHM_ENABLE_ZMQ` | Enable ZeroMQ transport |
+
+Socket and SHM transports are always available when lightbeam is enabled.
 
 ## Data Structures
 
@@ -39,630 +54,505 @@ namespace hshm::lbm {
 Describes a memory region for data transfer:
 
 ```cpp
-namespace hshm::lbm {
-// Bulk flags
-#define BULK_EXPOSE  // Bulk is exposed (metadata only, no data transfer)
-#define BULK_XFER   // Bulk is marked for data transmission
-
 struct Bulk {
-    hipc::FullPtr<char> data;       // Pointer to data (supports shared memory)
-    size_t size;                    // Size of data in bytes
-    hshm::bitfield32_t flags;       // BULK_EXPOSE or BULK_XFER
-    void* desc = nullptr;           // RDMA memory registration descriptor
-    void* mr = nullptr;             // Memory region handle (for future RDMA support)
+    hipc::FullPtr<char> data;     // Pointer to data (supports shared memory)
+    size_t size;                  // Size of data in bytes
+    hshm::bitfield32_t flags;    // BULK_EXPOSE or BULK_XFER
+    void* desc = nullptr;        // Transport handle (e.g., zmq_msg_t*)
+    void* mr = nullptr;          // RDMA memory region handle (future)
 };
-}
 ```
 
-**Key Features:**
-- Uses `hipc::FullPtr` for shared memory compatibility
-- Can be created from raw pointers, `hipc::ShmPtr<>`, or `hipc::FullPtr`
-- Flags control bulk behavior:
-  - **BULK_EXPOSE**: Bulk metadata is sent but no data is transferred (useful for shared memory)
-  - **BULK_XFER**: Bulk marked for data transmission (data is transferred over network)
-  - Sender's `send` vector can contain bulks with either flag
-  - Only BULK_XFER bulks are actually transmitted via Send() and received via RecvBulks()
-- Prepared for future RDMA transport extensions
+**Bulk Flags:**
+
+| Flag | Description |
+|------|-------------|
+| `BULK_EXPOSE` | Metadata-only: bulk size and ShmPtr are sent, but no data bytes are transferred over the wire |
+| `BULK_XFER` | Data transfer: bulk data bytes are transmitted to the receiver |
 
 ### hshm::lbm::LbmMeta
 
 Base class for message metadata:
 
 ```cpp
-namespace hshm::lbm {
 class LbmMeta {
  public:
-    std::vector<Bulk> send;  // Bulks marked BULK_XFER (sender side)
-    std::vector<Bulk> recv;  // Bulks marked BULK_EXPOSE (receiver side)
+    std::vector<Bulk> send;        // Sender's bulk descriptors
+    std::vector<Bulk> recv;        // Receiver's bulk descriptors (populated by Recv)
+    size_t send_bulks = 0;         // Count of BULK_XFER entries in send
+    size_t recv_bulks = 0;         // Count of BULK_XFER entries in recv
+    ClientInfo client_info_;       // Client routing info (not serialized)
 };
-}
 ```
 
-**Usage:**
-- Extend `LbmMeta` to include custom metadata fields
-- Must implement cereal serialization for custom fields
-- **send vector**: Contains sender's bulk descriptors (can have BULK_EXPOSE or BULK_XFER flags)
-  - Only bulks marked BULK_XFER will be transmitted over the network
-  - Sender populates this vector with bulks to send
-- **recv vector**: Receiver's copy of send with local data pointers
-  - Server receives metadata, inspects all bulks in `send` (regardless of flag) to see data sizes
-  - Server allocates local buffers and creates `recv` bulks copying flags from `send`
-  - Only bulks marked BULK_XFER will receive data via `RecvBulks()`
-  - `recv` should mirror `send` structure but with receiver's local pointers
+Extend `LbmMeta` to include custom metadata fields. Implement a `serialize()` method that calls `LbmMeta::serialize(ar)` first:
+
+```cpp
+class MyMeta : public LbmMeta {
+ public:
+    int request_id;
+    std::string operation;
+
+    template <typename Ar>
+    void serialize(Ar& ar) {
+        LbmMeta::serialize(ar);
+        ar(request_id, operation);
+    }
+};
+```
+
+### hshm::lbm::ClientInfo
+
+Routing information returned by `Recv()`:
+
+```cpp
+struct ClientInfo {
+    int rc = 0;                // Return code (0 = success, EAGAIN = no data)
+    int fd_ = -1;              // Socket fd (SocketTransport server mode)
+    std::string identity_;     // ZMQ identity (ZeroMqTransport server mode)
+};
+```
+
+### hshm::lbm::LbmContext
+
+Context for controlling send/recv behavior:
+
+```cpp
+constexpr uint32_t LBM_SYNC = 0x1;  // Synchronous mode
+
+struct LbmContext {
+    uint32_t flags;                            // LBM_* flags
+    int timeout_ms;                            // Timeout in ms (0 = no timeout)
+    char* copy_space = nullptr;                // Ring buffer for SHM transport
+    ShmTransferInfo* shm_info_ = nullptr;      // SHM ring buffer metadata
+
+    LbmContext();                              // Default: no flags, no timeout
+    LbmContext(uint32_t f);                    // Flags only
+    LbmContext(uint32_t f, int timeout);       // Flags + timeout
+    bool IsSync() const;
+    bool HasTimeout() const;
+};
+```
 
 ## API Reference
 
-### hshm::lbm::Client Interface
+### hshm::lbm::Transport
 
-The client initiates data transfers:
+The unified interface implemented by all transports:
 
 ```cpp
-namespace hshm::lbm {
-class Client {
+class Transport {
  public:
-    // Expose memory for transfer (creates Bulk descriptor)
-    virtual Bulk Expose(const char* data, size_t data_size, u32 flags) = 0;
-    virtual Bulk Expose(const hipc::ShmPtr<>& ptr, size_t data_size, u32 flags) = 0;
-    virtual Bulk Expose(const hipc::FullPtr<char>& ptr, size_t data_size, u32 flags) = 0;
+    TransportType type_;
+    TransportMode mode_;
+
+    bool IsServer() const;
+    bool IsClient() const;
+
+    // Create a bulk descriptor for a memory region
+    virtual Bulk Expose(const hipc::FullPtr<char>& ptr, size_t data_size,
+                        u32 flags) = 0;
 
     // Send metadata and bulk data
-    template<typename MetaT>
-    int Send(MetaT &meta);
+    template <typename MetaT>
+    int Send(MetaT& meta, const LbmContext& ctx = LbmContext());
+
+    // Receive metadata and bulk data (single call)
+    template <typename MetaT>
+    ClientInfo Recv(MetaT& meta, const LbmContext& ctx = LbmContext());
+
+    // Free transport-allocated receive buffers
+    virtual void ClearRecvHandles(LbmMeta& meta);
+
+    // Server-only: get the bound address
+    virtual std::string GetAddress() const;
+
+    // Get underlying file descriptor (-1 if not applicable)
+    virtual int GetFd() const;
+
+    // Register with an EventManager for epoll-driven I/O
+    virtual void RegisterEventManager(EventManager& em);
 };
-}
 ```
 
-**Methods:**
-- `Expose()`: Registers memory for transfer, returns `Bulk` descriptor
-  - Accepts raw pointers, `hipc::ShmPtr<>`, or `hipc::FullPtr`
-  - **flags**: Use `BULK_XFER` to mark bulk for transmission
-  - Returns immediately (no actual data transfer)
-- `Send()`: Transmits metadata and bulks in the send vector
-  - Template method accepting any `LbmMeta`-derived type
-  - Serializes metadata using cereal (includes both send and recv vectors)
-  - **Only transmits bulks in `meta.send` vector**
-  - Validates all send bulks have `BULK_XFER` flag
-  - **Synchronous**: Blocks until send completes
-  - **Returns**: `0` on success, `-1` if send bulk missing BULK_XFER, other error codes on failure
+**Key methods:**
 
-### hshm::lbm::Server Interface
-
-The server receives data transfers:
-
-```cpp
-namespace hshm::lbm {
-class Server {
- public:
-    // Expose memory for receiving data
-    virtual Bulk Expose(char* data, size_t data_size, u32 flags) = 0;
-    virtual Bulk Expose(const hipc::ShmPtr<>& ptr, size_t data_size, u32 flags) = 0;
-    virtual Bulk Expose(const hipc::FullPtr<char>& ptr, size_t data_size, u32 flags) = 0;
-
-    // Two-phase receive
-    template<typename MetaT>
-    int RecvMetadata(MetaT &meta);
-
-    template<typename MetaT>
-    int RecvBulks(MetaT &meta);
-
-    // Get server address
-    virtual std::string GetAddress() const = 0;
-};
-}
-```
-
-**Methods:**
-- `Expose()`: Registers receive buffers, returns `Bulk` descriptor
-  - **flags**: Copy flags from corresponding `send` bulk to maintain consistency
-  - Must be called after `RecvMetadata()` to populate `meta.recv` with local buffers
-- `RecvMetadata()`: Receives and deserializes message metadata
-  - **Non-blocking**: Returns immediately if no message available
-  - Populates `meta.send` with sender's bulk descriptors (size and flags)
-  - Server can inspect all bulks in `meta.send` (regardless of flag) to determine buffer sizes
-  - **Returns**: `0` on success, `EAGAIN` if no message, other error codes on failure
-  - Typically used in polling loop until message arrives
-- `RecvBulks()`: Receives actual data into exposed buffers
-  - Must be called after `RecvMetadata()` succeeds and `meta.recv` is populated
-  - **Only receives data into bulks marked BULK_XFER in `meta.recv` vector**
-  - Iterates over `meta.recv` and receives only into bulks with BULK_XFER flag
-  - Bulks marked BULK_EXPOSE in recv will be skipped (no data transfer)
-  - **Synchronous**: Blocks until all WRITE bulks received
-  - **Returns**: `0` on success, error codes on failure
-- `GetAddress()`: Returns the server's bind address
+- `Expose()`: Creates a `Bulk` descriptor from a `hipc::FullPtr<char>`. No data is transferred yet.
+- `Send()`: Serializes metadata, then transmits data for each `BULK_XFER` bulk in `meta.send`. Returns `0` on success.
+- `Recv()`: Receives metadata, auto-populates `meta.recv` from `meta.send` descriptors, and receives bulk data. Returns a `ClientInfo` with `rc == 0` on success, `rc == EAGAIN` if no data is available.
+- `ClearRecvHandles()`: Frees transport-allocated buffers in `meta.recv`. Must be called after you are done with received data.
 
 ### hshm::lbm::TransportFactory
 
-Factory for creating client and server instances:
+Factory for creating transport instances:
 
 ```cpp
-namespace hshm::lbm {
 class TransportFactory {
  public:
-    static std::unique_ptr<Client> GetClient(
-        const std::string& addr, Transport t,
+    static std::unique_ptr<Transport> Get(
+        const std::string& addr, TransportType t, TransportMode mode,
         const std::string& protocol = "", int port = 0);
 
-    static std::unique_ptr<Server> GetServer(
-        const std::string& addr, Transport t,
-        const std::string& protocol = "", int port = 0);
+    static std::unique_ptr<Transport> Get(
+        const std::string& addr, TransportType t, TransportMode mode,
+        const std::string& protocol, int port, const std::string& domain);
 };
-}
 ```
+
+**Default ports/protocols when empty:**
+
+| Transport | Default Protocol | Default Port |
+|-----------|-----------------|--------------|
+| ZeroMQ | `"tcp"` | 8192 |
+| Socket | `"tcp"` | 8193 |
+| SHM | N/A | N/A |
+
+## Transport Backends
+
+### ZeroMQ Transport
+
+Uses a ROUTER/DEALER socket pattern. Server creates a ROUTER socket; clients create DEALER sockets with unique identities (hostname:PID).
+
+```cpp
+#include <hermes_shm/lightbeam/zmq_transport.h>
+
+// Direct construction
+auto server = std::make_unique<ZeroMqTransport>(
+    TransportMode::kServer, "127.0.0.1", "tcp", 8195);
+auto client = std::make_unique<ZeroMqTransport>(
+    TransportMode::kClient, "127.0.0.1", "tcp", 8195);
+```
+
+**Features:**
+- Shared ZMQ context across client instances (2 I/O threads)
+- ZMTP heartbeats for dead connection detection (1s interval, 3s timeout)
+- Zero-copy sends via `zmq_msg_init_data()`
+- Zero-copy receives when no pre-allocated buffer is provided (data pointer points directly into ZMQ message; freed by `ClearRecvHandles()`)
+- 4 MB send/recv socket buffers
+- Supports `tcp://` and `ipc://` protocols
+
+### Socket Transport
+
+Uses POSIX TCP or Unix domain sockets with scatter-gather I/O (`writev`).
+
+```cpp
+#include <hermes_shm/lightbeam/socket_transport.h>
+
+// TCP
+auto server = std::make_unique<SocketTransport>(
+    TransportMode::kServer, "127.0.0.1", "tcp", 9100);
+auto client = std::make_unique<SocketTransport>(
+    TransportMode::kClient, "127.0.0.1", "tcp", 9100);
+
+// Unix domain socket
+auto server_ipc = std::make_unique<SocketTransport>(
+    TransportMode::kServer, "/tmp/my.sock", "ipc", 0);
+auto client_ipc = std::make_unique<SocketTransport>(
+    TransportMode::kClient, "/tmp/my.sock", "ipc", 0);
+```
+
+**Features:**
+- TCP_NODELAY enabled for low-latency transfers
+- Non-blocking accept for multi-client servers
+- `EventManager` integration for epoll-driven I/O
+- Bidirectional: server can send responses back using `client_info_.fd_`
+- 4-byte length-prefixed framing (network byte order)
+- Single `writev()` syscall for metadata + all bulk data
+
+### Shared Memory Transport
+
+Uses an SPSC (single-producer, single-consumer) ring buffer for zero-network-hop transfer between threads or co-located processes. Requires a shared `LbmContext` with a pre-allocated copy space.
+
+```cpp
+#include <hermes_shm/lightbeam/shm_transport.h>
+
+ShmTransport client(TransportMode::kClient);
+ShmTransport server(TransportMode::kServer);
+
+// Set up shared copy space
+char copy_space[4096];
+ShmTransferInfo shm_info;
+shm_info.copy_space_size_ = 4096;
+
+LbmContext ctx;
+ctx.copy_space = copy_space;
+ctx.shm_info_ = &shm_info;
+
+// Send and receive must run in separate threads
+std::thread sender([&]() { client.Send(meta, ctx); });
+auto info = server.Recv(recv_meta, ctx);
+sender.join();
+```
+
+**Features:**
+- Uses `LocalSerialize` instead of cereal (no network dependencies)
+- ShmPtr passthrough: if a bulk's `alloc_id` is valid (shared memory), only the ShmPtr is transferred — no data copy
+- Private memory: if `alloc_id` is null, full data bytes are copied through the ring buffer
+- `BULK_EXPOSE` flag: only the ShmPtr is sent (no data at all)
+- Automatic chunking for data larger than the ring buffer
 
 ## Examples
 
 ### Basic Client-Server Communication
 
 ```cpp
-#include <hermes_shm/lightbeam/zmq_transport.h>
-#include <iostream>
-#include <vector>
-#include <thread>
-#include <chrono>
-#include <errno.h>
+#include <hermes_shm/lightbeam/transport_factory_impl.h>
 
 using namespace hshm::lbm;
 
 void basic_example() {
-    // Server setup
-    std::string addr = "127.0.0.1";
-    std::string protocol = "tcp";
-    int port = 8888;
+    // Create server and client via factory
+    auto server = TransportFactory::Get(
+        "127.0.0.1", TransportType::kSocket, TransportMode::kServer, "tcp", 9200);
+    auto client = TransportFactory::Get(
+        "127.0.0.1", TransportType::kSocket, TransportMode::kClient, "tcp", 9200);
 
-    auto server = hshm::lbm::TransportFactory::GetServer(addr, hshm::lbm::Transport::kZeroMq,
-                                             protocol, port);
-    auto client = hshm::lbm::TransportFactory::GetClient(addr, hshm::lbm::Transport::kZeroMq,
-                                             protocol, port);
-
-    // Give ZMQ time to establish connection
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-    // CLIENT: Prepare and send data
+    // Prepare data
     const char* message = "Hello, Lightbeam!";
     size_t message_size = strlen(message);
 
+    // Client: expose memory and send
     LbmMeta send_meta;
-    Bulk bulk = client->Expose(message, message_size, BULK_XFER);
-    send_meta.send.push_back(bulk);
+    send_meta.send.push_back(
+        client->Expose(hipc::FullPtr<char>(const_cast<char*>(message)),
+                       message_size, BULK_XFER));
 
     int rc = client->Send(send_meta);
-    if (rc != 0) {
-        std::cerr << "Send failed with error: " << rc << "\n";
-        return;
-    }
-    std::cout << "Client sent data successfully\n";
+    assert(rc == 0);
 
-    // SERVER: Receive metadata (poll until available)
+    // Server: receive with retry loop
     LbmMeta recv_meta;
-    while (true) {
-        rc = server->RecvMetadata(recv_meta);
-        if (rc == 0) break;
-        if (rc != EAGAIN) {
-            std::cerr << "RecvMetadata failed with error: " << rc << "\n";
-            return;
+    ClientInfo info;
+    do {
+        info = server->Recv(recv_meta);
+        if (info.rc == EAGAIN) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
-    std::cout << "Server received metadata with "
-              << recv_meta.send.size() << " bulks\n";
+    } while (info.rc == EAGAIN);
+    assert(info.rc == 0);
 
-    // SERVER: Allocate buffer based on sender's bulk size and copy flags from send
-    std::vector<char> buffer(recv_meta.send[0].size);
-    recv_meta.recv.push_back(server->Expose(buffer.data(), buffer.size(),
-                                            recv_meta.send[0].flags.bits_));
+    // Access received data
+    std::string received(recv_meta.recv[0].data.ptr_,
+                         recv_meta.recv[0].size);
 
-    rc = server->RecvBulks(recv_meta);
-    if (rc != 0) {
-        std::cerr << "RecvBulks failed with error: " << rc << "\n";
-        return;
-    }
-    std::cout << "Server received: "
-              << std::string(buffer.data(), buffer.size()) << "\n";
+    // Free transport-allocated buffers
+    server->ClearRecvHandles(recv_meta);
 }
 ```
 
 ### Custom Metadata with Multiple Bulks
 
 ```cpp
-#include <hermes_shm/lightbeam/zmq_transport.h>
-#include <cereal/archives/binary.hpp>
-#include <cereal/types/string.hpp>
-#include <cereal/types/vector.hpp>
+#include <hermes_shm/lightbeam/transport_factory_impl.h>
 
 using namespace hshm::lbm;
 
-// Custom metadata class
 class RequestMeta : public LbmMeta {
  public:
     int request_id;
     std::string operation;
-    std::string client_name;
+
+    template <typename Ar>
+    void serialize(Ar& ar) {
+        LbmMeta::serialize(ar);
+        ar(request_id, operation);
+    }
 };
 
-// Cereal serialization
-namespace cereal {
-    template<class Archive>
-    void serialize(Archive& ar, RequestMeta& meta) {
-        ar(meta.send, meta.recv, meta.request_id, meta.operation, meta.client_name);
-    }
-}
-
 void custom_metadata_example() {
-    auto server = std::make_unique<hshm::lbm::ZeroMqServer>("127.0.0.1", "tcp", 8889);
-    auto client = std::make_unique<hshm::lbm::ZeroMqClient>("127.0.0.1", "tcp", 8889);
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    auto server = TransportFactory::Get(
+        "127.0.0.1", TransportType::kSocket, TransportMode::kServer, "tcp", 9201);
+    auto client = TransportFactory::Get(
+        "127.0.0.1", TransportType::kSocket, TransportMode::kClient, "tcp", 9201);
 
-    // CLIENT: Send multiple data chunks with metadata
     const char* data1 = "First chunk";
     const char* data2 = "Second chunk";
 
     RequestMeta send_meta;
     send_meta.request_id = 42;
     send_meta.operation = "write";
-    send_meta.client_name = "client_01";
+    send_meta.send.push_back(
+        client->Expose(hipc::FullPtr<char>(const_cast<char*>(data1)),
+                       strlen(data1), BULK_XFER));
+    send_meta.send.push_back(
+        client->Expose(hipc::FullPtr<char>(const_cast<char*>(data2)),
+                       strlen(data2), BULK_XFER));
 
-    send_meta.send.push_back(client->Expose(data1, strlen(data1), BULK_XFER));
-    send_meta.send.push_back(client->Expose(data2, strlen(data2), BULK_XFER));
+    client->Send(send_meta);
 
-    int rc = client->Send(send_meta);
-    if (rc != 0) {
-        std::cerr << "Send failed\n";
-        return;
-    }
-
-    // SERVER: Receive metadata (poll until available)
+    // Server receives everything in one call
     RequestMeta recv_meta;
+    ClientInfo info;
+    do {
+        info = server->Recv(recv_meta);
+    } while (info.rc == EAGAIN);
+
+    // Access metadata and bulk data
+    assert(recv_meta.request_id == 42);
+    assert(recv_meta.operation == "write");
+    std::string chunk0(recv_meta.recv[0].data.ptr_, recv_meta.recv[0].size);
+    std::string chunk1(recv_meta.recv[1].data.ptr_, recv_meta.recv[1].size);
+
+    server->ClearRecvHandles(recv_meta);
+}
+```
+
+### Bidirectional Communication (Socket Transport)
+
+```cpp
+void bidirectional_example() {
+    auto server = std::make_unique<SocketTransport>(
+        TransportMode::kServer, "127.0.0.1", "tcp", 9202);
+    auto client = std::make_unique<SocketTransport>(
+        TransportMode::kClient, "127.0.0.1", "tcp", 9202);
+
+    // Client sends a request
+    const char* request = "client_request";
+    LbmMeta send_meta;
+    send_meta.send.push_back(client->Expose(
+        hipc::FullPtr<char>(const_cast<char*>(request)),
+        strlen(request), BULK_XFER));
+    client->Send(send_meta);
+
+    // Server receives the request
+    LbmMeta recv_meta;
+    ClientInfo info;
+    do { info = server->Recv(recv_meta); } while (info.rc == EAGAIN);
+
+    // Server sends a response back using the client's fd
+    const char* response = "server_response";
+    LbmMeta resp_meta;
+    resp_meta.client_info_.fd_ = info.fd_;  // Route back to this client
+    resp_meta.send.push_back(server->Expose(
+        hipc::FullPtr<char>(const_cast<char*>(response)),
+        strlen(response), BULK_XFER));
+    server->Send(resp_meta);
+
+    // Client receives the response
+    LbmMeta client_recv;
+    ClientInfo client_info;
+    do { client_info = client->Recv(client_recv); } while (client_info.rc == EAGAIN);
+
+    server->ClearRecvHandles(recv_meta);
+    client->ClearRecvHandles(client_recv);
+}
+```
+
+### EventManager-Driven Server
+
+```cpp
+#include <hermes_shm/lightbeam/socket_transport.h>
+
+void event_driven_example() {
+    auto server = std::make_unique<SocketTransport>(
+        TransportMode::kServer, "127.0.0.1", "tcp", 9203);
+
+    EventManager em;
+    server->RegisterEventManager(em);
+
+    // Accept clients, send data, then:
     while (true) {
-        rc = server->RecvMetadata(recv_meta);
-        if (rc == 0) break;
-        if (rc != EAGAIN) {
-            std::cerr << "RecvMetadata failed: " << rc << "\n";
-            return;
+        int nfds = em.Wait(100000);  // 100ms timeout (in microseconds)
+        if (nfds <= 0) continue;
+
+        LbmMeta recv_meta;
+        auto info = server->Recv(recv_meta);
+        if (info.rc == 0) {
+            // Process message
+            server->ClearRecvHandles(recv_meta);
         }
+    }
+}
+```
+
+### Shared Memory Transport
+
+```cpp
+#include <hermes_shm/lightbeam/shm_transport.h>
+#include <hermes_shm/lightbeam/transport_factory_impl.h>
+
+void shm_example() {
+    // Create shared copy space
+    constexpr size_t kCopySpaceSize = 4096;
+    char copy_space[kCopySpaceSize] = {};
+    ShmTransferInfo shm_info;
+    shm_info.copy_space_size_ = kCopySpaceSize;
+
+    LbmContext ctx;
+    ctx.copy_space = copy_space;
+    ctx.shm_info_ = &shm_info;
+
+    auto client = TransportFactory::Get("", TransportType::kShm, TransportMode::kClient);
+    auto server = TransportFactory::Get("", TransportType::kShm, TransportMode::kServer);
+
+    const char* data = "Hello via shared memory";
+    LbmMeta send_meta;
+    send_meta.send.push_back(
+        client->Expose(hipc::FullPtr<char>(const_cast<char*>(data)),
+                       strlen(data), BULK_XFER));
+
+    // Must run sender and receiver in separate threads
+    int send_rc = -1;
+    std::thread sender([&]() {
+        send_rc = client->Send(send_meta, ctx);
+    });
+
+    LbmMeta recv_meta;
+    auto info = server->Recv(recv_meta, ctx);
+    sender.join();
+
+    assert(info.rc == 0);
+    assert(send_rc == 0);
+
+    std::string received(recv_meta.recv[0].data.ptr_, recv_meta.recv[0].size);
+    server->ClearRecvHandles(recv_meta);
+}
+```
+
+## Error Handling
+
+All `Send()` calls return an integer error code. `Recv()` returns a `ClientInfo` struct with an `rc` field.
+
+| Return Code | Meaning |
+|-------------|---------|
+| `0` | Success |
+| `EAGAIN` | No data available (non-blocking recv) |
+| `-1` | Generic error (deserialization failure, invalid state) |
+| Other positive values | System `errno` or ZMQ error codes |
+
+**Polling pattern:**
+
+```cpp
+ClientInfo info;
+do {
+    info = server->Recv(meta);
+    if (info.rc == EAGAIN) {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
+} while (info.rc == EAGAIN);
 
-    std::cout << "Request ID: " << recv_meta.request_id << "\n";
-    std::cout << "Operation: " << recv_meta.operation << "\n";
-    std::cout << "Client: " << recv_meta.client_name << "\n";
-    std::cout << "Number of bulks: " << recv_meta.send.size() << "\n";
-
-    // SERVER: Allocate buffers based on sender's bulk sizes and copy flags from send
-    std::vector<std::vector<char>> buffers;
-    for (size_t i = 0; i < recv_meta.send.size(); ++i) {
-        buffers.emplace_back(recv_meta.send[i].size);
-        recv_meta.recv.push_back(server->Expose(buffers[i].data(),
-                                                 buffers[i].size(),
-                                                 recv_meta.send[i].flags.bits_));
-    }
-
-    rc = server->RecvBulks(recv_meta);
-    if (rc != 0) {
-        std::cerr << "RecvBulks failed\n";
-        return;
-    }
-
-    for (size_t i = 0; i < buffers.size(); ++i) {
-        std::cout << "Chunk " << i << ": "
-                  << std::string(buffers[i].begin(), buffers[i].end()) << "\n";
-    }
-}
-```
-
-### Working with Shared Memory Pointers
-
-```cpp
-#include <hermes_shm/lightbeam/zmq_transport.h>
-#include <hermes_shm/memory/memory_manager.h>
-
-using namespace hshm::lbm;
-
-void shared_memory_example() {
-    // Assume memory manager is initialized
-    hipc::Allocator* alloc = HSHM_MEMORY_MANAGER->GetDefaultAllocator();
-
-    // Allocate shared memory
-    size_t data_size = 1024;
-    hipc::ShmPtr<> shm_ptr = alloc->Allocate(data_size);
-    hipc::FullPtr<char> full_ptr(shm_ptr);
-
-    // Write data to shared memory
-    memcpy(full_ptr.ptr_, "Shared memory data", 18);
-
-    // Create client and expose shared memory
-    auto client = std::make_unique<hshm::lbm::ZeroMqClient>("127.0.0.1", "tcp", 8890);
-
-    LbmMeta meta;
-    // Can use either hipc::ShmPtr<> or hipc::FullPtr directly
-    meta.send.push_back(client->Expose(full_ptr, data_size, BULK_XFER));
-
-    int rc = client->Send(meta);
-    if (rc != 0) {
-        std::cerr << "Send failed\n";
-    }
-
-    // Free shared memory
-    alloc->Free(shm_ptr);
-}
-```
-
-### Distributed MPI Communication
-
-```cpp
-#include <hermes_shm/lightbeam/zmq_transport.h>
-#include <mpi.h>
-
-using namespace hshm::lbm;
-
-void distributed_example() {
-    MPI_Init(nullptr, nullptr);
-
-    int my_rank, world_size;
-    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
-
-    std::string addr = "127.0.0.1";
-    int base_port = 9000;
-
-    // Each rank creates a server on a unique port
-    auto server = hshm::lbm::TransportFactory::GetServer(
-        addr, hshm::lbm::Transport::kZeroMq, "tcp", base_port + my_rank);
-
-    // Rank 0 sends to all other ranks
-    if (my_rank == 0) {
-        std::vector<std::unique_ptr<hshm::lbm::Client>> clients;
-        for (int i = 1; i < world_size; ++i) {
-            clients.push_back(hshm::lbm::TransportFactory::GetClient(
-                addr, hshm::lbm::Transport::kZeroMq, "tcp", base_port + i));
-        }
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
-
-        for (size_t i = 0; i < clients.size(); ++i) {
-            std::string msg = "Message to rank " + std::to_string(i + 1);
-
-            LbmMeta meta;
-            meta.send.push_back(clients[i]->Expose(msg.data(), msg.size(), BULK_XFER));
-
-            int rc = clients[i]->Send(meta);
-            if (rc != 0) {
-                std::cerr << "Send failed to rank " << (i + 1) << "\n";
-            }
-        }
-    } else {
-        // Other ranks receive from rank 0
-        LbmMeta meta;
-        int rc = server->RecvMetadata(meta);
-        while (rc == EAGAIN) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            rc = server->RecvMetadata(meta);
-        }
-        if (rc != 0) {
-            std::cerr << "RecvMetadata failed\n";
-            MPI_Finalize();
-            return;
-        }
-
-        std::vector<char> buffer(meta.send[0].size);
-        meta.recv.push_back(server->Expose(buffer.data(), buffer.size(), meta.send[0].flags.bits_));
-
-        rc = server->RecvBulks(meta);
-        if (rc != 0) {
-            std::cerr << "RecvBulks failed\n";
-            MPI_Finalize();
-            return;
-        }
-
-        std::cout << "Rank " << my_rank << " received: "
-                  << std::string(buffer.begin(), buffer.end()) << "\n";
-    }
-
-    MPI_Finalize();
+if (info.rc != 0) {
+    // Handle error
 }
 ```
 
 ## Best Practices
 
-### 1. Connection Management
+1. **Always call `ClearRecvHandles()`** after processing received data to free transport-allocated buffers (ZMQ messages, malloc'd memory).
 
-```cpp
-// Give ZMQ time to establish connections
-std::this_thread::sleep_for(std::chrono::milliseconds(100));
+2. **Data lifetime**: Ensure data passed to `Expose()` remains valid until `Send()` completes.
 
-// Store clients/servers in containers for reuse
-std::vector<std::unique_ptr<Client>> client_pool;
-```
+3. **Serialization**: Always call `LbmMeta::serialize(ar)` first in custom metadata serialize methods.
 
-### 2. Error Handling
+4. **ZMQ connection time**: ZMQ uses asynchronous connection establishment. The constructor polls for up to 5 seconds for the connection to be ready.
 
-```cpp
-int rc = client->Send(meta);
-if (rc != 0) {
-    std::cerr << "Send failed with error code: " << rc << "\n";
-    // Implement retry logic
-}
-```
+5. **Large TCP transfers**: For data larger than the TCP buffer size, run `Send()` and `Recv()` in separate threads to avoid deadlock.
 
-### 3. Polling for Receive
+6. **SHM ring buffer sizing**: Choose a copy space size that balances memory usage with throughput. Data larger than the ring buffer is automatically chunked.
 
-```cpp
-// Poll for metadata until available
-int rc = server->RecvMetadata(meta);
-while (rc == EAGAIN) {
-    // Do other work or sleep briefly
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    rc = server->RecvMetadata(meta);
-}
-if (rc != 0) {
-    std::cerr << "Error: " << rc << "\n";
-}
-```
+7. **EventManager**: Use `RegisterEventManager()` and `em.Wait()` for efficient multi-client servers instead of busy-polling.
 
-### 4. Memory Management
+## Related Documentation
 
-```cpp
-// Ensure data lifetime during transfer
-{
-    std::vector<char> data(1024);
-    Bulk bulk = client->Expose(data.data(), data.size(), BULK_XFER);
-    LbmMeta meta;
-    meta.send.push_back(bulk);
-    // data must remain valid until Send() completes
-    int rc = client->Send(meta);
-} // data destroyed after Send completes
-```
-
-### 5. Send and Recv Vector Usage
-
-```cpp
-// CLIENT: Populate send vector with BULK_XFER bulks
-LbmMeta send_meta;
-send_meta.send.push_back(client->Expose(data1, size1, BULK_XFER));
-send_meta.send.push_back(client->Expose(data2, size2, BULK_XFER));
-
-// Send transmits only bulks in send vector
-int rc = client->Send(send_meta);
-
-// SERVER: Receive metadata and inspect send vector for sizes
-LbmMeta recv_meta;
-while ((rc = server->RecvMetadata(recv_meta)) == EAGAIN) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
-}
-
-// Allocate buffers based on sender's bulk sizes and copy flags from send
-for (size_t i = 0; i < recv_meta.send.size(); ++i) {
-    std::vector<char> buffer(recv_meta.send[i].size);
-    recv_meta.recv.push_back(server->Expose(buffer.data(), buffer.size(),
-                                            recv_meta.send[i].flags.bits_));
-}
-
-// RecvBulks receives into recv vector only
-server->RecvBulks(recv_meta);
-```
-
-### 6. Custom Metadata Serialization
-
-```cpp
-// Always serialize send and recv vectors first in custom metadata
-namespace cereal {
-    template<class Archive>
-    void serialize(Archive& ar, CustomMeta& meta) {
-        ar(meta.send, meta.recv);  // Serialize base class vectors first
-        ar(meta.custom_field1, meta.custom_field2);  // Then custom fields
-    }
-}
-```
-
-### 7. Buffer Allocation Strategy
-
-```cpp
-// Receive metadata and inspect send vector for sizes
-LbmMeta meta;
-int rc = server->RecvMetadata(meta);
-while (rc == EAGAIN) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    rc = server->RecvMetadata(meta);
-}
-if (rc != 0) {
-    return;
-}
-
-// Allocate buffers based on sender's bulk sizes in send vector
-std::vector<std::vector<char>> buffers;
-for (const auto& bulk : meta.send) {
-    buffers.emplace_back(bulk.size);  // Allocate exact size from sender
-}
-
-// Populate recv vector with exposed buffers, copying flags from send
-for (size_t i = 0; i < buffers.size(); ++i) {
-    meta.recv.push_back(server->Expose(buffers[i].data(), buffers[i].size(),
-                                       meta.send[i].flags.bits_));
-}
-```
-
-### 8. Multi-Threading
-
-```cpp
-// Use separate server thread for receiving
-std::atomic<bool> running{true};
-std::thread server_thread([&server, &running]() {
-    while (running) {
-        LbmMeta meta;
-        int rc = server->RecvMetadata(meta);
-        if (rc == 0) {
-            // Process message
-        } else if (rc != EAGAIN) {
-            std::cerr << "Error: " << rc << "\n";
-            break;
-        }
-    }
-});
-```
-
-## Error Codes
-
-### Return Values
-
-All operations return an integer error code:
-
-- **0**: Success
-- **EAGAIN**: No data available (RecvMetadata only)
-- **Positive values**: System error codes (from `errno.h` or `zmq_errno()`)
-- **-1**: Generic error (e.g., deserialization failure, message part mismatch)
-
-### Common ZMQ Error Codes
-
-- **EAGAIN (11)**: Resource temporarily unavailable (non-blocking operation would block)
-- **EINTR (4)**: Interrupted system call
-- **ETERM (156384763)**: Context was terminated
-- **ENOTSOCK (88)**: Invalid socket
-- **EMSGSIZE (90)**: Message too large
-
-### Checking Errors
-
-```cpp
-int rc = server->RecvMetadata(meta);
-if (rc == EAGAIN) {
-    // No data available, try again later
-} else if (rc != 0) {
-    // Error occurred
-    std::cerr << "Error " << rc << ": " << strerror(rc) << "\n";
-}
-```
-
-## Performance Considerations
-
-1. **Metadata Overhead**: Keep custom metadata small - it's serialized/deserialized on every message
-
-2. **Bulk Count**: Minimize the number of bulks per message when possible
-
-3. **Buffer Reuse**: Reuse allocated buffers across multiple receives
-
-4. **Connection Pooling**: Create clients once and reuse them
-
-5. **Serialization Cost**: Use efficient serialization for custom metadata
-
-6. **Polling Interval**: Balance between responsiveness and CPU usage when polling
-   - Too frequent: Wastes CPU cycles
-   - Too infrequent: Adds latency
-
-7. **Blocking vs Polling**:
-   - `Send()` and `RecvBulks()` are synchronous/blocking
-   - `RecvMetadata()` can be polled with EAGAIN handling
-
-## Limitations and Future Work
-
-**Current Limitations:**
-- Only ZeroMQ transport is implemented
-- RecvMetadata polling required (returns EAGAIN)
-- No built-in timeout mechanism
-- Limited to TCP protocol
-
-**Future Enhancements:**
-- Thallium/Mercury transport for RPC-style communication
-- Libfabric transport for RDMA operations
-- Timeout support for operations
-- Built-in retry mechanisms
-- Protocol negotiation and versioning
-- Connection multiplexing
-- Async/await style API with callbacks
+- [EventManager Guide](./event_manager_guide) - Epoll-based event loop for I/O multiplexing
+- [LocalSerialize Guide](./local_serialize_guide) - Binary serialization used by SHM transport

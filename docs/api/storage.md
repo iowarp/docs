@@ -20,7 +20,7 @@ The Storage API documentation is being developed. This will cover:
 Storage operations are currently available through:
 
 1. **Python API** — High-level blob operations via [Python bindings](./python)
-2. **C++ SDK** — Native CTE client for high-performance applications (see [Context Transfer Engine](../sdk/context-transfer))
+2. **C++ SDK** — Native CTE client for high-performance applications (see [Context Transfer Engine](../sdk/context-transfer-engine/cte))
 3. **Docker Runtime** — Container-based deployment with YAML configuration (see [Configuration](../deployment/configuration))
 
 ## Configuration

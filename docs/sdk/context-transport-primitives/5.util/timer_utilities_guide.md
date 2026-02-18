@@ -1,4 +1,4 @@
-# HSHM Timer Utilities Guide
+# Timer Utilities Guide
 
 ## Overview
 

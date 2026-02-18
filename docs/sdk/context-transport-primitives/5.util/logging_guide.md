@@ -1,4 +1,4 @@
-# Hermes SHM Logging Guide
+# Logging Guide
 
 This guide covers the HILOG and HELOG logging macros provided by Hermes Shared Memory (HSHM) for structured logging and error reporting.
 

@@ -1,4 +1,4 @@
-# HSHM Singleton Utilities Guide
+# Singleton Utilities Guide
 
 ## Overview
 

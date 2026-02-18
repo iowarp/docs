@@ -196,7 +196,7 @@ The `wrp_cae_omni` utility is the primary tool for processing OMNI files. It loa
 #### Prerequisites
 
 1. **Chimaera runtime must be running**
-2. **CAE container must be created** using `chimaera compose` (see [Launch Guide](launch.md))
+2. **CAE container must be created** using `chimaera compose` (see [Configuration](../../deployment/configuration))
 3. **CTE container must be configured** for blob storage
 
 #### Basic Usage
@@ -372,8 +372,8 @@ Planned enhancements to the OMNI format:
 
 ## Related Documentation
 
-- [CAE Launch Guide](launch.md) - How to launch CAE using chimaera compose
-- [CTE Configuration](../context-transfer-engine/config.md) - CTE storage configuration
+- [Deployment Configuration](../../deployment/configuration) - How to launch CAE using chimaera compose
+- [CTE Documentation](../context-transfer-engine/cte) - CTE storage documentation
 - [Chimaera Compose](../context-runtime/2.module_dev_guide.md) - Compose configuration format
 - [Module Development Guide](../context-runtime/2.module_dev_guide.md) - ChiMod development
 

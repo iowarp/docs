@@ -1,4 +1,4 @@
-# HSHM Environment Variables Guide
+# Environment Variables Guide
 
 ## Overview
 

@@ -113,7 +113,7 @@ const config: Config = {
           title: 'Documentation',
           items: [
             {label: 'Getting Started', to: '/docs/getting-started/installation'},
-            {label: 'SDK Reference', to: '/docs/sdk/context-runtime/deployment'},
+            {label: 'SDK Reference', to: '/docs/sdk'},
             {label: 'API Reference', to: '/docs/api/python'},
             {label: 'Deployment', to: '/docs/deployment/configuration'},
           ],

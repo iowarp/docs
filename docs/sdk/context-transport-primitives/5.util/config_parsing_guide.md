@@ -1,4 +1,4 @@
-# HSHM Configuration Parsing Guide
+# Configuration Parsing Guide
 
 ## Overview
 

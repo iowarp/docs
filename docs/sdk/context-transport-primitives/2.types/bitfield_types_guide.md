@@ -1,4 +1,4 @@
-# HSHM Bitfield Types Guide
+# Bitfield Types Guide
 
 ## Overview
 

@@ -1,4 +1,4 @@
-# HSHM Dynamic Libraries Guide
+# Dynamic Libraries Guide
 
 ## Overview
 

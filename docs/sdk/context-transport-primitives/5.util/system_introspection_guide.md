@@ -1,4 +1,4 @@
-# HSHM System Introspection Guide
+# System Introspection Guide
 
 ## Overview
 

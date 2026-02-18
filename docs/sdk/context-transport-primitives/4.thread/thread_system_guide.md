@@ -1,4 +1,4 @@
-# HSHM Thread System Guide
+# Thread System Guide
 
 ## Overview
 

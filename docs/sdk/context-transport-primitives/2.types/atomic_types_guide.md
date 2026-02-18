@@ -1,4 +1,4 @@
-# HSHM Atomic Types Guide
+# Atomic Types Guide
 
 ## Overview
 
