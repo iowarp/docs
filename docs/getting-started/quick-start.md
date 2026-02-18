@@ -1,7 +1,7 @@
 ---
 sidebar_position: 2
 title: Quick Start
-description: Get IOWarp running with Docker in 5 minutes and run your first benchmarks.
+description: Get IOWarp running with Docker in 5 minutes.
 ---
 
 # Quick Start Tutorial
@@ -13,9 +13,34 @@ Get IOWarp running with Docker in 5 minutes. This tutorial walks you through run
 - Docker and Docker Compose installed
 - At least 8 GB of available RAM
 
-## 1. Create Configuration
+## 1. Start the Runtime
 
-Create a `chimaera.yaml` file:
+The `docker/quickstart/` directory contains everything you need. From the repository root:
+
+```bash
+cd docker/quickstart
+docker compose up -d
+```
+
+This starts a single-node Chimaera runtime using the pre-built `iowarp/deploy-cpu` image.
+
+### Verify it's running
+
+```bash
+docker compose logs
+```
+
+You should see output indicating that worker threads have been spawned and modules loaded. Look for `SpawnWorkerThreads` in the output.
+
+### Stop the runtime
+
+```bash
+docker compose down
+```
+
+## 2. Configuration
+
+The quickstart ships with a ready-to-use `chimaera.yaml`. Here is a minimal configuration for reference:
 
 ```yaml
 # IOWarp Runtime Configuration
@@ -64,54 +89,26 @@ compose:
 | `capacity_limit` | Max capacity (`KB`, `MB`, `GB`, `TB`) |
 | `score` | Tier priority: `0.0` = lowest, `1.0` = highest |
 
-## 2. Start the Runtime
+### Docker Compose Details
 
-Create a `docker-compose.yml`:
+The `docker-compose.yml` mounts the config at `/etc/iowarp/chimaera.yaml` and sets the `CHI_SERVER_CONF` environment variable so the runtime finds it:
 
 ```yaml
 services:
   iowarp:
     image: iowarp/deploy-cpu:latest
-    container_name: iowarp
+    container_name: iowarp-quickstart
     hostname: iowarp
     volumes:
-      - ./chimaera.yaml:/home/iowarp/.chimaera/chimaera.yaml:ro
+      - ./chimaera.yaml:/etc/iowarp/chimaera.yaml:ro
+    environment:
+      - CHI_SERVER_CONF=/etc/iowarp/chimaera.yaml
     ports:
       - "5555:5555"
     mem_limit: 8g
     command: ["chimaera", "runtime", "start"]
     restart: unless-stopped
 ```
-
-Start it:
-
-```bash
-docker compose up -d
-```
-
-## 3. Run Benchmarks
-
-The `docker/wrp_cte_bench/` directory contains a complete Docker Compose setup for running CTE benchmarks:
-
-```bash
-cd docker/wrp_cte_bench
-
-# Run default benchmark (Put test)
-docker compose up
-
-# Run specific test with custom parameters
-TEST_CASE=Get IO_SIZE=4m IO_COUNT=1000 docker compose up
-```
-
-### Benchmark Parameters
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `TEST_CASE` | `Put` | `Put`, `Get`, or `PutGet` |
-| `NUM_PROCS` | `1` | Number of parallel processes |
-| `DEPTH` | `4` | Queue depth for concurrent operations |
-| `IO_SIZE` | `1m` | I/O operation size (`b`, `k`, `m`, `g`) |
-| `IO_COUNT` | `100` | Number of operations |
 
 ## Next Steps
 

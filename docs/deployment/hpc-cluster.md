@@ -81,9 +81,6 @@ export CHI_SERVER_CONF=/etc/iowarp/config.yaml
 # 2. Start the runtime in the background
 chimaera runtime start &
 
-# 3. Wait for initialization
-sleep 2
-
 # 4. (Optional) Create pools from the compose section
 chimaera compose $CHI_SERVER_CONF
 

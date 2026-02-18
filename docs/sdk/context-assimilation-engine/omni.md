@@ -374,8 +374,8 @@ Planned enhancements to the OMNI format:
 
 - [CAE Launch Guide](launch.md) - How to launch CAE using chimaera compose
 - [CTE Configuration](../context-transfer-engine/config.md) - CTE storage configuration
-- [Chimaera Compose](../context-runtime/module_dev_guide.md) - Compose configuration format
-- [Module Development Guide](../context-runtime/module_dev_guide.md) - ChiMod development
+- [Chimaera Compose](../context-runtime/2.module_dev_guide.md) - Compose configuration format
+- [Module Development Guide](../context-runtime/2.module_dev_guide.md) - ChiMod development
 
 ---
 
