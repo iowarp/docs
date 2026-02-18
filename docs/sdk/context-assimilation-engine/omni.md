@@ -1,14 +1,8 @@
----
-sidebar_position: 4
-title: Context Assimilation Engine
-description: SDK reference for the CLIO Ingest Engine (CAE) — OMNI configuration format for data transfer operations.
----
-
-# Context Assimilation Engine (CAE) SDK
+# OMNI File Format Documentation
 
 ## Overview
 
-OMNI (Object Migration and Negotiation Interface) is a YAML-based configuration format used by the CLIO Ingest Engine (formerly CAE) to describe data transfer operations. An OMNI file specifies one or more data transfers from source locations to destinations, with support for various formats, dependencies, and partial transfers.
+OMNI (Object Migration and Negotiation Interface) is a YAML-based configuration format used by the Content Assimilation Engine (CAE) to describe data transfer operations. An OMNI file specifies one or more data transfers from source locations to destinations, with support for various formats, dependencies, and partial transfers.
 
 ## File Structure
 
@@ -202,7 +196,7 @@ The `wrp_cae_omni` utility is the primary tool for processing OMNI files. It loa
 #### Prerequisites
 
 1. **Chimaera runtime must be running**
-2. **CAE container must be created** using `chimaera_compose`
+2. **CAE container must be created** using `chimaera compose` (see [Launch Guide](launch.md))
 3. **CTE container must be configured** for blob storage
 
 #### Basic Usage
@@ -221,11 +215,11 @@ wrp_cae_omni /path/to/transfer_config.yaml
 ```bash
 # 1. Start runtime
 export WRP_RUNTIME_CONF=/etc/iowarp/config.yaml
-chimaera_start_runtime &
+chimaera runtime start &
 sleep 2
 
 # 2. Create CAE container (if not already created)
-chimaera_compose /path/to/cae_config.yaml
+chimaera compose /path/to/cae_config.yaml
 
 # 3. Process OMNI file
 wrp_cae_omni /path/to/omni_file.yaml
@@ -266,7 +260,7 @@ ParseOmni completed successfully!
 
 **Error: "Chimaera IPC not initialized. Is the runtime running?"**
 - **Cause**: Runtime not started
-- **Solution**: Start runtime with `chimaera_start_runtime`
+- **Solution**: Start runtime with `chimaera runtime start`
 
 **Error: "Failed to load OMNI file"**
 - **Cause**: Invalid YAML syntax or missing file
@@ -291,7 +285,7 @@ std::vector<wrp_cae::core::AssimilationCtx> LoadOmni(const std::string& omni_pat
 try {
   auto contexts = LoadOmni("/path/to/config.yaml");
   // Pass to ParseOmni
-  cae_client.ParseOmni(HSHM_MCTX, contexts, num_tasks_scheduled);
+  cae_client.ParseOmni(contexts, num_tasks_scheduled);
 } catch (const std::exception& e) {
   std::cerr << "Failed to load OMNI: " << e.what() << std::endl;
 }
@@ -376,6 +370,12 @@ Planned enhancements to the OMNI format:
 - **Notifications**: Callbacks or webhooks on completion
 - **Transforms**: Data transformation pipelines
 
+## Related Documentation
+
+- [CAE Launch Guide](launch.md) - How to launch CAE using chimaera compose
+- [CTE Configuration](../context-transfer-engine/config.md) - CTE storage configuration
+- [Chimaera Compose](../context-runtime/module_dev_guide.md) - Compose configuration format
+- [Module Development Guide](../context-runtime/module_dev_guide.md) - ChiMod development
 
 ---
 

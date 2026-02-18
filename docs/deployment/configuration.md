@@ -6,308 +6,229 @@ description: Complete configuration reference for IOWarp runtime and CTE deploym
 
 # Configuration Reference
 
-This document describes how to configure IOWarp deployments.
-
-## Table of Contents
-
-- [Overview](#overview)
-- [Quick Start](#quick-start)
-- [Configuration File Format](#configuration-file-format)
-- [Runtime Configuration Parameters](#runtime-configuration-parameters)
-- [CTE Configuration Parameters](#cte-configuration-parameters)
-- [Complete Examples](#complete-examples)
-- [Environment Variables](#environment-variables)
-- [Docker Deployment](#docker-deployment)
-
----
-
 ## Overview
 
-CTE runs on the IoWarp Runtime (Chimaera distributed task execution framework). A single YAML configuration file configures both:
+IOWarp uses a single YAML file to configure both the Chimaera runtime and any ChiMods (such as CTE, CAE) that are created at startup via the `compose` section.
 
-1. **Runtime Infrastructure**: Workers, memory, networking, logging
-2. **CTE ChiMod**: Storage devices, data placement, performance tuning
+The configuration file is located via environment variables (in priority order):
 
-Configuration is specified via the `WRP_RUNTIME_CONF` environment variable pointing to a YAML file.
-
----
-
-## Quick Start
-
-**Basic Deployment** (compose section creates CTE automatically):
+| Variable | Priority | Description |
+|----------|----------|-------------|
+| `CHI_SERVER_CONF` | **Primary** | Path to the configuration YAML. Checked first. |
+| `WRP_RUNTIME_CONF` | Fallback | Used when `CHI_SERVER_CONF` is not set. |
 
 ```bash
-# Set configuration file
-export WRP_RUNTIME_CONF=/etc/iowarp/config.yaml
-
-# Start runtime (automatically creates CTE from compose section)
-chimaera_start_runtime
-```
-
-**Alternative: Manual Pool Creation** (using chimaera_compose utility):
-
-```bash
-# Start runtime first
-export WRP_RUNTIME_CONF=/etc/iowarp/config.yaml
-chimaera_start_runtime &
-
-# Wait for runtime to initialize
-sleep 2
-
-# Create CTE pool from compose configuration
-chimaera_compose /etc/iowarp/config.yaml
-```
-
-The `chimaera_compose` utility is useful for:
-- Setting up pools after runtime initialization
-- Scripted deployment workflows
-- Testing pool configurations
-- Separating runtime startup from pool creation
-
-**Minimal Configuration** (`config.yaml`):
-
-```yaml
-workers:
-  sched_threads: 4
-  slow_threads: 4
-
-memory:
-  main_segment_size: 1GB
-  client_data_segment_size: 512MB
-  runtime_data_segment_size: 512MB
-
-networking:
-  port: 5555
-
-compose:
-  - mod_name: wrp_cte_core
-    pool_name: cte_main
-    pool_query: dynamic
-    pool_id: "512.0"  # Default CTE pool ID
-    storage:
-      - path: /tmp/cte_storage
-        bdev_type: file
-        capacity_limit: 10GB
-    dpe:
-      dpe_type: max_bw
-  - mod_name: wrp_cae_core
-    pool_name: cae_main
-    pool_query: local
-    pool_id: "400.0"
-```
-
----
-
-## Configuration File Format
-
-The configuration file has two main parts:
-
-### 1. Runtime Configuration (Top-Level)
-
-```yaml
-# Worker threads
-workers:
-  sched_threads: 8           # Fast task workers (< 50us)
-  slow_threads: 8            # Slow task workers (>= 50us)
-
-# Shared memory segments
-memory:
-  main_segment_size: 4GB
-  client_data_segment_size: 2GB
-  runtime_data_segment_size: 2GB
-
-# Networking for distributed mode
-networking:
-  port: 5555
-  neighborhood_size: 32
-  hostfile: /etc/iowarp/hostfile  # Optional: for multi-node
-
-# Logging (optional, can omit for defaults)
-logging:
-  level: info
-  file: /tmp/chimaera.log
-
-# Runtime settings (optional, can omit for defaults)
-runtime:
-  stack_size: 65536
-  queue_depth: 10000
-  lane_map_policy: round_robin
-  heartbeat_interval: 1000
-```
-
-### 2. CTE Compose Configuration
-
-The CTE ChiMod is created via the `compose` section. The default pool ID for CTE is `512.0`.
-
-```yaml
-compose:
-  - mod_name: wrp_cte_core
-    pool_name: cte_main
-    pool_query: dynamic
-    pool_id: "512.0"  # Default CTE pool ID (recommended)
-
-    # CTE-specific configuration
-    storage:
-      - path: /mnt/storage1
-        bdev_type: file
-        capacity_limit: 100GB
-        score: -1.0              # -1.0 = auto, 0.0-1.0 = manual
-      - path: /mnt/storage2
-        bdev_type: file
-        capacity_limit: 100GB
-        score: -1.0
-
-    dpe:
-      dpe_type: max_bw           # Options: random, round_robin, max_bw
-
-    targets:
-      neighborhood: 4
-      default_target_timeout_ms: 30000
-      poll_period_ms: 5000
-
-    performance:
-      target_stat_interval_ms: 5000
-      max_concurrent_operations: 64
-      score_threshold: 0.7
-      score_difference_threshold: 0.05
-
-  - mod_name: wrp_cae_core
-    pool_name: cae_main
-    pool_query: local
-    pool_id: "400.0"
+export CHI_SERVER_CONF=/etc/iowarp/config.yaml
+chimaera runtime start
 ```
 
 ---
 
 ## Runtime Configuration Parameters
 
-### Workers (`workers`)
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `sched_threads` | 4 | Scheduler workers for fast tasks (< 50us) |
-| `slow_threads` | 4 | Workers for slow tasks (>= 50us) |
-
-**Recommendation**: Set total threads = CPU cores (e.g., 8+8 for 16-core system)
-
 ### Memory (`memory`)
 
+Controls shared memory segment sizes. Sizes can be specified as `auto`, human-readable strings (`1GB`, `512MB`, `64K`), or raw bytes.
+
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `main_segment_size` | 1GB | Task metadata and control structures |
-| `client_data_segment_size` | 512MB | Application data |
-| `runtime_data_segment_size` | 512MB | Runtime internal state |
+| `main_segment_size` | `auto` | Main shared memory segment for task metadata and control structures. `auto` calculates from `queue_depth` and `num_threads`. |
+| `client_data_segment_size` | `512MB` | Shared memory segment for application data buffers. |
+| `runtime_data_segment_size` | *(optional)* | Runtime-internal data segment. Omit to use the default. |
 
-**Size format**: `1GB`, `512MB`, `64K`, or bytes (`1073741824`)
+```yaml
+memory:
+  main_segment_size: auto        # Or e.g. "4GB"
+  client_data_segment_size: 2GB
+  runtime_data_segment_size: 2GB
+```
 
-**Docker**: Set `shm_size` >= sum of segments + 20% overhead
+> **Docker**: Set `shm_size` to at least the sum of all segments plus ~20% overhead.
+
+---
 
 ### Networking (`networking`)
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `port` | 5555 | ZeroMQ port (must match across cluster) |
-| `neighborhood_size` | 32 | Max nodes queried for range queries |
-| `hostfile` | - | Path to file with cluster IPs (one per line) |
+| `port` | `5555` | ZeroMQ port. Must match across all nodes in a cluster. |
+| `neighborhood_size` | `32` | Maximum nodes queried when splitting range queries. |
+| `hostfile` | *(none)* | Path to a file listing cluster node IPs, one per line. Required for multi-node deployments. |
+| `wait_for_restart` | `30` | Seconds to wait for remote connections during startup. |
+| `wait_for_restart_poll_period` | `1` | Seconds between retry attempts during startup. |
 
-**Hostfile format** (`/etc/iowarp/hostfile`):
+```yaml
+networking:
+  port: 5555
+  neighborhood_size: 32
+  hostfile: /etc/iowarp/hostfile   # Multi-node only
+  wait_for_restart: 30
+  wait_for_restart_poll_period: 1
 ```
-172.20.0.10
-172.20.0.11
-172.20.0.12
+
+**Hostfile format** (one IP or hostname per line):
 ```
-
-### Logging and Runtime (Optional)
-
-These sections can be omitted to use defaults. See `docs/chimaera/deployment.md` for details.
+192.168.1.10
+192.168.1.11
+192.168.1.12
+```
 
 ---
 
-## CTE Configuration Parameters
+### Runtime (`runtime`)
 
-All CTE parameters are specified within the compose entry for `wrp_cte_core`.
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `num_threads` | `4` | Worker threads for task execution. |
+| `process_reaper_threads` | `1` | Threads that clean up completed processes. |
+| `queue_depth` | `1024` | Task queue depth per worker. |
+| `local_sched` | `"default"` | Local task scheduler policy. |
+| `heartbeat_interval` | `1000` | Heartbeat interval in milliseconds. |
+| `first_busy_wait` | `10000` | Microseconds of busy-waiting before a worker sleeps when idle. |
+| `max_sleep` | `50000` | Maximum worker sleep duration in microseconds. |
+
+```yaml
+runtime:
+  num_threads: 8
+  process_reaper_threads: 1
+  queue_depth: 1024
+  local_sched: "default"
+  heartbeat_interval: 1000
+  first_busy_wait: 10000
+  max_sleep: 50000
+```
+
+**Recommendation**: Set `num_threads` to the number of CPU cores on the node.
+
+---
+
+### Logging (`logging`)
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `level` | `"info"` | Log verbosity: `"debug"`, `"info"`, `"warn"`, `"error"`. |
+| `file` | `"/tmp/chimaera.log"` | Path to the log file. |
+
+```yaml
+logging:
+  level: info
+  file: /tmp/chimaera.log
+```
+
+---
+
+## Compose Section
+
+The `compose` section declaratively creates ChiMod pools at runtime startup. Each entry defines one pool.
+
+```yaml
+compose:
+  - mod_name: wrp_cte_core      # ChiMod library name
+    pool_name: cte_main          # User-defined pool name
+    pool_query: local            # Routing: local, dynamic, broadcast
+    pool_id: "512.0"             # Unique pool ID (default CTE pool ID)
+    # ... ChiMod-specific parameters
+```
+
+### `pool_query` Values
+
+| Value | Description |
+|-------|-------------|
+| `local` | Create the pool on the local node only. |
+| `dynamic` | Auto-detect: use existing pool locally, or broadcast creation. |
+| `broadcast` | Create the pool on all nodes in the cluster. |
+
+---
+
+## CTE ChiMod Parameters (`wrp_cte_core`)
 
 ### Storage Devices (`storage`)
 
-Array of storage targets for blob storage.
+Array of storage targets. At least one entry is required.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `path` | Yes | Directory path for block device |
-| `bdev_type` | Yes | Device type: `file` or `ram` |
-| `capacity_limit` | Yes | Capacity (e.g., `10GB`, `1TB`) |
-| `score` | No | Manual score 0.0-1.0, or -1.0 for auto (default: -1.0) |
+| `path` | Yes | Directory path. Use `ram::<name>` for RAM-based storage. |
+| `bdev_type` | Yes | `"file"` for filesystem-backed storage, `"ram"` for memory-backed. |
+| `capacity_limit` | Yes | Maximum capacity (e.g., `"10GB"`, `"512MB"`). |
+| `score` | No | Manual placement score (0.0–1.0). Higher = preferred. `0.0` enables automatic scoring. |
 
-**Example**:
 ```yaml
 storage:
-  # RAM-based cache storage (use ram:: prefix)
+  # RAM tier — fastest, not persistent
   - path: "ram::cte_cache"
     bdev_type: ram
     capacity_limit: 512MB
-    score: 1.0              # Manual score - fastest tier
-  # File-based storage
+    score: 1.0
+
+  # NVMe tier
   - path: /mnt/nvme/cte
     bdev_type: file
-    capacity_limit: 500GB
-    score: 0.9              # Fast storage
+    capacity_limit: 200GB
+    score: 0.9
+
+  # HDD tier
   - path: /mnt/hdd/cte
     bdev_type: file
     capacity_limit: 2TB
-    score: 0.3              # Slow storage
+    score: 0.3
 ```
-
-**Note**: RAM-based storage requires the `ram::` prefix in the path.
 
 ### Data Placement Engine (`dpe`)
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `dpe_type` | `max_bw` | Placement algorithm: `random`, `round_robin`, `max_bw` |
+| `dpe_type` | `"max_bw"` | Placement algorithm: `"random"`, `"round_robin"`, `"max_bw"`. |
 
 ### Targets (`targets`)
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `neighborhood` | 4 | Number of storage targets CTE can buffer to |
-| `default_target_timeout_ms` | 30000 | Timeout for target operations (ms) |
-| `poll_period_ms` | 5000 | Period to rescan targets for stats (ms) |
+| `neighborhood` | `1` | Number of storage nodes CTE can buffer to simultaneously. |
+| `default_target_timeout_ms` | `30000` | Timeout for storage target operations (ms). |
+| `poll_period_ms` | `5000` | How often to rescan targets for bandwidth/capacity stats (ms). |
 
-### Performance (`performance`)
+---
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `target_stat_interval_ms` | 5000 | Interval for updating target stats (ms) |
-| `max_concurrent_operations` | 64 | Max concurrent I/O operations |
-| `score_threshold` | 0.7 | Threshold for blob reorganization (0.0-1.0) |
-| `score_difference_threshold` | 0.05 | Min score difference to trigger reorganization |
+## CAE ChiMod Parameters (`wrp_cae_core`)
 
-**Note**: Most users can omit the `performance` section to use optimized defaults.
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `pool_name` | Yes | User-defined pool name. |
+| `pool_query` | Yes | Routing policy (`local`, `dynamic`, `broadcast`). |
+| `pool_id` | Yes | Unique pool ID. Default CAE pool ID is `"400.0"`. |
+| `worker_count` | No | Number of CAE ingestion workers (default: `4`). |
+
+```yaml
+- mod_name: wrp_cae_core
+  pool_name: cae_main
+  pool_query: local
+  pool_id: "400.0"
+  worker_count: 4
+```
 
 ---
 
 ## Complete Examples
 
-### Single-Node Development
+### Minimal Single-Node
 
 ```yaml
-workers:
-  sched_threads: 4
-  slow_threads: 4
-
 memory:
-  main_segment_size: 1GB
+  main_segment_size: auto
   client_data_segment_size: 512MB
-  runtime_data_segment_size: 512MB
 
 networking:
   port: 5555
 
+runtime:
+  num_threads: 4
+
 compose:
   - mod_name: wrp_cte_core
     pool_name: cte_main
-    pool_query: dynamic
-    pool_id: "512.0"  # Default CTE pool ID
+    pool_query: local
+    pool_id: "512.0"
     storage:
       - path: /tmp/cte_storage
         bdev_type: file
@@ -316,228 +237,108 @@ compose:
       dpe_type: max_bw
 ```
 
-### Multi-Node Production (4 nodes)
+### Multi-Tier RAM + NVMe + HDD
 
 ```yaml
-# Combined Chimaera + CTE Configuration
-# For use with 4-node distributed cluster
-
-workers:
-  sched_threads: 8
-  slow_threads: 8
-
 memory:
-  main_segment_size: 4GB
-  client_data_segment_size: 2GB
-  runtime_data_segment_size: 2GB
-
-networking:
-  port: 8080
-  neighborhood_size: 32
-  hostfile: /etc/iowarp/hostfile
-
-logging:
-  level: info
-  file: /var/log/chimaera/chimaera.log
-
-runtime:
-  stack_size: 65536
-  queue_depth: 10000
-  lane_map_policy: round_robin
-  heartbeat_interval: 1000
-
-compose:
-  - mod_name: wrp_cte_core
-    pool_name: cte_main
-    pool_query: dynamic
-    pool_id: "512.0"  # Default CTE pool ID
-
-    # 4 storage targets across 4 nodes
-    storage:
-      - path: /mnt/hdd1
-        bdev_type: file
-        capacity_limit: 10GB
-        score: 0.25
-      - path: /mnt/hdd2
-        bdev_type: file
-        capacity_limit: 10GB
-        score: 0.25
-      - path: /mnt/hdd3
-        bdev_type: file
-        capacity_limit: 10GB
-        score: 0.25
-      - path: /mnt/hdd4
-        bdev_type: file
-        capacity_limit: 10GB
-        score: 0.25
-
-    dpe:
-      dpe_type: max_bw
-
-    targets:
-      neighborhood: 4
-      default_target_timeout_ms: 30000
-      poll_period_ms: 5000
-
-    performance:
-      target_stat_interval_ms: 5000
-      max_concurrent_operations: 64
-      score_threshold: 0.7
-      score_difference_threshold: 0.05
-```
-
-### Multi-Tier Storage with RAM Cache
-
-```yaml
-workers:
-  sched_threads: 8
-  slow_threads: 8
-
-memory:
-  main_segment_size: 4GB
+  main_segment_size: auto
   client_data_segment_size: 2GB
   runtime_data_segment_size: 2GB
 
 networking:
   port: 5555
 
+runtime:
+  num_threads: 16
+  queue_depth: 1024
+
+logging:
+  level: info
+
 compose:
   - mod_name: wrp_cte_core
     pool_name: cte_main
-    pool_query: dynamic
-    pool_id: "512.0"  # Default CTE pool ID
+    pool_query: local
+    pool_id: "512.0"
     storage:
-      # RAM cache tier (use ram:: prefix)
       - path: "ram::cte_cache"
         bdev_type: ram
         capacity_limit: 512MB
         score: 1.0
-      # Fast tier - NVMe
       - path: /mnt/nvme/cte
         bdev_type: file
         capacity_limit: 200GB
         score: 0.9
-      # Medium tier - SSD
-      - path: /mnt/ssd/cte
-        bdev_type: file
-        capacity_limit: 500GB
-        score: 0.7
-      # Slow tier - HDD
       - path: /mnt/hdd/cte
         bdev_type: file
         capacity_limit: 2TB
         score: 0.3
     dpe:
       dpe_type: max_bw
+    targets:
+      neighborhood: 1
+      default_target_timeout_ms: 30000
+      poll_period_ms: 5000
 ```
 
----
+### Multi-Node Cluster (4 nodes)
 
-## Environment Variables
+```yaml
+memory:
+  main_segment_size: auto
+  client_data_segment_size: 2GB
+  runtime_data_segment_size: 2GB
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `WRP_RUNTIME_CONF` | Path to configuration YAML | `export WRP_RUNTIME_CONF=/etc/iowarp/config.yaml` |
+networking:
+  port: 5555
+  neighborhood_size: 32
+  hostfile: /etc/iowarp/hostfile
 
-**Note**: The runtime does NOT read individual `CHI_*` environment variables. All configuration must be in the YAML file.
+runtime:
+  num_threads: 8
+  queue_depth: 1024
+  heartbeat_interval: 1000
+
+logging:
+  level: info
+  file: /var/log/iowarp/chimaera.log
+
+compose:
+  - mod_name: wrp_cte_core
+    pool_name: cte_main
+    pool_query: dynamic
+    pool_id: "512.0"
+    storage:
+      - path: /mnt/storage
+        bdev_type: file
+        capacity_limit: 1TB
+        score: 0.8
+    dpe:
+      dpe_type: max_bw
+    targets:
+      neighborhood: 4
+      default_target_timeout_ms: 30000
+      poll_period_ms: 5000
+```
 
 ---
 
 ## Docker Deployment
 
-### Docker Compose Example
-
-**File**: `docker-compose.yml`
-
 ```yaml
-version: '3.8'
-
+# docker-compose.yml
 services:
-  iowarp-cte:
+  iowarp:
     image: iowarp/chimaera-cte:latest
-    container_name: iowarp-cte
-    hostname: cte-node1
-
-    # Shared memory: sum of segments + 20% overhead
-    # 4GB + 2GB + 2GB = 8GB -> use 10GB
-    shm_size: 10gb
-
+    shm_size: 6gb   # >= sum of all memory segments + 20%
     volumes:
       - ./config.yaml:/etc/iowarp/config.yaml:ro
       - ./data:/data
-      - ./logs:/var/log/chimaera
-
     environment:
-      - WRP_RUNTIME_CONF=/etc/iowarp/config.yaml
-
+      - CHI_SERVER_CONF=/etc/iowarp/config.yaml
+      - CHI_IPC_MODE=SHM
     ports:
       - "5555:5555"
-
-    networks:
-      cte_net:
-        ipv4_address: 172.20.0.10
-
-networks:
-  cte_net:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/24
 ```
 
-### Multi-Node Deployment
-
-For a 3-node cluster, create 3 services with different IPs (172.20.0.10, 172.20.0.11, 172.20.0.12) and mount the same config with a hostfile:
-
-**Hostfile** (`config/hostfile`):
-```
-172.20.0.10
-172.20.0.11
-172.20.0.12
-```
-
-**Configuration** (`config/config.yaml`):
-```yaml
-networking:
-  port: 5555
-  hostfile: /etc/iowarp/hostfile
-# ... rest of configuration
-```
-
-Mount the hostfile in each container:
-```yaml
-volumes:
-  - ./config/hostfile:/etc/iowarp/hostfile:ro
-```
-
-### Deployment Steps
-
-1. **Create directories**:
-   ```bash
-   mkdir -p config data logs
-   ```
-
-2. **Create configuration** (`config/config.yaml`)
-
-3. **Create storage paths**:
-   ```bash
-   mkdir -p data/cte_storage1 data/cte_storage2
-   ```
-
-4. **Start**:
-   ```bash
-   docker-compose up -d
-   ```
-
-5. **Verify**:
-   ```bash
-   docker logs iowarp-cte
-   docker exec iowarp-cte chimaera_pool_list
-   ```
-
----
-
----
-
-**Last Updated**: 2025-11-09
-**Version**: 2.0.0
+For multi-node Docker deployments, mount a shared hostfile and set the networking hostfile path accordingly. See [HPC Cluster](./hpc-cluster) for details.

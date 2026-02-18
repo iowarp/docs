@@ -1,16 +1,4 @@
----
-sidebar_position: 2
-title: Runtime Modules
-description: Guide to developing Chimaera runtime modules (ChiMods) for IOWarp.
----
-
 # Chimaera Module Development Guide
-
-## Linking
-
-```
-find_package(iowarp-core CONFIG)
-```
 
 ## Table of Contents
 1. [Overview](#overview)
@@ -27,13 +15,11 @@ find_package(iowarp-core CONFIG)
 8. [Pool Query and Task Routing](#pool-query-and-task-routing)
 9. [Client-Server Communication](#client-server-communication)
 10. [Memory Management](#memory-management)
-    - [CHI_IPC Buffer Allocation](#chi_ipc-buffer-allocation)
+    - [CHI_CLIENT Buffer Allocation](#chi_client-buffer-allocation)
     - [Shared-Memory Compatible Data Structures](#shared-memory-compatible-data-structures)
 11. [Build System Integration](#build-system-integration)
 12. [External ChiMod Development](#external-chimod-development)
 13. [Example Module](#example-module)
-
-
 
 ## Overview
 
@@ -201,27 +187,26 @@ using CreateTask = chimaera::admin::GetOrCreatePoolTask<CreateParams>;
  */
 struct CustomTask : public chi::Task {
   // Task-specific data using HSHM macros
-  INOUT chi::string data_;      // Input/output string
-  IN chi::u32 operation_id_;     // Input parameter
-  OUT chi::u32 result_code_;     // Output result
+  INOUT chi::priv::string data_;  // Input/output string (use HSHM_MALLOC)
+  IN chi::u32 operation_id_;      // Input parameter
+  OUT chi::u32 result_code_;      // Output result
 
-  // SHM constructor
-  explicit CustomTask(const hipc::CtxAllocator<CHI_MAIN_ALLOC_T> &alloc)
-      : chi::Task(alloc), 
-        data_(alloc), 
-        operation_id_(0), 
+  // SHM default constructor - uses HSHM_MALLOC for string initialization
+  CustomTask()
+      : chi::Task(),
+        data_(HSHM_MALLOC),
+        operation_id_(0),
         result_code_(0) {}
 
-  // Emplace constructor
+  // Emplace constructor - no allocator parameter needed
   explicit CustomTask(
-      const hipc::CtxAllocator<CHI_MAIN_ALLOC_T> &alloc,
       const chi::TaskId &task_id,
       const chi::PoolId &pool_id,
       const chi::PoolQuery &pool_query,
       const std::string &data,
       chi::u32 operation_id)
-      : chi::Task(alloc, task_id, pool_id, pool_query, 10),
-        data_(alloc, data),
+      : chi::Task(task_id, pool_id, pool_query, Method::kCustom),
+        data_(HSHM_MALLOC, data),
         operation_id_(operation_id),
         result_code_(0) {
     task_id_ = task_id;
@@ -239,7 +224,7 @@ struct CustomTask : public chi::Task {
 
 ### Client Implementation (MOD_NAME_client.h/cc)
 
-The client provides a simple API for task submission:
+The client provides an **async-only API** for task submission. All operations return `chi::Future<TaskType>` objects:
 
 ```cpp
 #ifndef MOD_NAME_CLIENT_H_
@@ -256,47 +241,75 @@ class Client : public chi::ContainerClient {
   explicit Client(const chi::PoolId& pool_id) { Init(pool_id); }
 
   /**
-   * Synchronous operation - waits for completion
+   * Async Create operation - returns Future for task completion
+   * Caller must call task.Wait() and check GetReturnCode()
    */
-  void Create(const hipc::MemContext& mctx, 
-              const chi::PoolQuery& pool_query,
-              const CreateParams& params = CreateParams()) {
-    auto task = AsyncCreate(mctx, pool_query, params);
-    task->Wait();
-    
-    // CRITICAL: Update client pool_id_ with the actual pool ID from the task
-    pool_id_ = task->new_pool_id_;
-    
-    CHI_IPC->DelTask(task);
-  }
-
-  /**
-   * Asynchronous operation - returns immediately
-   */
-  hipc::FullPtr<CreateTask> AsyncCreate(
-      const hipc::MemContext& mctx,
+  chi::Future<CreateTask> AsyncCreate(
       const chi::PoolQuery& pool_query,
+      const std::string& pool_name,
+      const chi::PoolId& custom_pool_id,
       const CreateParams& params = CreateParams()) {
     auto* ipc_manager = CHI_IPC;
-    
+
     // CRITICAL: CreateTask MUST use admin pool for GetOrCreatePool processing
     auto task = ipc_manager->NewTask<CreateTask>(
         chi::CreateTaskId(),
         chi::kAdminPoolId,  // Always use admin pool for CreateTask
         pool_query,
         CreateParams::chimod_lib_name,  // ChiMod name from CreateParams
-        pool_name_,             // Pool name from base client
+        pool_name,              // User-provided pool name
+        custom_pool_id,         // Target pool ID to create
+        this,                   // Client pointer for PostWait callback
         params);                // CreateParams with configuration
-    
-    // Submit to runtime
-    ipc_manager->Enqueue(task);
-    return task;
+
+    // Submit to runtime and return Future
+    return ipc_manager->Send(task);
+  }
+
+  /**
+   * Async Custom operation - example of a typical async method
+   */
+  chi::Future<CustomTask> AsyncCustom(
+      const chi::PoolQuery& pool_query,
+      const std::string& input_data,
+      chi::u32 operation_id) {
+    auto* ipc_manager = CHI_IPC;
+    auto task = ipc_manager->NewTask<CustomTask>(
+        chi::CreateTaskId(),
+        pool_id_,           // Use client's pool_id_ for non-Create operations
+        pool_query,
+        input_data,
+        operation_id);
+    return ipc_manager->Send(task);
   }
 };
 
 }  // namespace chimaera::MOD_NAME
 
 #endif  // MOD_NAME_CLIENT_H_
+```
+
+**Usage Pattern:**
+```cpp
+// Create client and initialize
+chimaera::MOD_NAME::Client client;
+const chi::PoolId pool_id(7000, 0);
+
+// Async create
+auto create_task = client.AsyncCreate(chi::PoolQuery::Dynamic(), "my_pool", pool_id);
+create_task.Wait();
+
+if (create_task->GetReturnCode() != 0) {
+    std::cerr << "Create failed" << std::endl;
+    return;
+}
+
+// Perform operations
+auto op_task = client.AsyncCustom(chi::PoolQuery::Local(), "data", 1);
+op_task.Wait();
+
+// Access results
+std::cout << "Result: " << op_task->result_code_ << std::endl;
 ```
 
 ### ChiMod CreateTask Pool Assignment Requirements
@@ -446,7 +459,7 @@ class Container : public chi::Container {
     // Process the operation
     std::string result = processData(task->data_.str(),
                                     task->operation_id_);
-    task->data_ = hipc::string(main_allocator_, result);
+    task->data_ = chi::priv::string(main_allocator_, result);
     task->result_code_ = 0;
     // Task completion is handled by the framework
   }
@@ -487,7 +500,7 @@ The execution mode is accessible through the `RunContext` parameter passed to al
 ```cpp
 void YourMethod(hipc::FullPtr<YourTask> task, chi::RunContext& rctx) {
   // Check execution mode
-  if (rctx.exec_mode == chi::ExecMode::kDynamicSchedule) {
+  if (rctx.exec_mode_ == chi::ExecMode::kDynamicSchedule) {
     // Dynamic scheduling logic - modify task routing
     task->pool_query_ = chi::PoolQuery::Broadcast();
     return;  // Return early - task will be re-routed
@@ -540,18 +553,18 @@ void Runtime::GetOrCreatePool(
   std::string pool_name = task->pool_name_.str();
 
   // PHASE 1: Dynamic scheduling - determine routing
-  if (rctx.exec_mode == chi::ExecMode::kDynamicSchedule) {
+  if (rctx.exec_mode_ == chi::ExecMode::kDynamicSchedule) {
     // Check if pool exists locally first
     chi::PoolId existing_pool_id = pool_manager->FindPoolByName(pool_name);
 
     if (!existing_pool_id.IsNull()) {
       // Pool exists locally - route to local execution only
-      HILOG(kDebug, "Admin: Pool '{}' found locally (ID: {}), using Local query",
+      HLOG(kDebug, "Admin: Pool '{}' found locally (ID: {}), using Local query",
             pool_name, existing_pool_id);
       task->pool_query_ = chi::PoolQuery::Local();
     } else {
       // Pool doesn't exist - broadcast creation to all nodes
-      HILOG(kDebug, "Admin: Pool '{}' not found locally, broadcasting creation",
+      HLOG(kDebug, "Admin: Pool '{}' not found locally, broadcasting creation",
             pool_name);
       task->pool_query_ = chi::PoolQuery::Broadcast();
     }
@@ -559,7 +572,7 @@ void Runtime::GetOrCreatePool(
   }
 
   // PHASE 2: Normal execution - actually create/get the pool
-  HILOG(kDebug, "Admin: Executing GetOrCreatePool task - ChiMod: {}, Pool: {}",
+  HLOG(kDebug, "Admin: Executing GetOrCreatePool task - ChiMod: {}, Pool: {}",
         task->chimod_name_.str(), pool_name);
 
   task->return_code_ = 0;
@@ -575,15 +588,15 @@ void Runtime::GetOrCreatePool(
     task->return_code_ = 0;
     pools_created_++;
 
-    HILOG(kDebug, "Admin: Pool operation completed successfully - ID: {}, Name: {}",
+    HLOG(kDebug, "Admin: Pool operation completed successfully - ID: {}, Name: {}",
           task->new_pool_id_, pool_name);
 
   } catch (const std::exception &e) {
     task->return_code_ = 99;
-    task->error_message_ = hipc::string(
-        task->GetCtxAllocator(),
+    task->error_message_ = chi::priv::string(
+        HSHM_MALLOC,
         std::string("Exception during pool creation: ") + e.what());
-    HELOG(kError, "Admin: Pool creation failed with exception: {}", e.what());
+    HLOG(kError, "Admin: Pool creation failed with exception: {}", e.what());
   }
 }
 ```
@@ -595,12 +608,12 @@ The `PoolQuery::Dynamic()` factory method triggers dynamic scheduling:
 ```cpp
 // Client code - request dynamic routing
 auto pool_query = chi::PoolQuery::Dynamic();
-client.Create(mctx, pool_query, "my_pool_name", pool_id);
+client.Create(pool_query, "my_pool_name", pool_id);
 ```
 
 **What happens internally:**
 1. Worker recognizes `Dynamic()` pool query
-2. Sets `rctx.exec_mode = ExecMode::kDynamicSchedule`
+2. Sets `rctx.exec_mode_ = ExecMode::kDynamicSchedule`
 3. Routes task to local node first
 4. Task method checks cache and updates `pool_query_`
 5. Worker re-routes with updated query
@@ -616,7 +629,7 @@ client.Create(mctx, pool_query, "my_pool_name", pool_id);
 **Cache Optimization Pattern:**
 ```cpp
 // Check local cache first
-if (rctx.exec_mode == chi::ExecMode::kDynamicSchedule) {
+if (rctx.exec_mode_ == chi::ExecMode::kDynamicSchedule) {
   if (LocalCacheHas(resource_id)) {
     task->pool_query_ = chi::PoolQuery::Local();  // Found locally
   } else {
@@ -632,7 +645,7 @@ auto resource = GetResource(resource_id);
 **State-Dependent Routing:**
 ```cpp
 // Route based on runtime conditions
-if (rctx.exec_mode == chi::ExecMode::kDynamicSchedule) {
+if (rctx.exec_mode_ == chi::ExecMode::kDynamicSchedule) {
   if (ShouldExecuteDistributed(task)) {
     task->pool_query_ = chi::PoolQuery::Broadcast();
   } else {
@@ -645,7 +658,7 @@ if (rctx.exec_mode == chi::ExecMode::kDynamicSchedule) {
 #### Implementation Guidelines
 
 **DO:**
-- ✅ Check `rctx.exec_mode` at the start of your method
+- ✅ Check `rctx.exec_mode_` at the start of your method
 - ✅ Return early after modifying `pool_query_` in dynamic mode
 - ✅ Keep dynamic scheduling logic lightweight (fast checks only)
 - ✅ Use dynamic scheduling for cache optimization patterns
@@ -662,7 +675,7 @@ The worker automatically handles dynamic scheduling:
 
 ```cpp
 // Worker::ExecTask() logic
-if (run_ctx->exec_mode == ExecMode::kDynamicSchedule) {
+if (run_ctx->exec_mode_ == ExecMode::kDynamicSchedule) {
   // After task returns, call RerouteDynamicTask instead of EndTask
   RerouteDynamicTask(task_ptr, run_ctx);
   return;
@@ -685,7 +698,7 @@ Chimaera uses a two-level configuration system with automated code generation:
 
 1. **chimaera_repo.yaml**: Repository-wide configuration (namespace, version, etc.)
 2. **chimaera_mod.yaml**: Module-specific configuration (method IDs, metadata)
-3. **chi_refresh_repo**: Utility script that generates autogen files from YAML configurations
+3. **chimaera repo refresh**: Utility script that generates autogen files from YAML configurations
 
 ### chimaera_repo.yaml
 Located at `chimods/chimaera_repo.yaml`, this file defines repository-wide settings:
@@ -737,14 +750,14 @@ kCoRwLockTest: 21 # CoRwLock reader-writer synchronization testing method
 - **Disabled methods**: Use -1 to disable inherited methods not implemented
 - **Consistency**: Once assigned, never change method IDs (breaks compatibility)
 
-### chi_refresh_repo Utility
+### chimaera repo refresh Utility
 
-The `chi_refresh_repo` utility automatically generates autogen files from YAML configurations.
+The `chimaera repo refresh` utility automatically generates autogen files from YAML configurations.
 
 #### Usage
 ```bash
 # From project root, regenerate all autogen files
-./build/bin/chi_refresh_repo chimods
+./build/bin/chimaera repo refresh chimods
 
 # The utility will:
 # 1. Read chimaera_repo.yaml for global settings
@@ -773,23 +786,23 @@ For each ChiMod, the utility generates:
    - Task serialization support (SaveIn/Out, LoadIn/Out)
    - Memory management (Del, NewCopy, Aggregate)
 
-#### When to Run chi_refresh_repo
-**ALWAYS** run chi_refresh_repo when:
+#### When to Run chimaera repo refresh
+**ALWAYS** run chimaera repo refresh when:
 - Adding new methods to chimaera_mod.yaml
 - Changing method IDs or names
 - Adding new ChiMods to the repository
 - Modifying namespace or version information
 
 #### Important Notes
-- **Never manually edit autogen files** - they are overwritten by chi_refresh_repo
-- **Run chi_refresh_repo before building** after YAML changes
+- **Never manually edit autogen files** - they are overwritten by chimaera repo refresh
+- **Run chimaera repo refresh before building** after YAML changes
 - **Commit autogen files to git** so other developers don't need to regenerate
 - **Method IDs are permanent** - changing them breaks binary compatibility
 
 ### Workflow Summary
 1. Define methods in `chimaera_mod.yaml` with sequential IDs
 2. Implement corresponding methods in `MOD_NAME_runtime.h/cc`
-3. Run `./build/bin/chi_refresh_repo chimods` to generate autogen files
+3. Run `./build/bin/chimaera repo refresh chimods` to generate autogen files
 4. Build project with `make` - autogen files provide the dispatch logic
 5. Autogen files handle virtual method routing, serialization, and memory management
 
@@ -826,7 +839,7 @@ void Copy(const hipc::FullPtr<YourTask> &other);
 ```cpp
 struct WriteTask : public chi::Task {
   IN Block block_;
-  IN hipc::Pointer data_;
+  IN hipc::ShmPtr<> data_;
   IN size_t length_;
   OUT chi::u64 bytes_written_;
 
@@ -870,7 +883,7 @@ void Aggregate(const hipc::FullPtr<YourTask> &other);
 ```cpp
 struct WriteTask : public chi::Task {
   IN Block block_;
-  IN hipc::Pointer data_;
+  IN hipc::ShmPtr<> data_;
   OUT chi::u64 bytes_written_;
 
   /**
@@ -1022,23 +1035,22 @@ When tasks are sent across nodes using Send/Recv:
 ```cpp
 struct ReadTask : public chi::Task {
   IN Block block_;
-  OUT hipc::Pointer data_;
+  OUT hipc::ShmPtr<> data_;
   INOUT size_t length_;
   OUT chi::u64 bytes_read_;
 
-  /** SHM constructor */
-  explicit ReadTask(const hipc::CtxAllocator<CHI_MAIN_ALLOC_T> &alloc)
-      : chi::Task(alloc), length_(0), bytes_read_(0) {}
+  /** SHM default constructor - no allocator parameter */
+  ReadTask()
+      : chi::Task(), length_(0), bytes_read_(0) {}
 
-  /** Emplace constructor */
-  explicit ReadTask(const hipc::CtxAllocator<CHI_MAIN_ALLOC_T> &alloc,
-                    const chi::TaskId &task_node,
+  /** Emplace constructor - no allocator parameter */
+  explicit ReadTask(const chi::TaskId &task_node,
                     const chi::PoolId &pool_id,
                     const chi::PoolQuery &pool_query,
                     const Block &block,
-                    hipc::Pointer data,
+                    hipc::ShmPtr<> data,
                     size_t length)
-      : chi::Task(alloc, task_node, pool_id, pool_query, 10),
+      : chi::Task(task_node, pool_id, pool_query, Method::kRead),
         block_(block), data_(data), length_(length), bytes_read_(0) {
     task_id_ = task_node;
     pool_id_ = pool_id;
@@ -1088,15 +1100,14 @@ FunctionName()  → FunctionNameTask  → kFunctionName
 
 **Correct Naming:**
 ```cpp
-// Function: GetStats() and AsyncGetStats()
-// Task: GetStatsTask  
+// Client Function: AsyncGetStats()
+// Task: GetStatsTask
 // Method: kGetStats
 
-// In bdev_client.h
-PerfMetrics GetStats(const hipc::MemContext& mctx, chi::u64& remaining_size);
-hipc::FullPtr<GetStatsTask> AsyncGetStats(const hipc::MemContext& mctx);
+// In bdev_client.h (async-only API)
+chi::Future<GetStatsTask> AsyncGetStats(const chi::PoolQuery& pool_query);
 
-// In bdev_tasks.h  
+// In bdev_tasks.h
 struct GetStatsTask : public chi::Task {
   OUT PerfMetrics metrics_;
   OUT chi::u64 remaining_size_;
@@ -1113,8 +1124,8 @@ void GetStats(hipc::FullPtr<GetStatsTask> task, chi::RunContext& ctx);
 **Incorrect Naming Examples:**
 ```cpp
 // WRONG: Function and task names don't match
-PerfMetrics GetStats(...);           // Function name
-struct StatTask { ... };             // Task name doesn't match function
+chi::Future<StatTask> AsyncGetStats(...);  // Task name doesn't match function
+struct StatTask { ... };                    // Task name doesn't match function
 
 // WRONG: Method constant doesn't match function  
 GLOBAL_CONST chi::u32 kStat = 14;    // Method doesn't match function name
@@ -1125,10 +1136,10 @@ void Stat(hipc::FullPtr<StatTask> task, ...);  // Runtime method doesn't match
 
 #### Naming Rules
 
-1. **Function Names**: Use descriptive verbs (e.g., `GetStats`, `AllocateBlocks`, `WriteData`)
-2. **Task Names**: Always append "Task" to the function name (e.g., `GetStatsTask`, `AllocateBlocksTask`)
-3. **Method Constants**: Prefix with "k" and match the function name exactly (e.g., `kGetStats`, `kAllocateBlocks`)
-4. **Runtime Methods**: Must match the function name exactly (e.g., `GetStats()`)
+1. **Client Function Names**: Use `Async` prefix with descriptive verbs (e.g., `AsyncGetStats`, `AsyncAllocateBlocks`, `AsyncWriteData`)
+2. **Task Names**: Remove `Async` prefix and append "Task" (e.g., `GetStatsTask`, `AllocateBlocksTask`)
+3. **Method Constants**: Prefix with "k" and match the base function name (e.g., `kGetStats`, `kAllocateBlocks`)
+4. **Runtime Methods**: Match the base function name without `Async` prefix (e.g., `GetStats()`)
 
 #### Backward Compatibility
 
@@ -1310,9 +1321,9 @@ struct BaseCreateTask : public chi::Task {
   
   // Serialization methods
   template<typename... Args>
-  void SetParams(const hipc::CtxAllocator<CHI_MAIN_ALLOC_T> &alloc, Args &&...args);
-  
-  CreateParamsT GetParams(const hipc::CtxAllocator<CHI_MAIN_ALLOC_T> &alloc) const;
+  void SetParams(AllocT* alloc, Args &&...args);
+
+  CreateParamsT GetParams() const;
 };
 ```
 
@@ -1347,16 +1358,14 @@ using CreateTask = chimaera::admin::BaseCreateTask<MyCreateParams, Method::kGetO
 
 If you have existing custom CreateTask implementations, migrate to BaseCreateTask:
 
-**Before (Custom Implementation):**
+**Before (Custom Implementation - Deprecated):**
 ```cpp
 struct CreateTask : public chi::Task {
-  // Custom constructor implementations
-  explicit CreateTask(const hipc::CtxAllocator<CHI_MAIN_ALLOC_T> &alloc,
-                      const chi::TaskId &task_id,
+  // Custom constructor implementations (deprecated - no longer takes allocator)
+  explicit CreateTask(const chi::TaskId &task_id,
                       const chi::PoolId &pool_id,
                       const chi::PoolQuery &pool_query)
-      : chi::Task(alloc, task_id, pool_id, pool_query, 0) {
-    method_ = Method::kCreate;  // Static casting required
+      : chi::Task(task_id, pool_id, pool_query, Method::kCreate) {
     // ... initialization code ...
   }
 };
@@ -1395,6 +1404,250 @@ using CreateTask = chimaera::admin::GetOrCreatePoolTask<CreateParams>;
 5. Task memory is properly reclaimed from the appropriate memory segment
 
 **Note**: Individual `DelTaskType` methods are no longer required. The framework's autogenerated Del dispatcher automatically calls `ipc_manager->DelTask()` for proper shared memory deallocation.
+
+## C++20 Coroutines for ChiMod Development
+
+Chimaera uses C++20 coroutines to enable cooperative task execution within runtime methods. This section covers the coroutine primitives and patterns used in ChiMod development.
+
+### Overview
+
+Coroutines allow runtime methods to suspend execution (`co_await`) and resume later without blocking the worker thread. This is essential for:
+- **Nested Pool Creation**: Create methods that need to create sub-pools
+- **Subtask Execution**: Runtime methods that spawn and wait for child tasks
+- **I/O Operations**: Async I/O that needs to yield while waiting
+
+### TaskResume Return Type
+
+All runtime methods that use coroutines must return `chi::TaskResume`:
+
+```cpp
+class Runtime : public chi::Container {
+public:
+  // Coroutine method - can use co_await and co_return
+  chi::TaskResume Create(hipc::FullPtr<CreateTask> task, chi::RunContext& rctx);
+
+  // Non-coroutine method - regular void return
+  void Custom(hipc::FullPtr<CustomTask> task, chi::RunContext& rctx);
+};
+```
+
+**Key Points:**
+- Methods returning `TaskResume` are coroutines and can use `co_await`/`co_return`
+- Methods returning `void` are regular functions and cannot use coroutine keywords
+- The `TaskResume` type integrates with Chimaera's task scheduling system
+
+### co_await - Suspending Execution
+
+Use `co_await` to suspend the current coroutine until an operation completes:
+
+```cpp
+chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task, chi::RunContext& rctx) {
+  // Create a subtask (e.g., create a BDev pool for storage)
+  auto bdev_task = bdev_client_.AsyncCreate(
+      chi::PoolQuery::Local(),
+      "storage_device",
+      chi::PoolId(7001, 0),
+      chimaera::bdev::BdevType::kFile);
+
+  // Suspend until subtask completes - worker can process other tasks
+  co_await bdev_task;
+
+  // Execution resumes here after bdev_task completes
+  if (bdev_task->GetReturnCode() != 0) {
+    task->SetReturnCode(1);
+    task->error_message_ = "Failed to create storage device";
+    co_return;
+  }
+
+  // Continue with remaining initialization
+  task->SetReturnCode(0);
+  co_return;
+}
+```
+
+**What Happens During co_await:**
+1. Coroutine state is saved
+2. Worker thread is released to process other tasks
+3. When awaited operation completes, coroutine is scheduled for resumption
+4. Execution continues from the point after `co_await`
+
+### co_return - Completing Coroutines
+
+Use `co_return` to complete a coroutine. For `TaskResume` coroutines, `co_return` takes no value:
+
+```cpp
+chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task, chi::RunContext& rctx) {
+  // Early return on error
+  if (!ValidateParams(task)) {
+    task->SetReturnCode(1);
+    co_return;  // Complete coroutine immediately
+  }
+
+  // Normal completion
+  task->SetReturnCode(0);
+  co_return;  // Complete coroutine
+}
+```
+
+**Important Notes:**
+- Always use `co_return` (not `return`) in coroutine methods
+- `co_return` takes no arguments for `TaskResume` coroutines
+- Ensure all code paths end with `co_return`
+
+### Common Coroutine Patterns
+
+#### Pattern 1: Nested Pool Creation
+
+The most common use case is creating dependent pools during container initialization:
+
+```cpp
+chi::TaskResume Runtime::Create(hipc::FullPtr<CreateTask> task, chi::RunContext& rctx) {
+  // Initialize container state
+  pool_id_ = task->pool_id_;
+
+  // Create dependent BDev pool for storage
+  auto bdev_task = bdev_client_.AsyncCreate(
+      chi::PoolQuery::Local(),
+      task->storage_path_.str(),
+      chi::PoolId(pool_id_.IsLocal() + 1, 0),
+      chimaera::bdev::BdevType::kFile,
+      task->storage_size_);
+
+  co_await bdev_task;
+
+  if (bdev_task->GetReturnCode() != 0) {
+    task->SetReturnCode(2);
+    task->error_message_ = "Storage initialization failed";
+    co_return;
+  }
+
+  storage_pool_id_ = bdev_task->new_pool_id_;
+  task->SetReturnCode(0);
+  co_return;
+}
+```
+
+#### Pattern 2: Sequential Subtask Execution
+
+Execute multiple subtasks in sequence:
+
+```cpp
+chi::TaskResume Runtime::Initialize(hipc::FullPtr<InitTask> task, chi::RunContext& rctx) {
+  // Step 1: Initialize storage
+  auto storage_task = storage_client_.AsyncInit(chi::PoolQuery::Local());
+  co_await storage_task;
+
+  if (storage_task->GetReturnCode() != 0) {
+    task->SetReturnCode(1);
+    co_return;
+  }
+
+  // Step 2: Initialize network (depends on storage)
+  auto network_task = network_client_.AsyncInit(chi::PoolQuery::Local());
+  co_await network_task;
+
+  if (network_task->GetReturnCode() != 0) {
+    task->SetReturnCode(2);
+    co_return;
+  }
+
+  // Step 3: Complete initialization
+  task->SetReturnCode(0);
+  co_return;
+}
+```
+
+#### Pattern 3: Parallel Subtask Execution
+
+For independent subtasks, launch them all first, then await:
+
+```cpp
+chi::TaskResume Runtime::ParallelInit(hipc::FullPtr<InitTask> task, chi::RunContext& rctx) {
+  // Launch multiple independent tasks
+  auto task1 = client1_.AsyncInit(chi::PoolQuery::Local());
+  auto task2 = client2_.AsyncInit(chi::PoolQuery::Local());
+  auto task3 = client3_.AsyncInit(chi::PoolQuery::Local());
+
+  // Await all tasks (order doesn't matter for independent tasks)
+  co_await task1;
+  co_await task2;
+  co_await task3;
+
+  // Check all results
+  if (task1->GetReturnCode() != 0 ||
+      task2->GetReturnCode() != 0 ||
+      task3->GetReturnCode() != 0) {
+    task->SetReturnCode(1);
+    co_return;
+  }
+
+  task->SetReturnCode(0);
+  co_return;
+}
+```
+
+### When to Use Coroutines
+
+**Use coroutines (TaskResume return type) when:**
+- ✅ Creating nested/dependent pools in Create methods
+- ✅ Spawning and waiting for subtasks
+- ✅ Performing async I/O operations that need to yield
+- ✅ Any operation that might block and should yield to other tasks
+
+**Use regular void methods when:**
+- ✅ Simple synchronous operations
+- ✅ Operations that complete quickly without waiting
+- ✅ Methods that don't spawn subtasks or wait for external events
+
+### PoolManager Coroutine Integration
+
+The PoolManager methods that create/destroy pools are coroutines:
+
+```cpp
+// In PoolManager (internal usage)
+TaskResume CreatePool(hipc::FullPtr<chi::Task> task, chi::RunContext* rctx);
+TaskResume DestroyPool(hipc::FullPtr<chi::Task> task, chi::RunContext* rctx);
+```
+
+**Why These Are Coroutines:**
+- `CreatePool` co_awaits the container's Create method
+- Create methods may need to co_await nested pool creations
+- The coroutine chain allows proper suspension and resumption
+
+### Admin Runtime Coroutine Methods
+
+The admin runtime has coroutine methods for pool management:
+
+```cpp
+// Admin runtime coroutine methods
+chi::TaskResume GetOrCreatePool(hipc::FullPtr<GetOrCreatePoolTask<T>> task, chi::RunContext& rctx);
+chi::TaskResume DestroyPool(hipc::FullPtr<DestroyPoolTask> task, chi::RunContext& rctx);
+```
+
+These methods co_await PoolManager operations internally.
+
+### Best Practices
+
+**DO:**
+- ✅ Use `co_return` (not `return`) in coroutine methods
+- ✅ Check return codes after `co_await`
+- ✅ Use `TaskResume` return type for methods that need `co_await`
+- ✅ Handle errors before continuing after `co_await`
+
+**DON'T:**
+- ❌ Mix `return` and `co_return` in the same method
+- ❌ Use `co_await` in non-coroutine (void) methods
+- ❌ Forget to `co_return` at the end of coroutine methods
+- ❌ Ignore return codes from awaited tasks
+
+### Migration from Non-Coroutine Methods
+
+To convert a regular method to a coroutine:
+
+1. **Change return type**: `void` → `chi::TaskResume`
+2. **Change all `return;`**: → `co_return;`
+3. **Add `co_await`**: For any async operations that need waiting
+4. **Update autogen**: Ensure dispatch code handles the new return type
 
 ### Framework Del Implementation
 The autogenerated Del dispatcher handles task cleanup:
@@ -1690,7 +1943,7 @@ chi::PoolQuery::Local()
 ```cpp
 // Client usage in MPI environment
 const chi::PoolId custom_pool_id(7000, 0);
-client.Create(HSHM_MCTX, chi::PoolQuery::Local(), "my_pool", custom_pool_id);
+client.Create(chi::PoolQuery::Local(), "my_pool", custom_pool_id);
 ```
 
 #### 2. Direct ID Mode
@@ -1703,7 +1956,7 @@ chi::PoolQuery::DirectId(ContainerId container_id)
 ```cpp
 // Route to container with ID 42
 auto query = chi::PoolQuery::DirectId(ContainerId(42));
-client.UpdateConfig(HSHM_MCTX, query, new_config);
+client.UpdateConfig(query, new_config);
 ```
 
 #### 3. Direct Hash Mode
@@ -1717,7 +1970,7 @@ chi::PoolQuery::DirectHash(u32 hash)
 // Hash-based routing for a key
 u32 hash = std::hash<std::string>{}(key);
 auto query = chi::PoolQuery::DirectHash(hash);
-client.Put(HSHM_MCTX, query, key, value);
+client.Put(query, key, value);
 ```
 
 #### 4. Range Mode
@@ -1730,7 +1983,7 @@ chi::PoolQuery::Range(u32 offset, u32 count)
 ```cpp
 // Process containers 10-19 (10 containers starting at offset 10)
 auto query = chi::PoolQuery::Range(10, 10);
-client.BulkUpdate(HSHM_MCTX, query, update_data);
+client.BulkUpdate(query, update_data);
 ```
 
 #### 5. Broadcast Mode
@@ -1743,7 +1996,7 @@ chi::PoolQuery::Broadcast()
 ```cpp
 // Broadcast configuration change to all containers
 auto query = chi::PoolQuery::Broadcast();
-client.InvalidateCache(HSHM_MCTX, query);
+client.InvalidateCache(query);
 ```
 
 #### 6. Physical Mode
@@ -1756,7 +2009,7 @@ chi::PoolQuery::Physical(u32 node_id)
 ```cpp
 // Execute on physical node 3
 auto query = chi::PoolQuery::Physical(3);
-client.NodeDiagnostics(HSHM_MCTX, query);
+client.NodeDiagnostics(query);
 ```
 
 #### 7. Dynamic Mode (Recommended for Create Operations)
@@ -1777,7 +2030,7 @@ chi::PoolQuery::Dynamic()
 ```cpp
 // Recommended: Use Dynamic() for Create operations
 const chi::PoolId custom_pool_id(7000, 0);
-client.Create(HSHM_MCTX, chi::PoolQuery::Dynamic(), "my_pool", custom_pool_id);
+client.Create(chi::PoolQuery::Dynamic(), "my_pool", custom_pool_id);
 
 // Dynamic scheduling will:
 // - Check local cache for "my_pool"
@@ -1804,7 +2057,7 @@ client.Create(HSHM_MCTX, chi::PoolQuery::Dynamic(), "my_pool", custom_pool_id);
 // Recommended: Use Dynamic for automatic cache optimization
 // This checks local cache first and falls back to broadcast creation if needed
 const chi::PoolId custom_pool_id(7000, 0);
-client.Create(HSHM_MCTX, chi::PoolQuery::Dynamic(), "my_pool_name", custom_pool_id);
+client.Create(chi::PoolQuery::Dynamic(), "my_pool_name", custom_pool_id);
 ```
 
 **Container Creation Pattern (Explicit Broadcast)**:
@@ -1812,7 +2065,7 @@ client.Create(HSHM_MCTX, chi::PoolQuery::Dynamic(), "my_pool_name", custom_pool_
 // Alternative: Use Broadcast to force distributed creation regardless of cache
 // This ensures the container is created across all nodes in distributed environments
 const chi::PoolId custom_pool_id(7000, 0);
-client.Create(HSHM_MCTX, chi::PoolQuery::Broadcast(), "my_pool_name", custom_pool_id);
+client.Create(chi::PoolQuery::Broadcast(), "my_pool_name", custom_pool_id);
 ```
 
 **Container Creation Pattern (MPI Environments)**:
@@ -1820,7 +2073,7 @@ client.Create(HSHM_MCTX, chi::PoolQuery::Broadcast(), "my_pool_name", custom_poo
 // In MPI jobs, Local may be more efficient for node-local containers
 // Use Local when you want node-local containers only
 const chi::PoolId custom_pool_id(7000, 0);
-client.Create(HSHM_MCTX, chi::PoolQuery::Local(), "my_pool_name", custom_pool_id);
+client.Create(chi::PoolQuery::Local(), "my_pool_name", custom_pool_id);
 ```
 
 **Load-Balanced Operations**:
@@ -1829,7 +2082,7 @@ client.Create(HSHM_MCTX, chi::PoolQuery::Local(), "my_pool_name", custom_pool_id
 for (const auto& item : items) {
   u32 hash = ComputeHash(item.id);
   auto query = chi::PoolQuery::DirectHash(hash);
-  client.Process(HSHM_MCTX, query, item);
+  client.Process(query, item);
 }
 ```
 
@@ -1841,7 +2094,7 @@ const u32 batch_size = 10;
 for (u32 offset = 0; offset < total_containers; offset += batch_size) {
   u32 count = std::min(batch_size, total_containers - offset);
   auto query = chi::PoolQuery::Range(offset, count);
-  client.BatchProcess(HSHM_MCTX, query, batch_data);
+  client.BatchProcess(query, batch_data);
 }
 ```
 
@@ -1856,17 +2109,16 @@ The runtime uses PoolQuery to determine task routing through several stages:
 
 ### PoolQuery in Task Definitions
 
-Tasks must include PoolQuery in their constructors:
+Tasks must include PoolQuery in their constructors (no allocator parameter needed):
 
 ```cpp
 class CustomTask : public chi::Task {
  public:
-  CustomTask(hipc::Allocator *alloc,
-             const chi::TaskId &task_id,
+  CustomTask(const chi::TaskId &task_id,
              const chi::PoolId &pool_id,
              const chi::PoolQuery &pool_query,  // Required parameter
              /* custom parameters */)
-      : chi::Task(alloc, task_id, pool_id, pool_query, method_id) {
+      : chi::Task(task_id, pool_id, pool_query, method_id) {
     // Task initialization
   }
 };
@@ -1908,7 +2160,7 @@ auto task = ipc_manager->NewTask<UpdateTask>(
     query,
     update_data
 );
-ipc_manager->Enqueue(task, chi::kHighPriority);
+return ipc_manager->Send(task);
 ```
 
 ### Troubleshooting PoolQuery Issues
@@ -1931,107 +2183,134 @@ ipc_manager->Enqueue(task, chi::kHighPriority);
 
 ### Client Implementation Patterns
 
-#### Critical Pool ID Update Pattern
+Chimaera uses an **async-only client API pattern**. All client operations are asynchronous, returning `chi::Future<TaskType>` objects. This design:
+- Enables parallel task submission for better performance
+- Provides consistent API across all operations
+- Allows fine-grained control over task completion timing
+- Simplifies the codebase by eliminating duplicate sync/async methods
 
-**IMPORTANT**: All ChiMod clients that implement Create methods MUST update their `pool_id_` field with the actual pool ID returned from completed CreateTask operations. This is essential because:
+#### Async Create Pattern
+
+**IMPORTANT**: All ChiMod clients MUST update their `pool_id_` field with the actual pool ID returned from completed CreateTask operations. This is essential because:
 
 1. CreateTask operations may return a different pool ID than initially specified
 2. Pool creation may reuse existing pools with different IDs
 3. Subsequent client operations depend on the correct pool ID
 
-**Required Pattern for All Client Create Methods:**
+**Required Pattern for All Client AsyncCreate Methods:**
 
 ```cpp
-void Create(const hipc::MemContext& mctx,
-            const chi::PoolQuery& pool_query,
-            const std::string& pool_name,
-            const chi::PoolId& custom_pool_id,
-            /* other module-specific parameters */) {
-    auto task = AsyncCreate(mctx, pool_query, pool_name, custom_pool_id, /* other params */);
-    task->Wait();
-
-    // CRITICAL: Update client pool_id_ with the actual pool ID from the task
-    pool_id_ = task->new_pool_id_;
-
-    CHI_IPC->DelTask(task);
+chi::Future<CreateTask> AsyncCreate(const chi::PoolQuery& pool_query,
+                                    const std::string& pool_name,
+                                    const chi::PoolId& custom_pool_id,
+                                    /* other module-specific parameters */) {
+    auto* ipc_manager = CHI_IPC;
+    auto task = ipc_manager->NewTask<CreateTask>(
+        chi::CreateTaskId(),
+        chi::kAdminPoolId,  // Always use admin pool for CreateTask
+        pool_query,
+        CreateParams::chimod_lib_name,
+        pool_name,
+        custom_pool_id,
+        /* module-specific parameters */
+        this  // Client pointer for PostWait callback
+    );
+    return ipc_manager->Send(task);
 }
 ```
 
-**Required Parameters for All Create Methods:**
+**Required Parameters for All AsyncCreate Methods:**
 
-1. **mctx**: Memory context for shared memory allocations
-2. **pool_query**: Task routing strategy (use `Broadcast()` for non-MPI, `Local()` for MPI)
-3. **pool_name**: User-provided name for the pool (must be unique, used as file path for file-based modules)
-4. **custom_pool_id**: Explicit pool ID for the container being created (must not be null)
-5. **Module-specific parameters**: Additional parameters specific to the ChiMod (e.g., BDev type, size)
+1. **pool_query**: Task routing strategy (use `Dynamic()` recommended, `Broadcast()` for non-MPI, `Local()` for MPI)
+2. **pool_name**: User-provided name for the pool (must be unique, used as file path for file-based modules)
+3. **custom_pool_id**: Explicit pool ID for the container being created (must not be null)
+4. **Module-specific parameters**: Additional parameters specific to the ChiMod (e.g., BDev type, size)
 
-**Why This Is Required:**
+**Why Pool ID Update Is Required:**
 
 - **Pool Reuse**: CreateTask is actually a GetOrCreatePoolTask that may return an existing pool
 - **ID Assignment**: The admin ChiMod may assign a different pool ID than requested
 - **Client Consistency**: All subsequent operations must use the correct pool ID
 - **Distributed Operation**: Pool IDs must be consistent across all client instances
 
-**Examples of Correct Implementation:**
+**Usage Pattern (Caller Side):**
 
 ```cpp
-// Admin client Create method
-void Create(const hipc::MemContext& mctx,
-            const chi::PoolQuery& pool_query,
-            const std::string& pool_name,
-            const chi::PoolId& custom_pool_id) {
-    auto task = AsyncCreate(mctx, pool_query, pool_name, custom_pool_id);
-    task->Wait();
+// Create a client and async create the pool
+chimaera::bdev::Client bdev_client;
+const chi::PoolId pool_id(7000, 0);
 
-    // CRITICAL: Update client pool_id_ with the actual pool ID from the task
-    pool_id_ = task->new_pool_id_;
+auto task = bdev_client.AsyncCreate(
+    chi::PoolQuery::Dynamic(),
+    "/path/to/storage.dat",
+    pool_id,
+    chimaera::bdev::BdevType::kFile,
+    1024 * 1024 * 1024);  // 1GB
 
+// Wait for completion
+task.Wait();
+
+// Check result
+if (task->GetReturnCode() != 0) {
+    std::cerr << "Create failed: " << task->error_message_.str() << std::endl;
+    return;
+}
+
+// The client's pool_id_ is updated via PostWait callback
+// Now can use the client for operations
+auto read_task = bdev_client.AsyncRead(chi::PoolQuery::Local(), block, buffer, size);
+read_task.Wait();
+```
+
+**Examples of Correct AsyncCreate Implementation:**
+
+```cpp
+// Admin client AsyncCreate method
+chi::Future<CreateTask> AsyncCreate(const chi::PoolQuery& pool_query,
+                                    const std::string& pool_name,
+                                    const chi::PoolId& custom_pool_id) {
     auto* ipc_manager = CHI_IPC;
-    ipc_manager->DelTask(task);
+    auto task = ipc_manager->NewTask<CreateTask>(
+        chi::CreateTaskId(),
+        chi::kAdminPoolId,
+        pool_query,
+        CreateParams::chimod_lib_name,
+        pool_name,
+        custom_pool_id,
+        this);
+    return ipc_manager->Send(task);
 }
 
-// BDev client Create method (with module-specific parameters)
-void Create(const hipc::MemContext& mctx,
-            const chi::PoolQuery& pool_query,
-            const std::string& pool_name,
-            const chi::PoolId& custom_pool_id,
-            BdevType bdev_type,
-            chi::u64 total_size = 0,
-            chi::u32 io_depth = 128,
-            chi::u32 alignment = 4096) {
-    auto task = AsyncCreate(mctx, pool_query, pool_name, custom_pool_id,
-                           bdev_type, total_size, io_depth, alignment);
-    task->Wait();
-
-    // CRITICAL: Update client pool_id_ with the actual pool ID from the task
-    pool_id_ = task->new_pool_id_;
-
-    CHI_IPC->DelTask(task);
-}
-
-// MOD_NAME client Create method (simple case)
-void Create(const hipc::MemContext& mctx,
-            const chi::PoolQuery& pool_query,
-            const std::string& pool_name,
-            const chi::PoolId& custom_pool_id) {
-    auto task = AsyncCreate(mctx, pool_query, pool_name, custom_pool_id);
-    task->Wait();
-
-    // CRITICAL: Update client pool_id_ with the actual pool ID from the task
-    pool_id_ = task->new_pool_id_;
-
-    CHI_IPC->DelTask(task);
+// BDev client AsyncCreate method (with module-specific parameters)
+chi::Future<CreateTask> AsyncCreate(const chi::PoolQuery& pool_query,
+                                    const std::string& pool_name,
+                                    const chi::PoolId& custom_pool_id,
+                                    BdevType bdev_type,
+                                    chi::u64 total_size = 0,
+                                    chi::u32 io_depth = 128,
+                                    chi::u32 alignment = 4096) {
+    auto* ipc_manager = CHI_IPC;
+    auto task = ipc_manager->NewTask<CreateTask>(
+        chi::CreateTaskId(),
+        chi::kAdminPoolId,
+        pool_query,
+        CreateParams::chimod_lib_name,
+        pool_name,
+        custom_pool_id,
+        bdev_type, total_size, io_depth, alignment,
+        this);
+    return ipc_manager->Send(task);
 }
 ```
 
 **Common Mistakes to Avoid:**
 
 - ❌ **Using null PoolId for custom_pool_id**: Create operations REQUIRE explicit, non-null pool IDs
-- ❌ **Forgetting to update pool_id_**: Leads to incorrect pool ID for subsequent operations
+- ❌ **Forgetting PostWait callback**: Ensure client pointer is passed to NewTask for pool_id_ update
 - ❌ **Using original pool_id_**: The task may return a different pool ID than initially specified
-- ❌ **Updating before task completion**: Always wait for task completion before reading new_pool_id_
-- ❌ **Not implementing this pattern**: All synchronous Create methods must follow this pattern
-- ❌ **Using Local instead of Broadcast**: In non-MPI environments, use `Broadcast()` for distributed container creation
+- ❌ **Accessing results before Wait()**: Always call `task.Wait()` before reading task fields
+- ❌ **Implementing synchronous wrappers**: Use async-only pattern, let callers handle waiting
+- ❌ **Using Local instead of Dynamic/Broadcast**: Use `Dynamic()` (recommended) or `Broadcast()` for distributed container creation
 
 **Critical Validation:**
 
@@ -2040,12 +2319,12 @@ The runtime validates that `custom_pool_id` is not null during Create operations
 ```cpp
 // WRONG - This will fail with error
 chi::PoolId null_id;  // Null pool ID
-client.Create(HSHM_MCTX, chi::PoolQuery::Broadcast(), "my_pool", null_id);
+client.Create(chi::PoolQuery::Broadcast(), "my_pool", null_id);
 // Error: "Cannot create pool with null PoolId. Explicit pool IDs are required."
 
 // CORRECT - Always provide explicit pool IDs
 const chi::PoolId custom_pool_id(7000, 0);
-client.Create(HSHM_MCTX, chi::PoolQuery::Broadcast(), "my_pool", custom_pool_id);
+client.Create(chi::PoolQuery::Broadcast(), "my_pool", custom_pool_id);
 ```
 
 This pattern is mandatory for all ChiMod clients and ensures correct pool ID management throughout the client lifecycle.
@@ -2057,34 +2336,36 @@ Three shared memory segments are used:
 3. **Runtime Data Segment**: Runtime-only data
 
 ### IPC Queue
-Tasks are submitted via a lock-free multi-producer single-consumer queue:
+Tasks are submitted via the IPC manager:
 ```cpp
-// Client side
+// Client side - create and submit task, returns Future
 auto task = ipc_manager->NewTask<CustomTask>(...);
-ipc_manager->Enqueue(task, chi::kLowLatency);
+auto future = ipc_manager->Send(task);
 
-// Server side
-hipc::Pointer task_ptr = ipc_manager->Dequeue(chi::kLowLatency);
+// Wait for completion
+future.Wait();
+
+// Access results
+auto result = future->output_field_;
 ```
 
 ## Memory Management
 
-### Allocator Usage
+### Task Memory Allocation
+
+Tasks are allocated in private memory using standard `new`/`delete`. The `HSHM_MALLOC` constant is used for initializing shared-memory strings within tasks:
+
 ```cpp
-// Get context allocator for current segment
-hipc::CtxAllocator<CHI_MAIN_ALLOC_T> ctx_alloc(HSHM_MCTX, allocator);
+// In task constructors, use HSHM_MALLOC for string initialization
+chi::priv::string my_string(HSHM_MALLOC, "initial value");
 
-// Allocate serializable string
-chi::string my_string(ctx_alloc, "initial value");
-
-// Allocate vector
-chi::vector<u32> my_vector(ctx_alloc);
-my_vector.resize(100);
+// Empty string initialization
+chi::priv::string empty_string(HSHM_MALLOC);
 ```
 
 ### Best Practices
-1. Always use HSHM types for shared data
-2. Pass CtxAllocator to constructors
+1. Always use HSHM types (chi::priv::string, chi::ipc::vector) for shared data
+2. Use HSHM_MALLOC for string initialization in task constructors
 3. Use FullPtr for cross-process references
 4. Let framework handle task cleanup via `ipc_manager->DelTask()`
 
@@ -2109,7 +2390,7 @@ ipc_manager->DelTask(task);
 
 The `CHI_IPC` singleton provides centralized buffer allocation for shared memory operations in client code. Use this for allocating temporary buffers that need to be shared between client and runtime processes.
 
-**Important**: `AllocateBuffer` returns `hipc::FullPtr<char>`, not `hipc::Pointer`. It is NOT a template function.
+**Important**: `AllocateBuffer` returns `hipc::FullPtr<char>`, not `hipc::ShmPtr<>`. It is NOT a template function.
 
 #### Basic Usage
 ```cpp
@@ -2145,7 +2426,7 @@ auto* ipc_manager = CHI_IPC;
 hipc::FullPtr<char> temp_buffer = ipc_manager->AllocateBuffer(data_size);
 
 // ✅ Good: Use chi::ipc types for persistent task data
-chi::ipc::string task_string(ctx_alloc, "persistent data");
+chi::ipc::string task_string(HSHM_MALLOC, "persistent data");
 
 // ❌ Avoid: Don't use CHI_IPC for small, simple task parameters
 // Use chi::ipc types directly in task definitions instead
@@ -2156,21 +2437,31 @@ chi::ipc::string task_string(ctx_alloc, "persistent data");
 For task definitions and any data that needs to be shared between client and runtime processes, always use shared-memory compatible types instead of standard C++ containers.
 
 #### chi::ipc::string
-Use `chi::ipc::string` or `hipc::string` instead of `std::string` in task definitions:
+Use `chi::ipc::string` or `chi::priv::string` instead of `std::string` in task definitions:
 
 ```cpp
 #include <[namespace]/types.h>
 
 // Task definition using shared-memory string
 struct CustomTask : public chi::Task {
-  INOUT hipc::string input_data_;     // Shared-memory compatible string
-  INOUT hipc::string output_data_;    // Results stored in shared memory
-  
-  CustomTask(const hipc::CtxAllocator<CHI_MAIN_ALLOC_T>& alloc,
-             const std::string& input) 
-    : input_data_(alloc, input),      // Initialize from std::string
-      output_data_(alloc) {}          // Empty initialization
-      
+  INOUT chi::priv::string input_data_;     // Shared-memory compatible string
+  INOUT chi::priv::string output_data_;    // Results stored in shared memory
+
+  // Default constructor - use HSHM_MALLOC for string initialization
+  CustomTask()
+      : chi::Task(),
+        input_data_(HSHM_MALLOC),
+        output_data_(HSHM_MALLOC) {}
+
+  // Emplace constructor - no allocator parameter needed
+  explicit CustomTask(const chi::TaskId& task_id,
+                      const chi::PoolId& pool_id,
+                      const chi::PoolQuery& pool_query,
+                      const std::string& input)
+      : chi::Task(task_id, pool_id, pool_query, Method::kCustom),
+        input_data_(HSHM_MALLOC, input),   // Initialize from std::string
+        output_data_(HSHM_MALLOC) {}       // Empty initialization
+
   // Conversion to std::string when needed
   std::string getResult() const {
     return std::string(output_data_.data(), output_data_.size());
@@ -2186,11 +2477,21 @@ Use `chi::ipc::vector` instead of `std::vector` for arrays in task definitions:
 struct ProcessArrayTask : public chi::Task {
   INOUT chi::ipc::vector<chi::u32> data_array_;
   INOUT chi::ipc::vector<chi::f32> result_array_;
-  
-  ProcessArrayTask(const hipc::CtxAllocator<CHI_MAIN_ALLOC_T>& alloc,
-                   const std::vector<chi::u32>& input_data)
-    : data_array_(alloc),
-      result_array_(alloc) {
+
+  // Default constructor
+  ProcessArrayTask()
+      : chi::Task(),
+        data_array_(HSHM_MALLOC),
+        result_array_(HSHM_MALLOC) {}
+
+  // Emplace constructor - no allocator parameter needed
+  explicit ProcessArrayTask(const chi::TaskId& task_id,
+                            const chi::PoolId& pool_id,
+                            const chi::PoolQuery& pool_query,
+                            const std::vector<chi::u32>& input_data)
+      : chi::Task(task_id, pool_id, pool_query, Method::kProcessArray),
+        data_array_(HSHM_MALLOC),
+        result_array_(HSHM_MALLOC) {
     // Copy from std::vector to shared-memory vector
     data_array_.resize(input_data.size());
     std::copy(input_data.begin(), input_data.end(), data_array_.begin());
@@ -2200,7 +2501,7 @@ struct ProcessArrayTask : public chi::Task {
 
 #### When to Use Each Type
 
-**Use shared-memory types (chi::ipc::string, hipc::string, chi::ipc::vector, etc.) for:**
+**Use shared-memory types (chi::ipc::string, chi::priv::string, chi::ipc::vector, etc.) for:**
 - Task input/output parameters
 - Data that persists across task execution
 - Any data structure that needs serialization
@@ -2215,12 +2516,12 @@ struct ProcessArrayTask : public chi::Task {
 ```cpp
 // Converting between std::string and shared-memory string types
 std::string std_str = "example data";
-hipc::string shm_str(ctx_alloc, std_str);          // std -> shared memory
+chi::priv::string shm_str(HSHM_MALLOC, std_str);   // std -> shared memory
 std::string result = std::string(shm_str);         // shared memory -> std
 
 // Converting between std::vector and shared-memory vector types
 std::vector<int> std_vec = {1, 2, 3, 4, 5};
-chi::ipc::vector<int> shm_vec(ctx_alloc);
+chi::ipc::vector<int> shm_vec(HSHM_MALLOC);
 shm_vec.assign(std_vec.begin(), std_vec.end());    // std -> shared memory
 
 std::vector<int> result_vec(shm_vec.begin(), shm_vec.end());  // shared memory -> std
@@ -2232,7 +2533,7 @@ Both `chi::ipc::string` and `chi::ipc::vector` automatically support serializati
 ```cpp
 // Task definition - no manual serialization needed
 struct SerializableTask : public chi::Task {
-  INOUT hipc::string message_;
+  INOUT chi::priv::string message_;
   INOUT chi::ipc::vector<chi::u64> timestamps_;
 
   // Cereal automatically handles chi::ipc types
@@ -2282,7 +2583,7 @@ For write operations, the sender has data to transfer:
 ```cpp
 struct WriteTask : public chi::Task {
   IN Block block_;              // Block to write to
-  IN hipc::Pointer data_;       // Data buffer pointer
+  IN hipc::ShmPtr<> data_;       // Data buffer pointer
   IN size_t length_;            // Data length
   OUT chi::u64 bytes_written_;  // Result
 
@@ -2323,7 +2624,7 @@ For read operations, the receiver allocates buffer for incoming data:
 ```cpp
 struct ReadTask : public chi::Task {
   IN Block block_;              // Block to read from
-  OUT hipc::Pointer data_;      // Data buffer pointer (allocated by receiver)
+  OUT hipc::ShmPtr<> data_;      // Data buffer pointer (allocated by receiver)
   INOUT size_t length_;         // Requested/actual length
   OUT chi::u64 bytes_read_;     // Result
 
@@ -2364,11 +2665,11 @@ struct ReadTask : public chi::Task {
 
 ```cpp
 template <typename Archive>
-void ar.bulk(hipc::Pointer ptr, size_t size, uint32_t flags);
+void ar.bulk(hipc::ShmPtr<> ptr, size_t size, uint32_t flags);
 ```
 
 **Parameters:**
-- `ptr`: Pointer to data buffer (`hipc::Pointer`, `hipc::FullPtr`, or raw pointer)
+- `ptr`: Pointer to data buffer (`hipc::ShmPtr<>`, `hipc::FullPtr`, or raw pointer)
 - `size`: Size of data in bytes
 - `flags`: Transfer flags (`BULK_EXPOSE` or `BULK_XFER`)
 
@@ -2384,7 +2685,7 @@ Some operations require data transfer in both directions:
 
 ```cpp
 struct ProcessTask : public chi::Task {
-  INOUT hipc::Pointer data_;    // Data buffer (modified in-place)
+  INOUT hipc::ShmPtr<> data_;    // Data buffer (modified in-place)
   INOUT size_t length_;         // Buffer length
 
   /** Serialize IN and INOUT parameters */
@@ -2428,30 +2729,23 @@ The `ar.bulk()` calls integrate seamlessly with the Lightbeam networking layer:
 ```cpp
 struct ReadTask : public chi::Task {
   IN Block block_;              // Block descriptor
-  OUT hipc::Pointer data_;      // Data buffer
+  OUT hipc::ShmPtr<> data_;      // Data buffer
   INOUT size_t length_;         // Buffer length
   OUT chi::u64 bytes_read_;     // Bytes actually read
 
-  /** SHM constructor */
-  explicit ReadTask(const hipc::CtxAllocator<CHI_MAIN_ALLOC_T> &alloc)
-      : chi::Task(alloc), length_(0), bytes_read_(0) {}
+  /** SHM default constructor */
+  ReadTask()
+      : chi::Task(), length_(0), bytes_read_(0) {}
 
   /** Emplace constructor */
-  explicit ReadTask(const hipc::CtxAllocator<CHI_MAIN_ALLOC_T> &alloc,
-                    const chi::TaskId &task_node,
+  explicit ReadTask(const chi::TaskId &task_node,
                     const chi::PoolId &pool_id,
                     const chi::PoolQuery &pool_query,
                     const Block &block,
-                    hipc::Pointer data,
+                    hipc::ShmPtr<> data,
                     size_t length)
-      : chi::Task(alloc, task_node, pool_id, pool_query, 10),
-        block_(block), data_(data), length_(length), bytes_read_(0) {
-    task_id_ = task_node;
-    pool_id_ = pool_id;
-    method_ = Method::kRead;
-    task_flags_.Clear();
-    pool_query_ = pool_query;
-  }
+      : chi::Task(task_node, pool_id, pool_query, Method::kRead),
+        block_(block), data_(data), length_(length), bytes_read_(0) {}
 
   /** Serialize IN and INOUT parameters */
   template <typename Archive>
@@ -3088,7 +3382,7 @@ The ChiMod build functions automatically handle common dependencies:
 
 **For All ChiMods:**
 - Creates both client and runtime shared libraries
-- Sets proper include directories (include/, `${CMAKE_SOURCE_DIR}`/include)
+- Sets proper include directories (include/, ${CMAKE_SOURCE_DIR}/include)
 - Automatically links core Chimaera dependencies
 - Sets required compile definitions (CHI_CHIMOD_NAME, CHI_NAMESPACE)
 - Configures proper build flags and settings
@@ -3520,7 +3814,7 @@ Your repository's root `CMakeLists.txt` must find and link to the installed Chim
 cmake_minimum_required(VERSION 3.20)
 project(my_external_chimod)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Find required Chimaera packages
@@ -3659,28 +3953,43 @@ Applications using your external ChiMod would reference it as:
 #include <[namespace]/admin/admin_client.h>
 
 int main() {
-  // Initialize Chimaera client
-  chi::CHIMAERA_CLIENT_INIT();
-  
+  // Initialize Chimaera (client mode with embedded runtime)
+  chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
+
   // Create your ChiMod client
   const chi::PoolId pool_id = chi::PoolId(7000, 0);
   myproject::my_module::Client client(pool_id);
-  
+
   // Use your ChiMod
   auto pool_query = chi::PoolQuery::Local();
-  client.Create(HSHM_MCTX, pool_query);
+  client.Create(pool_query);
 }
 ```
 
-### CHIMAERA_RUNTIME_INIT for Testing and Benchmarks
+### CHIMAERA_INIT Initialization Modes
 
-For simple unit tests and benchmarks, Chimaera provides `CHIMAERA_RUNTIME_INIT()` as a convenience function that initializes both the client and runtime in a single process. This is an alternative to using `CHIMAERA_CLIENT_INIT()` when you need both components initialized together.
+Chimaera provides a unified initialization function `CHIMAERA_INIT()` that supports different operational modes:
 
-**Important Notes:**
-- **Primary Use Case**: Unit tests and benchmarks only
-- **Not for Production**: Should NOT be used in main production applications
-- **Single Process**: Initializes both client and runtime in the same process
-- **Simplified Testing**: Eliminates need for separate runtime and client processes during testing
+**Client Mode with Embedded Runtime (Most Common):**
+```cpp
+// Initialize both client and runtime in single process
+// Recommended for: Applications, unit tests, and benchmarks
+chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
+```
+
+**Client-Only Mode (Advanced):**
+```cpp
+// Initialize client only - connects to external runtime
+// Recommended for: Production deployments with separate runtime process
+chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, false);
+```
+
+**Runtime/Server Mode (Advanced):**
+```cpp
+// Initialize runtime/server only - no client
+// Recommended for: Standalone runtime processes
+chi::CHIMAERA_INIT(chi::ChimaeraMode::kServer, false);
+```
 
 **Usage Example (Unit Tests/Benchmarks):**
 ```cpp
@@ -3689,7 +3998,7 @@ For simple unit tests and benchmarks, Chimaera provides `CHIMAERA_RUNTIME_INIT()
 
 TEST(MyModuleTest, BasicOperation) {
   // Initialize both client and runtime in single process
-  chi::CHIMAERA_RUNTIME_INIT();
+  chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true);
 
   // Create your ChiMod client
   const chi::PoolId pool_id = chi::PoolId(7000, 0);
@@ -3697,15 +4006,16 @@ TEST(MyModuleTest, BasicOperation) {
 
   // Test your ChiMod functionality
   auto pool_query = chi::PoolQuery::Local();
-  client.Create(HSHM_MCTX, pool_query, "test_pool");
+  client.Create(pool_query, "test_pool");
 
   // Assertions and test logic...
 }
 ```
 
-**When to Use Each:**
-- **CHIMAERA_CLIENT_INIT()**: Production applications connecting to existing runtime
-- **CHIMAERA_RUNTIME_INIT()**: Unit tests, benchmarks, and simple testing scenarios
+**When to Use Each Mode:**
+- **Client with Embedded Runtime** (`kClient, true`): Unit tests, benchmarks, and standalone applications
+- **Client Only** (`kClient, false`): Production applications connecting to existing external runtime
+- **Server/Runtime Only** (`kServer, false`): Dedicated runtime processes
 
 ### Dependencies and Installation Paths
 
@@ -3758,7 +4068,7 @@ export CMAKE_PREFIX_PATH="/path/to/[namespace]/install:$CMAKE_PREFIX_PATH"
 
 See the `chimods/MOD_NAME` directory for a complete working example that demonstrates:
 - Task definition with proper constructors
-- Client API with sync/async methods
+- Client API with async-only methods
 - Runtime container with execution logic
 - Build system integration
 - YAML configuration
@@ -4062,16 +4372,16 @@ void Custom(hipc::FullPtr<CustomTask> task, chi::RunContext& ctx) {
 
 ## Unit Testing
 
-Unit testing for ChiMods can be implemented following these key principles:
+Unit testing for ChiMods is covered in the separate [Module Test Guide](module_test_guide.md). This guide provides comprehensive information on:
 
-- Set up test environment with proper configuration
-- Configure environment variables for module discovery
-- Integrate with test framework patterns
-- Create test examples with fixtures
-- Configure CMake for test builds
-- Follow best practices for ChiMod testing
+- Test environment setup and configuration
+- Environment variables and module discovery
+- Test framework integration patterns
+- Complete test examples with fixtures
+- CMake integration and build setup
+- Best practices for ChiMod testing
 
-Test both runtime and client components in the same process for comprehensive integration testing without complex multi-process coordination.
+The test guide demonstrates how to test both runtime and client components in the same process, enabling comprehensive integration testing without complex multi-process coordination.
 
 ## Quick Reference Checklist
 
@@ -4081,7 +4391,7 @@ When creating a new Chimaera module, ensure you have:
 - [ ] Tasks inherit from `chi::Task` or use GetOrCreatePoolTask template (recommended for non-admin modules)
 - [ ] **Use GetOrCreatePoolTask**: For non-admin modules instead of BaseCreateTask directly
 - [ ] **Use BaseCreateTask with IS_ADMIN=true**: Only for admin module
-- [ ] SHM constructor with CtxAllocator parameter (if custom task)
+- [ ] SHM default constructor (if custom task)
 - [ ] Emplace constructor with all required parameters (if custom task)
 - [ ] Uses HSHM serializable types (chi::string, chi::vector, etc.)
 - [ ] Method constant assigned in constructor (e.g., `method_ = Method::kCreate;`)
@@ -4100,10 +4410,9 @@ When creating a new Chimaera module, ensure you have:
 ### Client API Checklist (`_client.h/cc`)
 - [ ] Inherits from `chi::ContainerClient`
 - [ ] Uses `CHI_IPC->NewTask<TaskType>()` for allocation
-- [ ] Uses `CHI_IPC->Enqueue()` for task submission
-- [ ] Uses `CHI_IPC->DelTask()` for cleanup
-- [ ] Provides both sync and async methods
-- [ ] **CRITICAL**: Create methods update `pool_id_ = task->new_pool_id_` after task completion
+- [ ] Uses `CHI_IPC->Send()` for task submission (returns Future)
+- [ ] **Async-only API**: All methods return `chi::Future<TaskType>`
+- [ ] **CRITICAL**: AsyncCreate passes `this` pointer for PostWait callback to update pool_id_
 
 ### Build System Checklist
 - [ ] CMakeLists.txt creates both client and runtime libraries
@@ -4149,19 +4458,19 @@ When creating a new Chimaera module, ensure you have:
 // BDev file-based device - pool_name is the file path
 std::string file_path = "/path/to/device.dat";
 const chi::PoolId bdev_pool_id(7000, 0);
-bdev_client.Create(mctx, pool_query, file_path, bdev_pool_id,
+bdev_client.Create(pool_query, file_path, bdev_pool_id,
                    chimaera::bdev::BdevType::kFile);
 
 // BDev RAM-based device - pool_name is unique identifier
 std::string pool_name = "my_ram_device_" + std::to_string(timestamp);
 const chi::PoolId ram_pool_id(7001, 0);
-bdev_client.Create(mctx, pool_query, pool_name, ram_pool_id,
+bdev_client.Create(pool_query, pool_name, ram_pool_id,
                    chimaera::bdev::BdevType::kRam, ram_size);
 
 // Other ChiMods - pool_name is descriptive identifier
 std::string pool_name = "my_container_" + user_identifier;
 const chi::PoolId mod_pool_id(7002, 0);
-mod_client.Create(mctx, pool_query, pool_name, mod_pool_id);
+mod_client.Create(pool_query, pool_name, mod_pool_id);
 ```
 
 ### Incorrect Pool Naming Usage
@@ -4170,54 +4479,83 @@ mod_client.Create(mctx, pool_query, pool_name, mod_pool_id);
 std::string bad_name = "pool_" + std::to_string(pool_id_.ToU64());
 
 // WRONG: Using empty strings
-client.Create(mctx, pool_query, "");
+client.Create(pool_query, "", pool_id);
 
 // WRONG: Auto-generating inside Create function
 // Create functions should not auto-generate names
-void Create(mctx, pool_query) {
+void Create(pool_query) {
     std::string auto_name = "pool_" + generate_id();  // Wrong approach
 }
 ```
 
-### Client Interface Pattern
-All ChiMod clients should follow this interface pattern:
+### Client Interface Pattern (Async-Only)
+All ChiMod clients should follow the async-only interface pattern:
 ```cpp
 class Client : public chi::ContainerClient {
  public:
-  // Synchronous Create with required pool_name
-  void Create(const hipc::MemContext& mctx, 
-              const chi::PoolQuery& pool_query,
-              const std::string& pool_name /* user-provided name */) {
-    auto task = AsyncCreate(mctx, pool_query, pool_name);
-    task->Wait();
-    pool_id_ = task->new_pool_id_;  // Set AFTER Create completes
-    // ... cleanup
-  }
-  
-  // Asynchronous Create with required pool_name
-  hipc::FullPtr<CreateTask> AsyncCreate(
-      const hipc::MemContext& mctx,
+  // Async-only Create with required pool_name - returns Future
+  chi::Future<CreateTask> AsyncCreate(
       const chi::PoolQuery& pool_query,
-      const std::string& pool_name /* user-provided name */) {
+      const std::string& pool_name,
+      const chi::PoolId& custom_pool_id /* user-provided name */) {
+    auto* ipc_manager = CHI_IPC;
     // Use pool_name directly, never generate internally
     auto task = ipc_manager->NewTask<CreateTask>(
         chi::CreateTaskId(),
         chi::kAdminPoolId,  // Always use admin pool
         pool_query,
         CreateParams::chimod_lib_name,  // Never hardcode
-        pool_name,  // User-provided name
-        pool_id_    // Target pool ID (unset during Create)
+        pool_name,          // User-provided name
+        custom_pool_id,     // Target pool ID
+        this                // Client pointer for PostWait callback
     );
-    return task;
+    return ipc_manager->Send(task);
+  }
+
+  // Example of async-only operation pattern
+  chi::Future<CustomTask> AsyncCustom(
+      const chi::PoolQuery& pool_query,
+      const std::string& input_data,
+      chi::u32 operation_id) {
+    auto* ipc_manager = CHI_IPC;
+    auto task = ipc_manager->NewTask<CustomTask>(
+        chi::CreateTaskId(),
+        pool_id_,           // Use client's pool_id_ for non-Create operations
+        pool_query,
+        input_data,
+        operation_id);
+    return ipc_manager->Send(task);
   }
 };
 ```
 
+**Usage Pattern (Caller Side):**
+```cpp
+// Initialize and create
+chimaera::my_module::Client client;
+const chi::PoolId pool_id(7000, 0);
+
+auto create_task = client.AsyncCreate(chi::PoolQuery::Dynamic(), "my_pool", pool_id);
+create_task.Wait();
+
+if (create_task->GetReturnCode() != 0) {
+    // Handle error
+    return;
+}
+
+// Perform operations
+auto op_task = client.AsyncCustom(chi::PoolQuery::Local(), "data", 1);
+op_task.Wait();
+
+// Access results
+auto result = op_task->output_data_.str();
+```
+
 ### BDev-Specific Requirements
-- **Single Interface**: Use only one `Create()` and `AsyncCreate()` method (no multiple overloads)
+- **Single Interface**: Use only one `AsyncCreate()` method (no multiple overloads)
 - **File Devices**: `pool_name` parameter serves as the file path
 - **RAM Devices**: `pool_name` parameter serves as unique identifier
-- **Method Signature**: `Create(mctx, pool_query, pool_name, bdev_type, total_size=0, io_depth=32, alignment=4096)`
+- **Method Signature**: `AsyncCreate(pool_query, pool_name, custom_pool_id, bdev_type, total_size=0, io_depth=32, alignment=4096)`
 
 ## Compose Configuration Feature
 
@@ -4276,13 +4614,13 @@ compose:
 Pools are automatically created when runtime initializes if compose section is present in configuration:
 ```bash
 export CHI_SERVER_CONF=/path/to/config_with_compose.yaml
-chimaera_start_runtime
+chimaera runtime start
 ```
 
-**2. Manual via chimaera_compose Utility:**
+**2. Manual via chimaera compose Utility:**
 Create pools using compose configuration against running runtime:
 ```bash
-chimaera_compose /path/to/compose_config.yaml
+chimaera compose /path/to/compose_config.yaml
 ```
 
 ### Implementation Checklist

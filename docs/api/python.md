@@ -1,10 +1,4 @@
----
-sidebar_position: 1
-title: Python API
-description: Python API reference for the Context Exploration Engine (CEE) — data assimilation, querying, and retrieval.
----
-
-# Python API — Context Exploration Engine (CEE)
+# Context Exploration Engine - Python API Documentation
 
 ## Overview
 
@@ -12,7 +6,20 @@ The Context Exploration Engine (CEE) provides a high-level Python API for managi
 
 **Key Feature:** The CEE API automatically initializes the IOWarp runtime when you create a `ContextInterface` instance. You don't need to manually initialize Chimaera, CTE, or CAE - the `ContextInterface` constructor handles all of this internally.
 
-## Import
+## Installation
+
+### Prerequisites
+
+1. Build IOWarp with Python bindings enabled:
+   ```bash
+   cmake --preset=debug -DWRP_CORE_ENABLE_PYTHON=ON
+   cmake --build build -j$(nproc)
+   sudo cmake --install build
+   ```
+
+2. The `wrp_cee` module will be installed to your Python site-packages directory.
+
+### Verification
 
 ```python
 import wrp_cee
