@@ -8,20 +8,32 @@ The Context Exploration Engine (CEE) provides a high-level Python API for managi
 
 ## Installation
 
-### Prerequisites
+### From pip (Recommended)
 
-1. Build IOWarp with Python bindings enabled:
-   ```bash
-   cmake --preset=debug -DWRP_CORE_ENABLE_PYTHON=ON
-   cmake --build build -j$(nproc)
-   sudo cmake --install build
-   ```
+```bash
+pip install iowarp-core
+```
 
-2. The `wrp_cee` module will be installed to your Python site-packages directory.
+This installs the `iowarp_core` package (runtime utilities, CLI) and the `wrp_cee` Python extension (context exploration API). All native dependencies are bundled — no system libraries or build tools required.
+
+### From Source
+
+Build IOWarp with Python bindings enabled:
+
+```bash
+cmake --preset=debug -DWRP_CORE_ENABLE_PYTHON=ON
+cmake --build build -j$(nproc)
+sudo cmake --install build
+```
+
+The `wrp_cee` module will be installed to your Python site-packages directory.
 
 ### Verification
 
 ```python
+import iowarp_core
+print("IOWarp version:", iowarp_core.get_version())
+
 import wrp_cee
 print("CEE API loaded successfully!")
 ```

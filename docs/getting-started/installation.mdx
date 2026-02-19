@@ -1,7 +1,7 @@
 ---
 sidebar_position: 1
 title: Installation
-description: Install IOWarp via Docker, native build, or Spack package manager.
+description: Install IOWarp via pip, Docker, native build, or Spack package manager.
 ---
 
 # Installation
@@ -12,7 +12,43 @@ import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
 <Tabs>
-<TabItem value="docker" label="🐳 Docker (Recommended)" default>
+<TabItem value="pip" label="🐍 Pip (Recommended)" default>
+
+Install the IOWarp Python package:
+
+```bash
+pip install iowarp-core
+```
+
+Verify the installation:
+
+```python
+import iowarp_core
+print(iowarp_core.get_version())
+```
+
+### Start the Runtime
+
+IOWarp includes the `chimaera` CLI for managing the runtime:
+
+```bash
+chimaera runtime start
+```
+
+### What's Included
+
+The pip package is self-contained with all dependencies statically linked. It includes:
+
+- **Python API** — `import iowarp_core` and `import wrp_cee` for context management
+- **CLI** — `chimaera` command for runtime management
+- **Shared libraries** — All IOWarp runtime libraries bundled in the package
+
+:::info
+No system dependencies are required beyond a standard C/C++ runtime (glibc). The package works on any Linux x86_64 or aarch64 system with Python 3.10+.
+:::
+
+</TabItem>
+<TabItem value="docker" label="🐳 Docker">
 
 Pull and run the IOWarp Docker image:
 
