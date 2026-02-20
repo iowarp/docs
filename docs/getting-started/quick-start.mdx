@@ -86,8 +86,6 @@ composes three modules automatically:
 
 ## 3. Start the Runtime
 
-### Option A -- Standalone daemon
-
 ```bash
 # Start in the background
 chimaera runtime start &
@@ -98,17 +96,6 @@ chimaera monitor --once
 # When done
 chimaera runtime stop
 ```
-
-### Option B -- Embedded runtime (recommended for scripts)
-
-Set the `CHI_WITH_RUNTIME` environment variable and the runtime starts
-inside your application process -- no separate daemon needed:
-
-```bash
-export CHI_WITH_RUNTIME=1
-```
-
-The example below uses this approach.
 
 ## 4. Context Exploration Engine Example
 
@@ -134,8 +121,7 @@ tmp.close()
 print(f"Created test file: {tmp.name} ({len(data):,} bytes)")
 
 # -- 2. Initialise the CEE interface -----------------------------------
-#    ContextInterface connects to the running Chimaera runtime (or starts
-#    an embedded one when CHI_WITH_RUNTIME=1).
+#    ContextInterface connects to the running Chimaera runtime.
 iface = cee.ContextInterface()
 
 # -- 3. Bundle (assimilate) the file -----------------------------------
@@ -167,10 +153,9 @@ os.unlink(tmp.name)
 print("Done!")
 ```
 
-Run it with the embedded runtime:
+Run it (make sure the runtime is still running in the background):
 
 ```bash
-export CHI_WITH_RUNTIME=1
 python3 cee_quickstart.py
 ```
 
@@ -190,7 +175,6 @@ Done!
 | Variable | Description |
 |----------|-------------|
 | `CHI_SERVER_CONF` | Path to YAML configuration file (highest priority) |
-| `CHI_WITH_RUNTIME` | Set to `1` to start an embedded runtime in-process |
 | `CHI_IPC_MODE` | Transport: `SHM` (shared memory), `TCP` (default), `IPC` (Unix socket) |
 | `HSHM_LOG_LEVEL` | Logging verbosity: `debug`, `info`, `warning`, `error`, `fatal` |
 
