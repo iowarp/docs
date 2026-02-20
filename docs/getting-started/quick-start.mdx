@@ -1,138 +1,17 @@
 ---
 sidebar_position: 2
 title: Quick Start
-description: Set up your IOWarp environment and run your first example.
+description: Start the Chimaera runtime and run your first CEE example.
 ---
 
 # Quick Start
 
-This guide walks you through setting up an IOWarp environment, starting the
-Chimaera runtime, and running a Context Exploration Engine (CEE) example that
+This guide assumes you have already [installed IOWarp](./installation).
+It walks you through the default configuration, starting the Chimaera
+runtime, and running a Context Exploration Engine (CEE) example that
 ingests, queries, retrieves, and cleans up data.
 
-## 1. Set Up Your Environment
-
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
-
-<Tabs>
-<TabItem value="conda" label="Conda (Recommended)" default>
-
-Conda is the recommended way to install IOWarp Core. It builds the full
-package from source with all optional features available.
-
-```bash
-# Clone the repository with submodules
-git clone --recurse-submodules https://github.com/iowarp/iowarp-core.git
-cd iowarp-core
-
-# Build and install (creates or reuses the "iowarp" conda environment)
-./install.sh
-```
-
-Activate the environment in every new terminal:
-
-```bash
-conda activate iowarp
-```
-
-#### Build Variants
-
-By default `install.sh` builds a CPU-only release. Pass a variant name for
-additional features:
-
-| Variant | Command | What it enables |
-|---------|---------|-----------------|
-| Release (default) | `./install.sh` | CPU-only, all engines |
-| Debug | `./install.sh debug` | Debug symbols, sanitizers |
-| CUDA | `./install.sh cuda` | NVIDIA GPU acceleration |
-| ROCm | `./install.sh rocm` | AMD GPU acceleration |
-| MPI | `./install.sh mpi` | Distributed multi-node |
-| Full | `./install.sh full` | CUDA + MPI + everything |
-
-</TabItem>
-<TabItem value="spack" label="Spack">
-
-1. Install Spack (v0.22.3+ recommended):
-
-```bash
-git clone https://github.com/spack/spack.git -b v0.22.3
-cd spack
-. share/spack/setup-env.sh
-echo ". ${PWD}/share/spack/setup-env.sh" >> ~/.bashrc
-```
-
-2. Add the IOWarp repository:
-
-```bash
-git clone https://github.com/iowarp/iowarp-install.git
-spack repo add iowarp-install/iowarp-spack
-```
-
-3. Install IOWarp:
-
-```bash
-spack install iowarp
-spack load iowarp
-```
-
-</TabItem>
-<TabItem value="docker" label="Docker">
-
-Pull the pre-built image:
-
-```bash
-docker pull iowarp/deploy-cpu:latest
-```
-
-Run a single-node runtime:
-
-```bash
-docker run -d -p 5555:5555 --memory=8g \
-  --name iowarp iowarp/deploy-cpu:latest \
-  chimaera runtime start
-```
-
-Or use Docker Compose. Create a `docker-compose.yml`:
-
-```yaml
-services:
-  iowarp:
-    image: iowarp/deploy-cpu:latest
-    container_name: iowarp
-    hostname: iowarp
-    volumes:
-      - ./chimaera.yaml:/home/iowarp/.chimaera/chimaera.yaml:ro
-    ports:
-      - "5555:5555"
-    mem_limit: 8g
-    command: ["chimaera", "runtime", "start"]
-    restart: unless-stopped
-```
-
-```bash
-docker compose up -d
-docker compose logs   # verify it started
-```
-
-:::info
-IOWarp uses `memfd_create()` for shared memory, so no special `/dev/shm`
-configuration is needed. Only `mem_limit` matters for resource control.
-:::
-
-</TabItem>
-</Tabs>
-
-### Verify the installation
-
-```bash
-chimaera --help
-```
-
-You should see the available subcommands (`runtime start`, `runtime stop`,
-`monitor`, `compose`, etc.).
-
-## 2. Default Configuration
+## 1. Default Configuration
 
 During installation a default configuration file is placed at:
 
@@ -161,7 +40,7 @@ composes three modules automatically:
 | `wrp_cte_core` | Context Transfer Engine with a 512 MB RAM cache |
 | `wrp_cae_core` | Context Assimilation Engine |
 
-## 3. Start the Runtime
+## 2. Start the Runtime
 
 ### Option A -- Standalone daemon
 
@@ -187,7 +66,7 @@ export CHI_WITH_RUNTIME=1
 
 The example below uses this approach.
 
-## 4. Context Exploration Engine Example
+## 3. Context Exploration Engine Example
 
 The Context Exploration Engine (CEE) lets you assimilate data into IOWarp,
 query for it by name or regex, retrieve it, and clean up -- all from Python.
@@ -262,7 +141,7 @@ Destroyed tag 'quickstart_demo'
 Done!
 ```
 
-## 5. Key Environment Variables
+## 4. Key Environment Variables
 
 | Variable | Description |
 |----------|-------------|
