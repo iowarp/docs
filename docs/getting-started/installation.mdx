@@ -1,7 +1,7 @@
 ---
 sidebar_position: 1
 title: Installation
-description: Install IOWarp via pip, Docker, native build, or Spack package manager.
+description: Install IOWarp via Conda, Docker, Spack, or pip.
 ---
 
 # Installation
@@ -12,43 +12,57 @@ import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
 <Tabs>
-<TabItem value="pip" label="🐍 Pip (Recommended)" default>
+<TabItem value="conda" label="Conda (Recommended)" default>
 
-Install the IOWarp Python package:
-
-```bash
-pip install iowarp-core
-```
-
-Verify the installation:
-
-```python
-import iowarp_core
-print(iowarp_core.get_version())
-```
-
-### Start the Runtime
-
-IOWarp includes the `chimaera` CLI for managing the runtime:
+Clone and build IOWarp Core from source using the automated installer.
+This uses conda internally to manage dependencies and produces a full-featured
+build with all optional components.
 
 ```bash
-chimaera runtime start
+git clone --recurse-submodules https://github.com/iowarp/iowarp-core.git
+cd iowarp-core
+./install.sh
+```
+
+Activate the environment in every new terminal:
+
+```bash
+conda activate iowarp
+```
+
+#### Build Variants
+
+Pass a variant name to enable additional features:
+
+| Variant | Command | What it enables |
+|---------|---------|-----------------|
+| Release (default) | `./install.sh` | CPU-only, all engines |
+| Debug | `./install.sh debug` | Debug symbols, sanitizers |
+| CUDA | `./install.sh cuda` | NVIDIA GPU acceleration |
+| ROCm | `./install.sh rocm` | AMD GPU acceleration |
+| MPI | `./install.sh mpi` | Distributed multi-node |
+| Full | `./install.sh full` | CUDA + MPI + everything |
+
+### Verify the installation
+
+```bash
+conda activate iowarp
+chimaera --help
 ```
 
 ### What's Included
 
-The pip package is self-contained with all dependencies statically linked. It includes:
+The Conda install provides the complete IOWarp stack:
 
-- **Python API** — `import iowarp_core` and `import wrp_cee` for context management
+- **All engines** — CTE, CAE, CEE with full feature support
+- **Python API** — `import wrp_cee` for context management
 - **CLI** — `chimaera` command for runtime management
-- **Shared libraries** — All IOWarp runtime libraries bundled in the package
-
-:::info
-No system dependencies are required beyond a standard C/C++ runtime (glibc). The package works on any Linux x86_64 or aarch64 system with Python 3.10+.
-:::
+- **GPU support** — CUDA and ROCm variants available
+- **MPI support** — Distributed multi-node deployments
+- **HDF5 support** — Scientific data format ingestion
 
 </TabItem>
-<TabItem value="docker" label="🐳 Docker">
+<TabItem value="docker" label="Docker">
 
 Pull and run the IOWarp Docker image:
 
@@ -92,23 +106,9 @@ IOWarp uses `memfd_create()` for shared memory, so no special `/dev/shm` configu
 :::
 
 </TabItem>
-<TabItem value="native" label="⚡ Native Install">
+<TabItem value="spack" label="Spack">
 
-Use the standalone installer script:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/iowarp/iowarp-install/main/install.sh | bash
-```
-
-This will:
-- Clone and build IOWarp core with all submodules
-- Install the IOWarp CLIO Kit
-- Set up the complete IOWarp environment
-
-</TabItem>
-<TabItem value="spack" label="📦 Spack">
-
-1. Install Spack (v0.23 recommended):
+1. Install Spack (v0.22.3+ recommended):
 
 ```bash
 git clone https://github.com/spack/spack.git -b v0.22.3
@@ -131,10 +131,52 @@ spack install iowarp
 ```
 
 </TabItem>
+<TabItem value="pip" label="Pip (Experimental)">
+
+:::caution Experimental
+The pip package is experimental. It does not include GPU (CUDA/ROCm),
+MPI, or HDF5 support. For production use, prefer the
+[Conda install](#) method.
+:::
+
+Install the IOWarp Python package:
+
+```bash
+pip install iowarp-core
+```
+
+Verify the installation:
+
+```python
+import iowarp_core
+print(iowarp_core.get_version())
+```
+
+### Start the Runtime
+
+IOWarp includes the `chimaera` CLI for managing the runtime:
+
+```bash
+chimaera runtime start
+```
+
+### What's Included
+
+The pip package is self-contained with all dependencies statically linked. It includes:
+
+- **Python API** — `import iowarp_core` and `import wrp_cee` for context management
+- **CLI** — `chimaera` command for runtime management
+- **Shared libraries** — All IOWarp runtime libraries bundled in the package
+
+:::info
+No system dependencies are required beyond a standard C/C++ runtime (glibc). The package works on any Linux x86_64 or aarch64 system with Python 3.10+.
+:::
+
+</TabItem>
 </Tabs>
 
 ## Next Steps
 
-- [Quick Start Tutorial](./quick-start) — Run your first benchmark
+- [Quick Start Tutorial](./quick-start) — Start the runtime and run your first example
 - [Configuration Reference](../deployment/configuration) — Customize your deployment
 - [CLIO Kit](../clio-kit/mcp-servers) — Explore MCP servers for AI agents
