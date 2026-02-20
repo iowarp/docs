@@ -66,7 +66,7 @@ export CHI_IPC_MODE=TCP
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CHIMAERA_WITH_RUNTIME` | *(unset)* | When set to `1`, starts the runtime server in-process. When `0`, client-only mode. |
+| `CHI_WITH_RUNTIME` | *(unset)* | When set to `1`, starts the runtime server in-process. When `0`, client-only mode. |
 
 This variable is read by `CHIMAERA_INIT()`. If unset, the value of the `default_with_runtime` argument passed to `CHIMAERA_INIT()` is used instead.
 
