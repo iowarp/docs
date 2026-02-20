@@ -7,11 +7,55 @@ description: Start the Chimaera runtime and run your first CEE example.
 # Quick Start
 
 This guide assumes you have already [installed IOWarp](./installation).
-It walks you through the default configuration, starting the Chimaera
-runtime, and running a Context Exploration Engine (CEE) example that
-ingests, queries, retrieves, and cleans up data.
+It walks you through activating your environment, the default
+configuration, starting the Chimaera runtime, and running a Context
+Exploration Engine (CEE) example.
 
-## 1. Default Configuration
+## 1. Activate Your Environment
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+<Tabs>
+<TabItem value="native" label="Native Install" default>
+
+```bash
+conda activate iowarp
+```
+
+</TabItem>
+<TabItem value="spack" label="Spack">
+
+```bash
+spack load iowarp
+```
+
+</TabItem>
+<TabItem value="docker" label="Docker">
+
+If you are using Docker, the environment is already set up inside the
+container. Exec into a running container:
+
+```bash
+docker exec -it iowarp bash
+```
+
+</TabItem>
+<TabItem value="pip" label="Pip">
+
+No activation needed -- the `chimaera` CLI and Python modules are
+available once the package is installed in your Python environment.
+
+</TabItem>
+</Tabs>
+
+Verify the environment is active:
+
+```bash
+chimaera --help
+```
+
+## 2. Default Configuration
 
 During installation a default configuration file is placed at:
 
@@ -40,7 +84,7 @@ composes three modules automatically:
 | `wrp_cte_core` | Context Transfer Engine with a 512 MB RAM cache |
 | `wrp_cae_core` | Context Assimilation Engine |
 
-## 2. Start the Runtime
+## 3. Start the Runtime
 
 ### Option A -- Standalone daemon
 
@@ -66,7 +110,7 @@ export CHI_WITH_RUNTIME=1
 
 The example below uses this approach.
 
-## 3. Context Exploration Engine Example
+## 4. Context Exploration Engine Example
 
 The Context Exploration Engine (CEE) lets you assimilate data into IOWarp,
 query for it by name or regex, retrieve it, and clean up -- all from Python.
@@ -141,7 +185,7 @@ Destroyed tag 'quickstart_demo'
 Done!
 ```
 
-## 4. Key Environment Variables
+## 5. Key Environment Variables
 
 | Variable | Description |
 |----------|-------------|
