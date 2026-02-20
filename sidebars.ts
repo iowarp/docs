@@ -21,6 +21,16 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'Deployment',
+      items: [
+        'deployment/configuration',
+        'deployment/hpc-cluster',
+        'deployment/performance',
+        'deployment/monitoring',
+      ],
+    },
+    {
+      type: 'category',
       label: 'SDK Reference',
       link: {type: 'doc', id: 'sdk/index'},
       items: [
@@ -54,16 +64,6 @@ const sidebars: SidebarsConfig = {
         'api/python',
         'api/agents',
         'api/storage',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Deployment',
-      items: [
-        'deployment/configuration',
-        'deployment/hpc-cluster',
-        'deployment/performance',
-        'deployment/monitoring',
       ],
     },
     'faq',
