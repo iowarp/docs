@@ -32,7 +32,7 @@ IOWarp is released under the [BSD 3-Clause License](https://opensource.org/licen
 This error occurs when another process is using the port Chimaera is trying to bind to:
 
 ```
-chimaera_start_runtime
+chimaera runtime start
 ERROR: Could not start TCP server on any host from hostfile
 Port attempted: 9128
 ```
@@ -51,12 +51,12 @@ Port attempted: 9128
 
 2. Stop the existing Chimaera runtime:
    ```bash
-   chimaera_stop_runtime
+   chimaera runtime stop
    ```
 
 3. Or kill the process directly:
    ```bash
-   pkill -9 chimaera_start_runtime
+   pkill -9 chimaera runtime start
    ```
 
 :::warning

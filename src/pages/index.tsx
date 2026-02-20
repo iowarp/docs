@@ -19,7 +19,7 @@ const sections = [
     icon: '🔧',
     title: 'SDK Reference',
     description: 'Build with Chimaera: IPC primitives, runtime modules, the Context Transfer Engine, and Context Assimilation Engine.',
-    link: '/docs/sdk/interprocess',
+    link: '/docs/sdk',
   },
   {
     icon: '📡',

@@ -15,7 +15,7 @@ description: IOWarp is a context orchestration platform for agentic AI in scient
 |----------|-----------|
 | **Researchers** | [Installation Guide](./getting-started/installation) → [Quick Start](./getting-started/quick-start) |
 | **HPC Practitioners** | [Deployment Guide](./deployment/hpc-cluster) → [Configuration](./deployment/configuration) |
-| **Developers** | [SDK Reference](./sdk/interprocess) → [Python API](./api/python) |
+| **Developers** | [SDK Reference](./sdk/) → [Python API](./api/python) |
 | **AI Researchers** | [CLIO Kit MCP Servers](./clio-kit/mcp-servers) → [Platform Overview](https://iowarp.ai/platform/) |
 
 ## Architecture Overview
