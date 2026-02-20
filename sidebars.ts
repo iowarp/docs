@@ -63,7 +63,6 @@ const sidebars: SidebarsConfig = {
       items: [
         'api/python',
         'api/agents',
-        'api/storage',
       ],
     },
     'faq',

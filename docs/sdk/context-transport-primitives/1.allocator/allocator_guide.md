@@ -1,16 +1,14 @@
-# Memory Allocators & Backends Guide
+---
+sidebar_position: 2
+---
+
+# Allocator Guide
 
 ## Overview
 
-HSHM provides a hierarchy of memory allocators and backends for shared memory, private memory, and GPU memory management. The allocator system supports cross-process memory sharing, GPU-accessible allocations, and lock-free multi-threaded allocation.
+HSHM provides a hierarchy of memory allocators for shared memory, private memory, and GPU memory management. All allocators inherit from the `Allocator` base class and are wrapped via `BaseAllocator<CoreAllocT>` which provides type-safe allocation methods.
 
-## Allocator Architecture
-
-All allocators inherit from the `Allocator` base class and are wrapped via `BaseAllocator<CoreAllocT>` which provides type-safe allocation methods.
-
-**Source:** `hermes_shm/memory/allocator/allocator.h`
-
-### Core Pointer Types
+## Core Pointer Types
 
 HSHM uses offset-based pointers for process-independent shared memory addressing:
 
@@ -28,7 +26,7 @@ char* raw = ptr.ptr_;           // Direct access (fast)
 hipc::ShmPtr<> shm = ptr.shm_; // Shared memory handle (cross-process)
 ```
 
-### Common Allocator API
+## Common Allocator API
 
 All allocators expose these methods through `BaseAllocator`:
 
@@ -51,110 +49,9 @@ FullPtr<T> NewObjs<T>(size_t count, Args&&... args);
 void DelObjs<T>(FullPtr<T> ptr, size_t count);
 ```
 
-## Memory Backends
-
-Memory backends provide the underlying memory regions that allocators manage. A backend is always created first, then an allocator is constructed on top of it.
-
-### Backend Lifecycle
-
-Every backend supports two operations:
-- `shm_init()` — Create and initialize a new memory region (the **owner**)
-- `shm_attach()` — Attach to an existing memory region created by another process
-
-### MallocBackend
-
-Wraps `malloc` for private (non-shared) in-process memory. Useful for single-process tests and allocators that don't need cross-process sharing.
-
-```cpp
-#include "hermes_shm/memory/backend/malloc_backend.h"
-
-hipc::MallocBackend backend;
-size_t heap_size = 128 * 1024 * 1024;  // 128 MB
-backend.shm_init(hipc::MemoryBackendId(0, 0), heap_size);
-
-// Create an allocator on top of this backend
-auto *alloc = backend.MakeAlloc<hipc::BuddyAllocator>();
-```
-
-### PosixShmMmap
-
-The primary backend for cross-process shared memory. Uses `shm_open` and `mmap` to create memory-mapped regions accessible by multiple processes.
-
-```cpp
-#include "hermes_shm/memory/backend/posix_shm_mmap.h"
-
-PosixShmMmap backend;
-
-// Process 0: Create shared memory
-backend.shm_init(MemoryBackendId(0, 0), 512 * 1024 * 1024, "/my_shm_region");
-
-// Process 1+: Attach to existing shared memory
-backend.shm_attach("/my_shm_region");
-```
-
-**Ownership model:** The process that calls `shm_init()` is the owner and is responsible for cleanup. Use `SetOwner()` / `UnsetOwner()` to transfer ownership between processes.
-
-### GpuMalloc
-
-**Source:** `hermes_shm/memory/backend/gpu_malloc.h`
-
-Allocates memory directly on the GPU using `cudaMalloc` (CUDA) or `hipMalloc` (ROCm).
-
-```cpp
-// Only available when HSHM_ENABLE_CUDA or HSHM_ENABLE_ROCM is set
-GpuMalloc backend;
-backend.shm_init(backend_id, data_capacity);
-```
-
-**Memory Layout:**
-```
-GPU Memory: [MemoryBackendHeader | GpuMallocPrivateHeader | Data...]
-```
-
-**Characteristics:**
-- Allocates entire region on GPU via `GpuApi::Malloc()`
-- Creates an IPC handle (`GpuIpcMemHandle`) for cross-process GPU memory sharing
-- Enforces minimum 1MB data size
-- Freed via `GpuApi::Free()`
-- Conditionally compiled: `#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM`
-
-### GpuShmMmap
-
-**Source:** `hermes_shm/memory/backend/gpu_shm_mmap.h`
-
-GPU-accessible POSIX shared memory. Combines host shared memory with GPU registration for zero-copy GPU access.
-
-```cpp
-// Only available when HSHM_ENABLE_CUDA or HSHM_ENABLE_ROCM is set
-GpuShmMmap backend;
-backend.shm_init(backend_id, url, data_capacity);
-```
-
-**Memory Layout:**
-```
-POSIX SHM File: [4KB backend header | 4KB shared header | Data...]
-Virtual Memory:  [4KB private header | 4KB shared header | Data...]
-```
-
-**Characteristics:**
-- Creates POSIX shared memory object (`shm_open`)
-- Maps with combined private/shared access (`MapMixedMemory`)
-- Registers memory with GPU via `GpuApi::RegisterHostMemory()`
-- GPU can access the memory directly without explicit transfers
-- Supports `shm_attach()` for other processes to join
-- Enforces minimum 1MB backend size
-- Conditionally compiled: `#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM`
-
-**Key Difference from GpuMalloc:**
-- Memory lives on the host (CPU) but is GPU-accessible
-- Inherently shareable via POSIX shared memory (no IPC handle needed)
-- Better for data that both CPU and GPU need to access
-
 ## Allocator Types
 
 ### MallocAllocator
-
-**Source:** `hermes_shm/memory/allocator/malloc_allocator.h`
 
 Wraps standard `malloc`/`free`. Used for private (non-shared) memory when no shared memory backend is needed.
 
@@ -174,8 +71,6 @@ alloc->DelObjs<int>(ptr, 100);
 - Tracks total allocation size when `HSHM_ALLOC_TRACK_SIZE` is enabled
 
 ### ArenaAllocator
-
-**Source:** `hermes_shm/memory/allocator/arena_allocator.h`
 
 Bump-pointer allocator. Allocations advance a pointer through a contiguous region. Individual frees are not supported — the entire arena is freed at once via `Reset()`.
 
@@ -210,8 +105,6 @@ size_t remaining = alloc->GetRemainingSize();
 **Best for:** Temporary allocations, scratch buffers, phase-based allocation patterns.
 
 ### BuddyAllocator
-
-**Source:** `hermes_shm/memory/allocator/buddy_allocator.h`
 
 Power-of-two free list allocator. Maintains separate free lists for different size classes, providing efficient allocation with bounded fragmentation.
 
@@ -253,8 +146,6 @@ alloc->Free(ptr);
 - Reallocate support for in-place growth when possible
 
 ### MultiProcessAllocator
-
-**Source:** `hermes_shm/memory/allocator/mp_allocator.h`
 
 Three-tier hierarchical allocator designed for multi-process, multi-threaded environments. Each tier adds more contention but accesses more memory.
 
@@ -301,8 +192,6 @@ The allocator system is designed for multiple processes to share the same memory
 
 ### Example: Multi-Process BuddyAllocator
 
-From `context-transport-primitives/test/unit/allocator/test_buddy_allocator_multiprocess.cc`:
-
 ```cpp
 #include "hermes_shm/memory/allocator/buddy_allocator.h"
 #include "hermes_shm/memory/backend/posix_shm_mmap.h"
@@ -348,8 +237,6 @@ int main(int argc, char **argv) {
 ```
 
 ### Example: Multi-Process MultiProcessAllocator
-
-From `context-transport-primitives/test/unit/allocator/test_mp_allocator_multiprocess.cc`:
 
 ```cpp
 #include "hermes_shm/memory/allocator/mp_allocator.h"
@@ -409,8 +296,6 @@ int main(int argc, char **argv) {
 
 ### Orchestrating Multi-Process Tests
 
-The shell script `run_mp_allocator_multiprocess_test.sh` shows how to orchestrate multiple processes:
-
 ```bash
 #!/bin/bash
 TEST_BINARY="./test_mp_allocator_multiprocess"
@@ -442,39 +327,6 @@ wait $RANK0_PID $RANK1_PID $RANK2_PID
 - `AttachAlloc<AllocT>()` reinterprets the existing memory as an allocator and calls `shm_attach()` — no reinitialization
 - Ownership (`SetOwner`/`UnsetOwner`) determines which process destroys the shared memory on exit
 
-## GPU Compatibility
-
-### GpuApi
-
-The `GpuApi` class provides an abstraction over CUDA and ROCm:
-
-| Method | Description |
-|--------|-------------|
-| `GpuApi::Malloc(size)` | Allocate GPU memory |
-| `GpuApi::Free(ptr)` | Free GPU memory |
-| `GpuApi::Memcpy(dst, src, size, kind)` | Copy memory between host/device |
-| `GpuApi::RegisterHostMemory(ptr, size)` | Register host memory for GPU access |
-| `GpuApi::UnregisterHostMemory(ptr)` | Unregister host memory |
-| `GpuApi::GetIpcMemHandle(ptr)` | Get IPC handle for GPU memory sharing |
-
-### Conditional Compilation
-
-GPU backends are only compiled when CUDA or ROCm is enabled:
-
-```cpp
-#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM
-  // GPU-specific code
-#endif
-
-#if HSHM_IS_HOST
-  // Host-only operations (initialization, IPC setup)
-#endif
-
-#if HSHM_IS_GPU
-  // GPU kernel operations
-#endif
-```
-
 ## Choosing an Allocator
 
 | Allocator | Use Case | Shared Memory | GPU | Free Support |
@@ -486,4 +338,5 @@ GPU backends are only compiled when CUDA or ROCm is enabled:
 
 ## Related Documentation
 
+- [Memory Backends Guide](./memory_backend_guide) - Backends that provide memory regions for these allocators
 - [Data Structures Guide](../types/data_structures_guide) - Data structures that use these allocators

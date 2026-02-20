@@ -1,42 +1,16 @@
-# Context Exploration Engine - Python API Documentation
+---
+sidebar_position: 1
+title: Context Exploration
+description: API reference for data assimilation, querying, retrieval, and cleanup in IOWarp.
+---
+
+# Context Exploration
 
 ## Overview
 
-The Context Exploration Engine (CEE) provides a high-level Python API for managing and exploring data contexts in IOWarp. The API is accessible through the `wrp_cee` Python module and offers a simple interface for data assimilation, querying, retrieval, and cleanup operations.
+The `wrp_cee` Python module provides a high-level API for managing and exploring data contexts in IOWarp. It offers a simple interface for data assimilation, querying, retrieval, and cleanup operations.
 
-**Key Feature:** The CEE API automatically initializes the IOWarp runtime when you create a `ContextInterface` instance. You don't need to manually initialize Chimaera, CTE, or CAE - the `ContextInterface` constructor handles all of this internally.
-
-## Installation
-
-### From pip (Recommended)
-
-```bash
-pip install iowarp-core
-```
-
-This installs the `iowarp_core` package (runtime utilities, CLI) and the `wrp_cee` Python extension (context exploration API). All native dependencies are bundled — no system libraries or build tools required.
-
-### From Source
-
-Build IOWarp with Python bindings enabled:
-
-```bash
-cmake --preset=debug -DWRP_CORE_ENABLE_PYTHON=ON
-cmake --build build -j$(nproc)
-sudo cmake --install build
-```
-
-The `wrp_cee` module will be installed to your Python site-packages directory.
-
-### Verification
-
-```python
-import iowarp_core
-print("IOWarp version:", iowarp_core.get_version())
-
-import wrp_cee
-print("CEE API loaded successfully!")
-```
+**Key Feature:** The API automatically initializes the IOWarp runtime when you create a `ContextInterface` instance. You don't need to manually initialize Chimaera, CTE, or CAE — the `ContextInterface` constructor handles all of this internally.
 
 ## Module: `wrp_cee`
 
@@ -178,10 +152,8 @@ ctx_interface = wrp_cee.ContextInterface()
 **Parameters:** None
 
 **Notes:**
-- Automatically initializes CAE client (which in turn initializes CTE and Chimaera)
-- Verifies Chimaera IPC is available
-- Sets `is_initialized_` flag on success
-- Assumes runtime configuration is already set via environment variables (e.g., `CHI_SERVER_CONF`)
+- Automatically initializes the full IOWarp runtime stack
+- Requires runtime configuration via environment variables (e.g., `CHI_SERVER_CONF`)
 
 **Typical Environment Setup:**
 
@@ -221,7 +193,7 @@ result = ctx_interface.context_bundle(bundle)
 
 **Description:**
 
-Assimilates one or more data objects into IOWarp. Each `AssimilationCtx` in the bundle describes a source file/dataset to assimilate and where to store it. The method calls the CAE's `ParseOmni` function which schedules assimilation tasks for each context.
+Assimilates one or more data objects into IOWarp. Each `AssimilationCtx` in the bundle describes a source file/dataset to assimilate and where to store it.
 
 **Example:**
 
@@ -276,7 +248,7 @@ blob_names = ctx_interface.context_query(tag_re, blob_re, max_results=0)
 
 **Description:**
 
-Queries the CTE system for blobs matching the specified regex patterns. Uses `BlobQuery` with `Broadcast` pool query to search across all nodes. Returns only the blob names, not the data.
+Queries for blobs matching the specified regex patterns across all nodes. Returns only the blob names, not the data.
 
 **Example:**
 
@@ -320,7 +292,7 @@ packed_data = ctx_interface.context_retrieve(
   - Default: `1024`
 - **`max_context_size`** (int, optional): Maximum total context size in bytes
   - Default: `268435456` (256MB)
-- **`batch_size`** (int, optional): Number of concurrent `AsyncGetBlob` operations
+- **`batch_size`** (int, optional): Number of concurrent retrieval operations
   - Controls parallelism
   - Default: `32`
 
@@ -332,13 +304,11 @@ packed_data = ctx_interface.context_retrieve(
 **Description:**
 
 Retrieves blob data matching the specified patterns and packs it into a single binary buffer. The method:
-1. Uses `BlobQuery` to find matching blobs
+1. Finds matching blobs
 2. Allocates a buffer of size `max_context_size`
-3. Retrieves blobs in batches using `AsyncGetBlob`
+3. Retrieves blobs in batches for efficiency
 4. Packs data sequentially into the buffer
 5. Returns the packed data as a string
-
-Blobs are processed in batches for efficiency. The buffer is automatically allocated and freed.
 
 **Example:**
 
@@ -388,7 +358,7 @@ result = ctx_interface.context_destroy(context_names)
 
 **Description:**
 
-Deletes the specified contexts from the CTE system. Each context name is treated as a tag name and deleted using CTE's `DelTag` API. This operation removes the tag and all associated blobs.
+Deletes the specified contexts. Each context name is treated as a tag name. This operation removes the tag and all associated blobs.
 
 **Example:**
 
@@ -415,7 +385,7 @@ else:
 
 ```python
 #!/usr/bin/env python3
-"""Complete CEE API example"""
+"""Complete Python API example"""
 
 import wrp_cee as cee
 import os
@@ -480,9 +450,9 @@ dst="iowarp://my_tag"              # Wrong! Don't use ://
 
 ## Runtime Assumptions
 
-The CEE Python API assumes:
+The Python API assumes:
 
-1. **Runtime is Started:** The IOWarp runtime (Chimaera server) should be running, or will be started by the `ContextInterface` constructor.
+1. **Runtime is Started:** The IOWarp runtime should be running, or will be started by the `ContextInterface` constructor.
 
 2. **Configuration Available:** Runtime configuration is available via environment variable:
    ```bash
@@ -490,12 +460,6 @@ The CEE Python API assumes:
    ```
 
 3. **Proper Permissions:** Your Python process has permission to access shared memory segments and connect to the runtime.
-
-4. **Dependencies Initialized:** When you create a `ContextInterface`, it will:
-   - Initialize CAE client
-   - Initialize CTE client (via CAE)
-   - Initialize Chimaera client (via CTE)
-   - Verify IPC manager is available
 
 ---
 
@@ -529,7 +493,5 @@ if result != 0:
 
 ## See Also
 
-- **C++ API Documentation:** `context-exploration-engine/api/include/wrp_cee/api/context_interface.h`
-- **Unit Tests:** `context-exploration-engine/api/test/test_context_interface.py`
-- **Demo Script:** `context-exploration-engine/api/demo/simple_assimilation_demo.py`
-- **CTE Documentation:** `context-transfer-engine/docs/cte/cte.md`
+- [Quick Start Guide](../getting-started/quick-start) — End-to-end walkthrough
+- [Configuration Reference](../deployment/configuration) — Runtime and storage tier setup
