@@ -1,7 +1,7 @@
 ---
 sidebar_position: 1
 title: Installation
-description: Install IOWarp via native build, Docker, Spack, or pip.
+description: Install IOWarp via Conda, Docker, Spack, or pip.
 ---
 
 # Installation
@@ -12,7 +12,7 @@ import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
 <Tabs>
-<TabItem value="native" label="Native Install (Recommended)" default>
+<TabItem value="conda" label="Conda (Recommended)" default>
 
 Clone and build IOWarp Core from source using the automated installer.
 This uses conda internally to manage dependencies and produces a full-featured
@@ -52,7 +52,7 @@ chimaera --help
 
 ### What's Included
 
-The native install provides the complete IOWarp stack:
+The Conda install provides the complete IOWarp stack:
 
 - **All engines** — CTE, CAE, CEE with full feature support
 - **Python API** — `import wrp_cee` for context management
@@ -136,7 +136,7 @@ spack install iowarp
 :::caution Experimental
 The pip package is experimental. It does not include GPU (CUDA/ROCm),
 MPI, or HDF5 support. For production use, prefer the
-[native install](#) method.
+[Conda install](#) method.
 :::
 
 Install the IOWarp Python package:

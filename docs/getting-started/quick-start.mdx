@@ -17,7 +17,7 @@ import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
 <Tabs>
-<TabItem value="native" label="Native Install" default>
+<TabItem value="conda" label="Conda" default>
 
 ```bash
 conda activate iowarp
@@ -64,8 +64,7 @@ During installation a default configuration file is placed at:
 ```
 
 This file is only created if it does not already exist, so your customisations
-are never overwritten. A reference copy is also installed to
-`$CONDA_PREFIX/etc/chimaera/chimaera_default.yaml`.
+are never overwritten.
 
 The runtime resolves its configuration in this order:
 
