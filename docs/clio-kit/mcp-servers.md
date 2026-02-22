@@ -11,19 +11,19 @@ description: "16 specialized Model Context Protocol servers for scientific compu
 CLIO Kit provides AI agents with direct access to HPC infrastructure, scientific data formats, and research workflows through [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) servers.
 
 :::tip
-For the interactive MCP showcase, visit [toolkit.iowarp.ai](https://toolkit.iowarp.ai).
+For the interactive MCP showcase, visit [docs.iowarp.ai](https://docs.iowarp.ai).
 :::
 
 ## Quick Start
 
 ```bash
 # Install and run any MCP server
-uvx iowarp-agent-toolkit mcp-server hdf5
-uvx iowarp-agent-toolkit mcp-server pandas
-uvx iowarp-agent-toolkit mcp-server slurm
+uvx clio-kit mcp-server hdf5
+uvx clio-kit mcp-server pandas
+uvx clio-kit mcp-server slurm
 
 # List all available servers
-uvx iowarp-agent-toolkit mcp-servers
+uvx clio-kit mcp-servers
 ```
 
 ## Available Servers
@@ -84,15 +84,15 @@ Add to `~/.cursor/mcp.json`:
   "mcpServers": {
     "hdf5-mcp": {
       "command": "uvx",
-      "args": ["iowarp-agent-toolkit", "mcp-server", "hdf5"]
+      "args": ["clio-kit", "mcp-server", "hdf5"]
     },
     "pandas-mcp": {
       "command": "uvx",
-      "args": ["iowarp-agent-toolkit", "mcp-server", "pandas"]
+      "args": ["clio-kit", "mcp-server", "pandas"]
     },
     "slurm-mcp": {
       "command": "uvx",
-      "args": ["iowarp-agent-toolkit", "mcp-server", "slurm"]
+      "args": ["clio-kit", "mcp-server", "slurm"]
     }
   }
 }
@@ -104,9 +104,9 @@ Add to `~/.cursor/mcp.json`:
 <TabItem value="claude-code" label="Claude Code">
 
 ```bash
-claude mcp add hdf5-mcp -- uvx iowarp-agent-toolkit mcp-server hdf5
-claude mcp add pandas-mcp -- uvx iowarp-agent-toolkit mcp-server pandas
-claude mcp add slurm-mcp -- uvx iowarp-agent-toolkit mcp-server slurm
+claude mcp add hdf5-mcp -- uvx clio-kit mcp-server hdf5
+claude mcp add pandas-mcp -- uvx clio-kit mcp-server pandas
+claude mcp add slurm-mcp -- uvx clio-kit mcp-server slurm
 ```
 
 [Claude Code MCP docs →](https://code.claude.com/docs/en/mcp)
@@ -122,12 +122,12 @@ Add to your VS Code MCP config:
     "hdf5-mcp": {
       "type": "stdio",
       "command": "uvx",
-      "args": ["iowarp-agent-toolkit", "mcp-server", "hdf5"]
+      "args": ["clio-kit", "mcp-server", "hdf5"]
     },
     "pandas-mcp": {
       "type": "stdio",
       "command": "uvx",
-      "args": ["iowarp-agent-toolkit", "mcp-server", "pandas"]
+      "args": ["clio-kit", "mcp-server", "pandas"]
     }
   }
 }
@@ -145,11 +145,11 @@ Edit `claude_desktop_config.json`:
   "mcpServers": {
     "hdf5-mcp": {
       "command": "uvx",
-      "args": ["iowarp-agent-toolkit", "mcp-server", "hdf5"]
+      "args": ["clio-kit", "mcp-server", "hdf5"]
     },
     "arxiv-mcp": {
       "command": "uvx",
-      "args": ["iowarp-agent-toolkit", "mcp-server", "arxiv"]
+      "args": ["clio-kit", "mcp-server", "arxiv"]
     }
   }
 }
@@ -164,4 +164,4 @@ Edit `claude_desktop_config.json`:
 
 - **GitHub**: [github.com/iowarp/clio-kit](https://github.com/iowarp/clio-kit)
 - **PyPI**: [pypi.org/project/clio-kit](https://pypi.org/project/clio-kit/)
-- **Interactive Showcase**: [toolkit.iowarp.ai](https://toolkit.iowarp.ai)
+- **Interactive Showcase**: [docs.iowarp.ai](https://docs.iowarp.ai)

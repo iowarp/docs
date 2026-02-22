@@ -14,7 +14,7 @@ IOWarp is a context orchestration platform for agentic AI in scientific computin
 ## Key URLs
 - Documentation: https://docs.iowarp.ai
 - Website: https://iowarp.ai
-- CLIO Kit Showcase: https://toolkit.iowarp.ai
+- CLIO Kit Showcase: https://docs.iowarp.ai
 - GitHub: https://github.com/iowarp
 
 ## License
