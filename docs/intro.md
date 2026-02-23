@@ -38,7 +38,7 @@ IOWarp consists of three layers:
 - [GitHub Organization](https://github.com/iowarp)
 - [Zulip Chat](https://iowarp.zulipchat.com)
 - [Research Publications](https://iowarp.ai/research/)
-- [CLIO Kit (toolkit.iowarp.ai)](https://toolkit.iowarp.ai)
+- [CLIO Kit (docs.iowarp.ai)](https://docs.iowarp.ai)
 - [IOWarp Website (iowarp.ai)](https://iowarp.ai)
 
 ## Need Help?

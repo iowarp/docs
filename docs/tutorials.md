@@ -21,7 +21,7 @@ Tutorials are being developed. Check back soon for:
 
 - [Quick Start Tutorial](./getting-started/quick-start) — Get IOWarp running in 5 minutes
 - [Research Demos](https://iowarp.ai/research/demos/) — See IOWarp in action
-- [CLIO Kit Showcase](https://toolkit.iowarp.ai) — Explore MCP servers interactively
+- [CLIO Kit Showcase](https://docs.iowarp.ai) — Explore MCP servers interactively
 
 ## Contribute a Tutorial
 
