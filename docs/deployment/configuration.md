@@ -37,7 +37,7 @@ Size values throughout the file accept: `B`, `KB`, `MB`, `GB`, `TB` (case-insens
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `port` | `5555` | ZeroMQ RPC listener port. Must match across all cluster nodes. |
+| `port` | `9413` | ZeroMQ RPC listener port. Must match across all cluster nodes. Can be overridden by `CHI_PORT` env var. |
 | `neighborhood_size` | `32` | Maximum nodes queried when splitting range queries. |
 | `hostfile` | *(none)* | Path to a file listing cluster node IPs/hostnames, one per line. Required for multi-node deployments. |
 | `wait_for_restart` | `30` | Seconds to wait for peer nodes during startup. |
@@ -45,7 +45,7 @@ Size values throughout the file accept: `B`, `KB`, `MB`, `GB`, `TB` (case-insens
 
 ```yaml
 networking:
-  port: 5555
+  port: 9413
   neighborhood_size: 32
   # hostfile: /etc/iowarp/hostfile   # Multi-node only
   wait_for_restart: 30
@@ -261,7 +261,7 @@ All fields are optional and override compile-time defaults.
 
 ```yaml
 networking:
-  port: 5555
+  port: 9413
 
 runtime:
   num_threads: 4
@@ -291,7 +291,7 @@ compose:
 
 ```yaml
 networking:
-  port: 5555
+  port: 9413
 
 runtime:
   num_threads: 16
@@ -334,7 +334,7 @@ compose:
 
 ```yaml
 networking:
-  port: 5555
+  port: 9413
   neighborhood_size: 32
   hostfile: /etc/iowarp/hostfile
 
@@ -383,7 +383,7 @@ services:
     volumes:
       - ./chimaera.yaml:/home/iowarp/.chimaera/chimaera.yaml:ro
     ports:
-      - "5555:5555"
+      - "9413:9413"
     mem_limit: 8g
     command: ["chimaera", "runtime", "start"]
     restart: unless-stopped

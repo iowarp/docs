@@ -19,8 +19,8 @@ This uses conda internally to manage dependencies and produces a full-featured
 build with all optional components.
 
 ```bash
-git clone --recurse-submodules https://github.com/iowarp/iowarp-core.git
-cd iowarp-core
+git clone --recurse-submodules https://github.com/iowarp/clio-core.git
+cd clio-core
 ./install.sh
 ```
 
@@ -73,7 +73,7 @@ docker pull iowarp/deploy-cpu:latest
 Run the container:
 
 ```bash
-docker run -d -p 5555:5555 --memory=8g --name iowarp iowarp/deploy-cpu:latest chimaera runtime start
+docker run -d -p 9413:9413 --memory=8g --name iowarp iowarp/deploy-cpu:latest chimaera runtime start
 ```
 
 ### Using Docker Compose
@@ -89,7 +89,7 @@ services:
     volumes:
       - ./chimaera.yaml:/home/iowarp/.chimaera/chimaera.yaml:ro
     ports:
-      - "5555:5555"
+      - "9413:9413"
     mem_limit: 8g
     command: ["chimaera", "runtime", "start"]
     restart: unless-stopped
@@ -120,8 +120,9 @@ echo ". ${PWD}/share/spack/setup-env.sh" >> ~/.bashrc
 2. Add the IOWarp repository:
 
 ```bash
-git clone https://github.com/iowarp/iowarp-install.git
-spack repo add iowarp-install/iowarp-spack
+git clone --recurse-submodules https://github.com/iowarp/clio-core.git
+cd clio-core
+spack repo add installers/spack
 ```
 
 3. Install IOWarp:

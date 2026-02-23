@@ -19,7 +19,7 @@ IOWarp is released under the [BSD 3-Clause License](https://opensource.org/licen
 ### Where can I get help?
 
 - **Zulip Chat**: [iowarp.zulipchat.com](https://iowarp.zulipchat.com)
-- **GitHub Issues**: [github.com/iowarp/iowarp/issues](https://github.com/iowarp/iowarp/issues)
+- **GitHub Issues**: [github.com/iowarp/clio-core/issues](https://github.com/iowarp/clio-core/issues)
 - **Discussions**: [github.com/orgs/iowarp/discussions](https://github.com/orgs/iowarp/discussions)
 - **Email**: grc@illinoistech.edu
 
