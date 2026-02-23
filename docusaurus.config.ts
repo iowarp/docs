@@ -131,7 +131,7 @@ const config: Config = {
           title: 'Community',
           items: [
             {label: 'GitHub', href: 'https://github.com/iowarp'},
-            {label: 'Issues', href: 'https://github.com/iowarp/iowarp/issues'},
+            {label: 'Issues', href: 'https://github.com/iowarp/clio-core/issues'},
             {label: 'Discussions', href: 'https://github.com/orgs/iowarp/discussions'},
             {label: 'Zulip Chat', href: 'https://iowarp.zulipchat.com'},
           ],

@@ -135,4 +135,4 @@ GPU backends are only compiled when CUDA or ROCm is enabled:
 ## Related Documentation
 
 - [Allocator Guide](./allocator_guide) - Allocators that manage memory from these backends
-- [Data Structures Guide](../types/data_structures_guide) - Data structures that use these allocators
+- [Vector Guide](../types/vector_guide) - Shared-memory vectors that use these allocators

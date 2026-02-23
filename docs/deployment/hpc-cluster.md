@@ -42,6 +42,13 @@ The following environment variables control runtime behavior. Set them before st
 export CHI_SERVER_CONF=/etc/iowarp/config.yaml
 ```
 
+### Networking Overrides
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CHI_PORT` | `9413` | Override the RPC port. Takes priority over the YAML `networking.port` setting. |
+| `CHI_SERVER_ADDR` | `127.0.0.1` | Override the server address that clients connect to. |
+
 ### IPC Transport Mode
 
 | Variable | Default | Description |
@@ -107,7 +114,7 @@ Reference it in your config:
 
 ```yaml
 networking:
-  port: 5555
+  port: 9413
   hostfile: /etc/iowarp/hostfile
 ```
 

@@ -27,4 +27,4 @@ AI agents currently interact with IOWarp through:
 
 - [CLIO Agent Overview](https://iowarp.ai/platform/clio-agent/) — Architecture and design
 - [CLIO Kit](https://docs.iowarp.ai) — Interactive MCP server showcase
-- [GitHub Issues](https://github.com/iowarp/iowarp/issues) — Request API features
+- [GitHub Issues](https://github.com/iowarp/clio-core/issues) — Request API features

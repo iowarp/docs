@@ -44,6 +44,6 @@ IOWarp consists of three layers:
 ## Need Help?
 
 - **Community** — [Zulip Chat](https://iowarp.zulipchat.com)
-- **Bug Reports** — [GitHub Issues](https://github.com/iowarp/iowarp/issues)
+- **Bug Reports** — [GitHub Issues](https://github.com/iowarp/clio-core/issues)
 - **Feature Requests** — [GitHub Discussions](https://github.com/orgs/iowarp/discussions)
 - **Email** — grc@illinoistech.edu
