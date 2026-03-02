@@ -1,4 +1,4 @@
-# CTE Core API Documentation
+# Core API Documentation
 
 ## Overview
 
