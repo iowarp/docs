@@ -236,6 +236,17 @@ cmake --install build
 
 ---
 
+## Step 7: Install Claude Code
+
+```bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+source ~/.bashrc
+nvm install --lts
+npm install -g @anthropic-ai/claude-code
+```
+
+---
+
 ## Key Things to Remember
 
 1. **This is ARM, not x86.** Binaries from your laptop won't run here. Compile everything on DeltaAI.
