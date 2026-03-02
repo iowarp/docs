@@ -1,4 +1,8 @@
-# Context Assimilation Engine (CAE) Overview
+---
+sidebar_position: 1
+---
+
+# Overview
 
 ## Introduction
 
