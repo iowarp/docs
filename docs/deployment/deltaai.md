@@ -236,14 +236,65 @@ cmake --install build
 
 ---
 
-## Step 7: Install Claude Code
+## Step 7 (Optional): Install AI Coding Agents
+
+DeltaAI does not ship with Node.js. If you want to use terminal-based coding agents, install Node.js first via [nvm](https://github.com/nvm-sh/nvm):
 
 ```bash
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
 source ~/.bashrc
 nvm install --lts
+```
+
+Then install whichever agents your workflow requires:
+
+<details>
+<summary><strong>Claude Code</strong> (Anthropic)</summary>
+
+```bash
 npm install -g @anthropic-ai/claude-code
 ```
+
+Requires an Anthropic API key or a Claude Pro/Max subscription. See [claude.ai/code](https://claude.ai/code) for details.
+
+</details>
+
+<details>
+<summary><strong>Gemini CLI</strong> (Google)</summary>
+
+```bash
+npm install -g @google/gemini-cli
+```
+
+Authenticate with your Google account on first run. See [geminicli.com](https://geminicli.com/docs/) for details.
+
+</details>
+
+<details>
+<summary><strong>Codex CLI</strong> (OpenAI)</summary>
+
+```bash
+npm install -g @openai/codex
+```
+
+Requires an OpenAI API key. See [openai.com/codex](https://developers.openai.com/codex/cli/) for details.
+
+</details>
+
+<details>
+<summary><strong>OpenCode</strong></summary>
+
+```bash
+npm install -g opencode-ai@latest
+```
+
+Supports multiple LLM providers. See [opencode.ai](https://opencode.ai/docs/) for details.
+
+</details>
+
+:::tip
+All of these agents work well inside a `tmux` session, which is especially useful on DeltaAI where SSH sessions require re-authentication.
+:::
 
 ---
 
