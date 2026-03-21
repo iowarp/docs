@@ -1,0 +1,95 @@
+# Developer Guide
+
+This guide covers setting up a development environment for building IOWarp Core from source.
+
+## Linux (DevContainer)
+
+The recommended way to develop on Linux is using the provided DevContainers, which come pre-configured with all dependencies via Conda.
+
+### Prerequisites
+
+- Docker
+- VS Code or Cursor with the **Dev Containers** extension
+
+### Getting Started
+
+1. Open the repository in VS Code/Cursor
+2. When prompted, select **Reopen in Container**
+3. Choose a configuration:
+   - **IOWarp Core (CPU-only)** — recommended for most development
+   - **IOWarp Core (NVIDIA GPU)** — for CUDA development (requires NVIDIA drivers + Container Toolkit)
+
+### Building
+
+```bash
+cmake --preset=debug
+cmake --build build -j$(nproc)
+```
+
+### Running Tests
+
+```bash
+cd build && ctest
+```
+
+See [`.devcontainer/README.md`](https://github.com/iowarp/clio-core/blob/main/.devcontainer/README.md) for full details on container options, GPU setup, and troubleshooting.
+
+## Windows (Native Build)
+
+Windows support currently covers the **Context Transport Primitives** library. The runtime, CTE, CAE, and CEE subsystems are not yet ported to Windows.
+
+### Prerequisites
+
+- **Visual Studio 2022** with the "Desktop development with C++" workload
+- **Git**
+- **CMake 3.19+** (included with Visual Studio or install separately)
+- **vcpkg** — install and set the `VCPKG_ROOT` environment variable:
+
+```powershell
+git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
+C:\vcpkg\bootstrap-vcpkg.bat
+# Set VCPKG_ROOT environment variable to C:\vcpkg
+[System.Environment]::SetEnvironmentVariable("VCPKG_ROOT", "C:\vcpkg", "User")
+```
+
+### Installing Dependencies
+
+The project root contains a `vcpkg.json` manifest. When you configure with a vcpkg-enabled CMake preset, dependencies are installed automatically — no manual `vcpkg install` step is needed.
+
+### Building
+
+```powershell
+# Configure (vcpkg installs dependencies automatically)
+cmake --preset=windows-debug
+
+# Build
+cmake --build build --config Debug
+```
+
+### Running Tests
+
+```powershell
+cd build
+ctest -C Debug
+```
+
+### Current Limitations
+
+The following subsystems are disabled on Windows and will not build:
+
+- **Context Runtime** (`WRP_CORE_ENABLE_RUNTIME=OFF`)
+- **Context Transfer Engine** (`WRP_CORE_ENABLE_CTE=OFF`)
+- **Context Assimilation Engine** (`WRP_CORE_ENABLE_CAE=OFF`)
+- **Context Execution Engine** (`WRP_CORE_ENABLE_CEE=OFF`)
+
+HDF5 is also disabled in the Windows presets since it is optional and not required for the transport primitives.
+
+### CMake Presets
+
+| Preset | Description |
+|--------|-------------|
+| `windows-debug` | Debug build with tests enabled |
+| `windows-release` | Release build with tests enabled |
+| `windows-pip` | Release build for pip wheels (no tests) |
+
+See [`installers/vcpkg/README.md`](https://github.com/iowarp/clio-core/blob/main/installers/vcpkg/README.md) for details on the vcpkg integration.
