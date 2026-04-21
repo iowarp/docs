@@ -42,7 +42,7 @@ docker exec iowarp-runtime chimaera_pool_list
 For I/O performance analysis, use the [Darshan MCP server](../clio-kit/mcp-servers) from CLIO Kit:
 
 ```bash
-uvx iowarp-agent-toolkit mcp-server darshan
+uvx clio-kit mcp-server darshan
 ```
 
 This provides 10 tools for bandwidth analysis, access pattern detection, and bottleneck identification.

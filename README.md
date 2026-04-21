@@ -39,7 +39,7 @@ docs/
 | Site | URL | Repository |
 |------|-----|-----------|
 | IOWarp Website | [iowarp.ai](https://iowarp.ai) | [iowarp/iowarp.github.io](https://github.com/iowarp/iowarp.github.io) |
-| CLIO Kit Showcase | [toolkit.iowarp.ai](https://toolkit.iowarp.ai) | [iowarp/clio-kit](https://github.com/iowarp/clio-kit) |
+| CLIO Kit Showcase | [docs.iowarp.ai](https://docs.iowarp.ai) | [iowarp/clio-kit](https://github.com/iowarp/clio-kit) |
 | Documentation | [docs.iowarp.ai](https://docs.iowarp.ai) | [iowarp/docs](https://github.com/iowarp/docs) |
 
 ## License

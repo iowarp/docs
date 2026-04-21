@@ -74,7 +74,7 @@ The runtime resolves its configuration in this order:
 | 2 | `~/.chimaera/chimaera.yaml` |
 | 3 | Built-in defaults |
 
-The default configuration starts **4 worker threads** on **port 5555** and
+The default configuration starts **4 worker threads** on **port 9413** and
 composes three modules automatically:
 
 | Module | Purpose |
@@ -175,6 +175,8 @@ Done!
 |----------|-------------|
 | `CHI_SERVER_CONF` | Path to YAML configuration file (highest priority) |
 | `CHI_IPC_MODE` | Transport: `SHM` (shared memory), `TCP` (default), `IPC` (Unix socket) |
+| `CHI_PORT` | Override the RPC port (default: `9413`). Takes priority over YAML config. |
+| `CHI_SERVER_ADDR` | Override the server address clients connect to (default: `127.0.0.1`). |
 | `HSHM_LOG_LEVEL` | Logging verbosity: `debug`, `info`, `warning`, `error`, `fatal` |
 
 ## Next Steps

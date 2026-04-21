@@ -339,4 +339,5 @@ wait $RANK0_PID $RANK1_PID $RANK2_PID
 ## Related Documentation
 
 - [Memory Backends Guide](./memory_backend_guide) - Backends that provide memory regions for these allocators
-- [Data Structures Guide](../types/data_structures_guide) - Data structures that use these allocators
+- [Vector Guide](../types/vector_guide) - Shared-memory vectors that use these allocators
+- [Ring Buffer Guide](../types/ring_buffer_guide) - Lock-free circular queues

@@ -25,7 +25,9 @@ const sidebars: SidebarsConfig = {
       label: 'Deployment',
       items: [
         'deployment/configuration',
+        'deployment/dashboard',
         'deployment/hpc-cluster',
+        'deployment/deltaai',
         'deployment/performance',
         'deployment/monitoring',
       ],
