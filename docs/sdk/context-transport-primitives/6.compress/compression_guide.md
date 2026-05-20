@@ -6,8 +6,8 @@ HSHM provides a unified compression framework that wraps multiple lossless and l
 
 **Headers:**
 ```cpp
-#include <hermes_shm/compress/compress.h>          // Base interface
-#include <hermes_shm/compress/compress_factory.h>   // Factory + presets
+#include <clio_ctp/compress/compress.h>          // Base interface
+#include <clio_ctp/compress/compress_factory.h>   // Factory + presets
 ```
 
 **Compile-time flag:** `CTP_ENABLE_COMPRESS`
@@ -48,15 +48,15 @@ These classes can be used directly without the factory:
 
 | Library | Class | Header |
 |---------|-------|--------|
-| bzip2 | `ctp::Bzip2` | `<hermes_shm/compress/bzip2.h>` |
-| zstd | `ctp::Zstd` | `<hermes_shm/compress/zstd.h>` |
-| lz4 | `ctp::Lz4` | `<hermes_shm/compress/lz4.h>` |
-| zlib | `ctp::Zlib` | `<hermes_shm/compress/zlib.h>` |
-| lzma | `ctp::Lzma` | `<hermes_shm/compress/lzma.h>` |
-| brotli | `ctp::Brotli` | `<hermes_shm/compress/brotli.h>` |
-| snappy | `ctp::Snappy` | `<hermes_shm/compress/snappy.h>` |
-| blosc2 | `ctp::Blosc` | `<hermes_shm/compress/blosc.h>` |
-| lzo | `ctp::Lzo` | `<hermes_shm/compress/lzo.h>` |
+| bzip2 | `ctp::Bzip2` | `<clio_ctp/compress/bzip2.h>` |
+| zstd | `ctp::Zstd` | `<clio_ctp/compress/zstd.h>` |
+| lz4 | `ctp::Lz4` | `<clio_ctp/compress/lz4.h>` |
+| zlib | `ctp::Zlib` | `<clio_ctp/compress/zlib.h>` |
+| lzma | `ctp::Lzma` | `<clio_ctp/compress/lzma.h>` |
+| brotli | `ctp::Brotli` | `<clio_ctp/compress/brotli.h>` |
+| snappy | `ctp::Snappy` | `<clio_ctp/compress/snappy.h>` |
+| blosc2 | `ctp::Blosc` | `<clio_ctp/compress/blosc.h>` |
+| lzo | `ctp::Lzo` | `<clio_ctp/compress/lzo.h>` |
 
 ## API Reference
 
@@ -155,7 +155,7 @@ class CompressionFactory {
 ### Direct Usage (No Factory)
 
 ```cpp
-#include <hermes_shm/compress/zstd.h>
+#include <clio_ctp/compress/zstd.h>
 
 void direct_compress_example() {
     ctp::Zstd zstd;
@@ -184,7 +184,7 @@ void direct_compress_example() {
 ### Factory with Presets
 
 ```cpp
-#include <hermes_shm/compress/compress_factory.h>
+#include <clio_ctp/compress/compress_factory.h>
 
 void factory_compress_example() {
     // Create a fast zstd compressor
@@ -211,7 +211,7 @@ void factory_compress_example() {
 ### Library ID Encoding
 
 ```cpp
-#include <hermes_shm/compress/compress_factory.h>
+#include <clio_ctp/compress/compress_factory.h>
 
 void library_id_example() {
     // Encode: zstd + FAST -> integer ID

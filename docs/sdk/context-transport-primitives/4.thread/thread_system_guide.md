@@ -38,7 +38,7 @@ CTP_THREAD_MODEL_T thread_model_ptr = CTP_THREAD_MODEL;
 ### Thread Creation and Management
 
 ```cpp
-#include "hermes_shm/thread/thread_model_manager.h"
+#include "clio_ctp/thread/thread_model_manager.h"
 
 void basic_threading_example() {
     // Get the current thread model
@@ -201,7 +201,7 @@ void cpu_affinity_example() {
 ## Producer-Consumer Pattern
 
 ```cpp
-#include "hermes_shm/types/atomic.h"
+#include "clio_ctp/types/atomic.h"
 #include <queue>
 #include <mutex>
 

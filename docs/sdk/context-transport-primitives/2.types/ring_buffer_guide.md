@@ -6,7 +6,7 @@ sidebar_position: 2
 
 ## Overview
 
-**Source:** `hermes_shm/data_structures/ipc/ring_buffer.h`
+**Source:** `clio_ctp/data_structures/ipc/ring_buffer.h`
 
 A lock-free circular queue for concurrent producer-consumer patterns. Configurable via compile-time flags.
 
@@ -37,7 +37,7 @@ enum RingQueueFlag {
 ## Usage
 
 ```cpp
-#include <hermes_shm/data_structures/ipc/ring_buffer.h>
+#include <clio_ctp/data_structures/ipc/ring_buffer.h>
 
 // Create a fixed-size SPSC ring buffer with depth 1024
 ctp::ipc::spsc_ring_buffer<int> rb(alloc, 1024);

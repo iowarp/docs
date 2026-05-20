@@ -9,7 +9,7 @@ The Timer Utilities API in Hermes Shared Memory (HSHM) provides high-resolution 
 ### Basic High-Resolution Timer
 
 ```cpp
-#include "hermes_shm/util/timer.h"
+#include "clio_ctp/util/timer.h"
 
 void basic_timing_example() {
     // Create a high-resolution timer
@@ -71,7 +71,7 @@ void timepoint_example() {
 ## MPI Distributed Timing
 
 ```cpp
-#include "hermes_shm/util/timer_mpi.h"
+#include "clio_ctp/util/timer_mpi.h"
 
 #if CTP_ENABLE_MPI
 void mpi_timing_example(MPI_Comm comm) {
@@ -119,7 +119,7 @@ void mpi_timing_example(MPI_Comm comm) {
 ## Thread-Local Timing
 
 ```cpp
-#include "hermes_shm/util/timer_thread.h"
+#include "clio_ctp/util/timer_thread.h"
 
 class WorkerPool {
     std::vector<std::thread> workers_;

@@ -9,7 +9,7 @@ The Singleton Utilities API in Hermes Shared Memory (HSHM) provides multiple sin
 ### Basic Singleton (Thread-Safe)
 
 ```cpp
-#include "hermes_shm/util/singleton.h"
+#include "clio_ctp/util/singleton.h"
 
 class DatabaseConfig {
 public:
@@ -387,7 +387,7 @@ void configure_system() {
 #ifndef PROJECT_SINGLETONS_H
 #define PROJECT_SINGLETONS_H
 
-#include "hermes_shm/util/singleton.h"
+#include "clio_ctp/util/singleton.h"
 #include "config/database_config.h"
 #include "metrics/metrics_collector.h"
 #include "logging/logger.h"

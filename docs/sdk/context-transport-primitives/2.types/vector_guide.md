@@ -10,12 +10,12 @@ HSHM provides two vector variants: `ctp::ipc::vector` for shared memory and `ctp
 
 ## ctp::ipc::vector
 
-**Source:** `hermes_shm/data_structures/ipc/vector.h`
+**Source:** `clio_ctp/data_structures/ipc/vector.h`
 
 A dynamic array stored in shared memory using offset-based pointers (`OffsetPtr<T>`) for process-independent addressing.
 
 ```cpp
-#include <hermes_shm/data_structures/ipc/vector.h>
+#include <clio_ctp/data_structures/ipc/vector.h>
 
 // Create with an allocator
 ctp::ipc::vector<int, AllocT> vec(alloc, 10);  // 10 elements
@@ -46,12 +46,12 @@ for (auto it = vec.begin(); it != vec.end(); ++it) {
 
 ## ctp::priv::vector
 
-**Source:** `hermes_shm/data_structures/priv/vector.h`
+**Source:** `clio_ctp/data_structures/priv/vector.h`
 
 A private-memory vector with allocator integration. Supports the same API as `std::vector` plus serialization.
 
 ```cpp
-#include <hermes_shm/data_structures/priv/vector.h>
+#include <clio_ctp/data_structures/priv/vector.h>
 
 // Standard construction
 ctp::priv::vector<int> vec = {1, 2, 3, 4, 5};

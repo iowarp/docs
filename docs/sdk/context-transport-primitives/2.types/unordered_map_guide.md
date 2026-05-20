@@ -6,7 +6,7 @@ sidebar_position: 4
 
 ## Overview
 
-**Source:** `hermes_shm/data_structures/priv/unordered_map_ll.h`
+**Source:** `clio_ctp/data_structures/priv/unordered_map_ll.h`
 
 A hash map implementation using a vector of lists design that provides efficient concurrent access when combined with external locking. Each bucket contains a `std::list` of key-value pairs; the hash space is partitioned across a fixed number of buckets set at construction time.
 
@@ -20,7 +20,7 @@ A hash map implementation using a vector of lists design that provides efficient
 ## Basic Usage
 
 ```cpp
-#include <hermes_shm/data_structures/priv/unordered_map_ll.h>
+#include <clio_ctp/data_structures/priv/unordered_map_ll.h>
 
 // Create map with 32 buckets
 ctp::priv::unordered_map_ll<int, std::string> map(32);

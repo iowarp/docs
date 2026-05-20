@@ -9,7 +9,7 @@ The Bitfield Types API in Hermes Shared Memory (HSHM) provides efficient bit man
 ### Standard Bitfield Operations
 
 ```cpp
-#include "hermes_shm/types/bitfield.h"
+#include "clio_ctp/types/bitfield.h"
 
 void basic_bitfield_example() {
     // Create a 32-bit bitfield
@@ -128,7 +128,7 @@ void bitfield_masking_example() {
 ### Thread-Safe Bitfield Usage
 
 ```cpp
-#include "hermes_shm/types/bitfield.h"
+#include "clio_ctp/types/bitfield.h"
 #include <thread>
 #include <vector>
 

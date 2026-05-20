@@ -4,7 +4,7 @@
 
 The `EventManager` class provides an epoll-based event loop for monitoring file descriptors and handling UNIX signals. It is used internally by the Lightbeam networking layer and the runtime worker system for efficient I/O multiplexing.
 
-**Source:** `hermes_shm/include/hermes_shm/lightbeam/event_manager.h`
+**Source:** `clio_ctp/include/clio_ctp/lightbeam/event_manager.h`
 
 ## Core Data Structures
 
@@ -167,7 +167,7 @@ int GetSignalFd();   // Returns the signalfd (after AddSignalEvent)
 A typical event loop combines file descriptor events with signal-based wakeups:
 
 ```cpp
-#include <hermes_shm/lightbeam/event_manager.h>
+#include <clio_ctp/lightbeam/event_manager.h>
 
 class ReadHandler : public ctp::lbm::EventAction {
  public:

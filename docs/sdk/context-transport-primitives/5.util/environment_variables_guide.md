@@ -9,7 +9,7 @@ The Environment Variables API in Hermes Shared Memory (HSHM) provides cross-plat
 ### Getting Environment Variables
 
 ```cpp
-#include "hermes_shm/introspect/system_info.h"
+#include "clio_ctp/introspect/system_info.h"
 
 // Get environment variables with optional size limits
 std::string home_dir = ctp::SystemInfo::Getenv("HOME");
@@ -579,7 +579,7 @@ private:
 ## Complete Example: Environment-Driven Application
 
 ```cpp
-#include "hermes_shm/introspect/system_info.h"
+#include "clio_ctp/introspect/system_info.h"
 #include <iostream>
 #include <map>
 

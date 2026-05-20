@@ -22,7 +22,7 @@ The `Recv()` method handles both phases automatically: it deserializes metadata,
 ### Transport Types
 
 ```cpp
-#include <hermes_shm/lightbeam/transport_factory_impl.h>
+#include <clio_ctp/lightbeam/transport_factory_impl.h>
 
 namespace ctp::lbm {
     enum class TransportType {
@@ -214,7 +214,7 @@ class TransportFactory {
 Uses a ROUTER/DEALER socket pattern. Server creates a ROUTER socket; clients create DEALER sockets with unique identities (hostname:PID).
 
 ```cpp
-#include <hermes_shm/lightbeam/zmq_transport.h>
+#include <clio_ctp/lightbeam/zmq_transport.h>
 
 // Direct construction
 auto server = std::make_unique<ZeroMqTransport>(
@@ -236,7 +236,7 @@ auto client = std::make_unique<ZeroMqTransport>(
 Uses POSIX TCP or Unix domain sockets with scatter-gather I/O (`writev`).
 
 ```cpp
-#include <hermes_shm/lightbeam/socket_transport.h>
+#include <clio_ctp/lightbeam/socket_transport.h>
 
 // TCP
 auto server = std::make_unique<SocketTransport>(
@@ -264,7 +264,7 @@ auto client_ipc = std::make_unique<SocketTransport>(
 Uses an SPSC (single-producer, single-consumer) ring buffer for zero-network-hop transfer between threads or co-located processes. Requires a shared `LbmContext` with a pre-allocated copy space.
 
 ```cpp
-#include <hermes_shm/lightbeam/shm_transport.h>
+#include <clio_ctp/lightbeam/shm_transport.h>
 
 ShmTransport client(TransportMode::kClient);
 ShmTransport server(TransportMode::kServer);
@@ -296,7 +296,7 @@ sender.join();
 ### Basic Client-Server Communication
 
 ```cpp
-#include <hermes_shm/lightbeam/transport_factory_impl.h>
+#include <clio_ctp/lightbeam/transport_factory_impl.h>
 
 using namespace ctp::lbm;
 
@@ -343,7 +343,7 @@ void basic_example() {
 ### Custom Metadata with Multiple Bulks
 
 ```cpp
-#include <hermes_shm/lightbeam/transport_factory_impl.h>
+#include <clio_ctp/lightbeam/transport_factory_impl.h>
 
 using namespace ctp::lbm;
 
@@ -441,7 +441,7 @@ void bidirectional_example() {
 ### EventManager-Driven Server
 
 ```cpp
-#include <hermes_shm/lightbeam/socket_transport.h>
+#include <clio_ctp/lightbeam/socket_transport.h>
 
 void event_driven_example() {
     auto server = std::make_unique<SocketTransport>(
@@ -468,8 +468,8 @@ void event_driven_example() {
 ### Shared Memory Transport
 
 ```cpp
-#include <hermes_shm/lightbeam/shm_transport.h>
-#include <hermes_shm/lightbeam/transport_factory_impl.h>
+#include <clio_ctp/lightbeam/shm_transport.h>
+#include <clio_ctp/lightbeam/transport_factory_impl.h>
 
 void shm_example() {
     // Create shared copy space

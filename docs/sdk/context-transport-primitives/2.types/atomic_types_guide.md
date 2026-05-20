@@ -9,7 +9,7 @@ The Atomic Types API in Hermes Shared Memory (HSHM) provides cross-platform atom
 ### Platform-Specific Atomic Types
 
 ```cpp
-#include "hermes_shm/types/atomic.h"
+#include "clio_ctp/types/atomic.h"
 
 void atomic_variants_example() {
     // Standard atomic (uses std::atomic on host, GPU atomics on device)

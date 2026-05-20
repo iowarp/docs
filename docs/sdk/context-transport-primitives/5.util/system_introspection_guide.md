@@ -7,7 +7,7 @@ The System Introspection API in Hermes Shared Memory (HSHM) provides cross-platf
 ## Accessing SystemInfo
 
 ```cpp
-#include "hermes_shm/introspect/system_info.h"
+#include "clio_ctp/introspect/system_info.h"
 
 // Get the singleton instance
 auto sys_info = CTP_SYSTEM_INFO;  // Returns SystemInfo*
@@ -115,7 +115,7 @@ pthread_setaffinity_np(pthread_self(), sizeof(cpuset), &cpuset);
 ### Thread-Local Storage (TLS)
 
 ```cpp
-#include "hermes_shm/thread/thread_model/thread_model.h"
+#include "clio_ctp/thread/thread_model/thread_model.h"
 
 // Define thread-specific data structure
 struct ThreadData {

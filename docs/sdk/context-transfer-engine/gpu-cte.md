@@ -21,9 +21,9 @@ Engine) client API. Two usage patterns are covered:
 #include <wrp_cte/core/core_tasks.h>
 
 // GPU memory backends (GPU kernel path only)
-#include <hermes_shm/memory/backend/gpu_shm_mmap.h>
-#include <hermes_shm/memory/backend/gpu_malloc.h>
-#include <hermes_shm/util/gpu_api.h>
+#include <clio_ctp/memory/backend/gpu_shm_mmap.h>
+#include <clio_ctp/memory/backend/gpu_malloc.h>
+#include <clio_ctp/util/gpu_api.h>
 ```
 
 ## CPU-Side Usage (Fork Client)

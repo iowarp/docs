@@ -75,8 +75,8 @@ alloc->DelObjs<int>(ptr, 100);
 Bump-pointer allocator. Allocations advance a pointer through a contiguous region. Individual frees are not supported — the entire arena is freed at once via `Reset()`.
 
 ```cpp
-#include "hermes_shm/memory/backend/malloc_backend.h"
-#include "hermes_shm/memory/allocator/arena_allocator.h"
+#include "clio_ctp/memory/backend/malloc_backend.h"
+#include "clio_ctp/memory/allocator/arena_allocator.h"
 
 // Create backend and allocator
 hipc::MallocBackend backend;
@@ -109,8 +109,8 @@ size_t remaining = alloc->GetRemainingSize();
 Power-of-two free list allocator. Maintains separate free lists for different size classes, providing efficient allocation with bounded fragmentation.
 
 ```cpp
-#include "hermes_shm/memory/backend/malloc_backend.h"
-#include "hermes_shm/memory/allocator/buddy_allocator.h"
+#include "clio_ctp/memory/backend/malloc_backend.h"
+#include "clio_ctp/memory/allocator/buddy_allocator.h"
 
 // Create backend and allocator
 hipc::MallocBackend backend;
@@ -193,8 +193,8 @@ The allocator system is designed for multiple processes to share the same memory
 ### Example: Multi-Process BuddyAllocator
 
 ```cpp
-#include "hermes_shm/memory/allocator/buddy_allocator.h"
-#include "hermes_shm/memory/backend/posix_shm_mmap.h"
+#include "clio_ctp/memory/allocator/buddy_allocator.h"
+#include "clio_ctp/memory/backend/posix_shm_mmap.h"
 
 using namespace ctp::ipc;
 
@@ -239,8 +239,8 @@ int main(int argc, char **argv) {
 ### Example: Multi-Process MultiProcessAllocator
 
 ```cpp
-#include "hermes_shm/memory/allocator/mp_allocator.h"
-#include "hermes_shm/memory/backend/posix_shm_mmap.h"
+#include "clio_ctp/memory/allocator/mp_allocator.h"
+#include "clio_ctp/memory/backend/posix_shm_mmap.h"
 
 using namespace ctp::ipc;
 

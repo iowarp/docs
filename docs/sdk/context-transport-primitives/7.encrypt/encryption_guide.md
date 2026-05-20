@@ -6,8 +6,8 @@ HSHM provides an AES-256-CBC encryption implementation built on top of OpenSSL's
 
 **Headers:**
 ```cpp
-#include <hermes_shm/encrypt/encrypt.h>   // Includes aes.h
-#include <hermes_shm/encrypt/aes.h>       // Direct include
+#include <clio_ctp/encrypt/encrypt.h>   // Includes aes.h
+#include <clio_ctp/encrypt/aes.h>       // Direct include
 ```
 
 **Compile-time flag:** `CTP_ENABLE_ENCRYPT`
@@ -94,7 +94,7 @@ Both the sender and receiver must use the same key and IV. The key and IV are st
 ### Basic Encrypt/Decrypt
 
 ```cpp
-#include <hermes_shm/encrypt/encrypt.h>
+#include <clio_ctp/encrypt/encrypt.h>
 
 void encrypt_example() {
     ctp::AES crypto;

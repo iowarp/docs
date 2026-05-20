@@ -138,7 +138,7 @@ export CTP_LOG_EXCLUDE="251,252"  # Disable kInfo and kWarning
 #### Log File Output
 Set `CTP_LOG_OUT` to write logs to a file (in addition to console):
 ```bash
-export CTP_LOG_OUT="/tmp/hermes_shm.log"
+export CTP_LOG_OUT="/tmp/clio_ctp.log"
 ```
 
 ### Debug Builds

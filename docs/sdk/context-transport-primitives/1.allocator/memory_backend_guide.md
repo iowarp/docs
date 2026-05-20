@@ -19,7 +19,7 @@ Every backend supports two operations:
 Wraps `malloc` for private (non-shared) in-process memory. Useful for single-process tests and allocators that don't need cross-process sharing.
 
 ```cpp
-#include "hermes_shm/memory/backend/malloc_backend.h"
+#include "clio_ctp/memory/backend/malloc_backend.h"
 
 hipc::MallocBackend backend;
 size_t heap_size = 128 * 1024 * 1024;  // 128 MB
@@ -34,7 +34,7 @@ auto *alloc = backend.MakeAlloc<hipc::BuddyAllocator>();
 The primary backend for cross-process shared memory. Uses `shm_open` and `mmap` to create memory-mapped regions accessible by multiple processes.
 
 ```cpp
-#include "hermes_shm/memory/backend/posix_shm_mmap.h"
+#include "clio_ctp/memory/backend/posix_shm_mmap.h"
 
 PosixShmMmap backend;
 

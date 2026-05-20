@@ -6,14 +6,14 @@ sidebar_position: 3
 
 ## Overview
 
-**Source:** `hermes_shm/data_structures/priv/string.h`
+**Source:** `clio_ctp/data_structures/priv/string.h`
 
 An SSO (Short String Optimization) string backed by `ctp::priv::vector`. Short strings (32 bytes or fewer) are stored inline without heap allocation.
 
 ## Usage
 
 ```cpp
-#include <hermes_shm/data_structures/priv/string.h>
+#include <clio_ctp/data_structures/priv/string.h>
 
 // Construction
 ctp::string s1("hello");

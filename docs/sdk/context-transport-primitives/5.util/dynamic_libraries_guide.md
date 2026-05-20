@@ -9,7 +9,7 @@ The Dynamic Libraries API in Hermes Shared Memory (HSHM) provides cross-platform
 ### Basic Library Loading
 
 ```cpp
-#include "hermes_shm/introspect/system_info.h"
+#include "clio_ctp/introspect/system_info.h"
 
 // Load a shared library
 ctp::SharedLibrary math_lib("./libmymath.so");      // Linux
@@ -806,7 +806,7 @@ private:
 ## Complete Example: Extensible Application
 
 ```cpp
-#include "hermes_shm/introspect/system_info.h"
+#include "clio_ctp/introspect/system_info.h"
 #include <iostream>
 #include <memory>
 

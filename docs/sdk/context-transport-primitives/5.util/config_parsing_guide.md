@@ -9,7 +9,7 @@ The Configuration Parsing API in Hermes Shared Memory (HSHM) provides powerful u
 ### Creating a Configuration Class
 
 ```cpp
-#include "hermes_shm/util/config_parse.h"
+#include "clio_ctp/util/config_parse.h"
 #include "yaml-cpp/yaml.h"
 
 class ApplicationConfig : public ctp::BaseConfig {

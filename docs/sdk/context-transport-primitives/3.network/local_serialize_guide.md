@@ -6,7 +6,7 @@
 
 **Header:**
 ```cpp
-#include <hermes_shm/data_structures/serialization/local_serialize.h>
+#include <clio_ctp/data_structures/serialization/local_serialize.h>
 ```
 
 ## Core Classes
@@ -181,7 +181,7 @@ The `is_loading` and `is_saving` type traits distinguish serialization direction
 ### Basic Arithmetic Serialization
 
 ```cpp
-#include <hermes_shm/data_structures/serialization/local_serialize.h>
+#include <clio_ctp/data_structures/serialization/local_serialize.h>
 
 int original = 42;
 
