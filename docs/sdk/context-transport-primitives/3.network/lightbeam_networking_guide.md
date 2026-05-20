@@ -24,7 +24,7 @@ The `Recv()` method handles both phases automatically: it deserializes metadata,
 ```cpp
 #include <hermes_shm/lightbeam/transport_factory_impl.h>
 
-namespace hshm::lbm {
+namespace ctp::lbm {
     enum class TransportType {
         kZeroMq,   // ZeroMQ (DEALER/ROUTER pattern)
         kSocket,   // POSIX TCP or Unix domain sockets
@@ -42,14 +42,14 @@ namespace hshm::lbm {
 
 | Flag | Description |
 |------|-------------|
-| `HSHM_ENABLE_LIGHTBEAM` | Master switch for all lightbeam transports |
-| `HSHM_ENABLE_ZMQ` | Enable ZeroMQ transport |
+| `CTP_ENABLE_LIGHTBEAM` | Master switch for all lightbeam transports |
+| `CTP_ENABLE_ZMQ` | Enable ZeroMQ transport |
 
 Socket and SHM transports are always available when lightbeam is enabled.
 
 ## Data Structures
 
-### hshm::lbm::Bulk
+### ctp::lbm::Bulk
 
 Describes a memory region for data transfer:
 
@@ -57,7 +57,7 @@ Describes a memory region for data transfer:
 struct Bulk {
     hipc::FullPtr<char> data;     // Pointer to data (supports shared memory)
     size_t size;                  // Size of data in bytes
-    hshm::bitfield32_t flags;    // BULK_EXPOSE or BULK_XFER
+    ctp::bitfield32_t flags;    // BULK_EXPOSE or BULK_XFER
     void* desc = nullptr;        // Transport handle (e.g., zmq_msg_t*)
     void* mr = nullptr;          // RDMA memory region handle (future)
 };
@@ -70,7 +70,7 @@ struct Bulk {
 | `BULK_EXPOSE` | Metadata-only: bulk size and ShmPtr are sent, but no data bytes are transferred over the wire |
 | `BULK_XFER` | Data transfer: bulk data bytes are transmitted to the receiver |
 
-### hshm::lbm::LbmMeta
+### ctp::lbm::LbmMeta
 
 Base class for message metadata:
 
@@ -101,7 +101,7 @@ class MyMeta : public LbmMeta {
 };
 ```
 
-### hshm::lbm::ClientInfo
+### ctp::lbm::ClientInfo
 
 Routing information returned by `Recv()`:
 
@@ -113,7 +113,7 @@ struct ClientInfo {
 };
 ```
 
-### hshm::lbm::LbmContext
+### ctp::lbm::LbmContext
 
 Context for controlling send/recv behavior:
 
@@ -136,7 +136,7 @@ struct LbmContext {
 
 ## API Reference
 
-### hshm::lbm::Transport
+### ctp::lbm::Transport
 
 The unified interface implemented by all transports:
 
@@ -182,7 +182,7 @@ class Transport {
 - `Recv()`: Receives metadata, auto-populates `meta.recv` from `meta.send` descriptors, and receives bulk data. Returns a `ClientInfo` with `rc == 0` on success, `rc == EAGAIN` if no data is available.
 - `ClearRecvHandles()`: Frees transport-allocated buffers in `meta.recv`. Must be called after you are done with received data.
 
-### hshm::lbm::TransportFactory
+### ctp::lbm::TransportFactory
 
 Factory for creating transport instances:
 
@@ -298,7 +298,7 @@ sender.join();
 ```cpp
 #include <hermes_shm/lightbeam/transport_factory_impl.h>
 
-using namespace hshm::lbm;
+using namespace ctp::lbm;
 
 void basic_example() {
     // Create server and client via factory
@@ -345,7 +345,7 @@ void basic_example() {
 ```cpp
 #include <hermes_shm/lightbeam/transport_factory_impl.h>
 
-using namespace hshm::lbm;
+using namespace ctp::lbm;
 
 class RequestMeta : public LbmMeta {
  public:

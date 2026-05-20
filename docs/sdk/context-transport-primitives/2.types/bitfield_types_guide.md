@@ -13,7 +13,7 @@ The Bitfield Types API in Hermes Shared Memory (HSHM) provides efficient bit man
 
 void basic_bitfield_example() {
     // Create a 32-bit bitfield
-    hshm::bitfield32_t flags;
+    ctp::bitfield32_t flags;
     
     // Define some flag constants
     constexpr uint32_t FLAG_ENABLED    = BIT_OPT(uint32_t, 0);  // Bit 0: 0x1
@@ -62,13 +62,13 @@ void basic_bitfield_example() {
 ```cpp
 void bitfield_sizes_example() {
     // Different sized bitfields
-    hshm::bitfield8_t   small_flags;    // 8-bit
-    hshm::bitfield16_t  medium_flags;   // 16-bit  
-    hshm::bitfield32_t  large_flags;    // 32-bit
-    hshm::bitfield64_t  huge_flags;     // 64-bit
+    ctp::bitfield8_t   small_flags;    // 8-bit
+    ctp::bitfield16_t  medium_flags;   // 16-bit  
+    ctp::bitfield32_t  large_flags;    // 32-bit
+    ctp::bitfield64_t  huge_flags;     // 64-bit
     
     // Generic integer bitfield
-    hshm::ibitfield int_flags;          // int-sized
+    ctp::ibitfield int_flags;          // int-sized
     
     // Set some bits in each
     small_flags.SetBits(0x03);          // Set bits 0,1
@@ -87,13 +87,13 @@ void bitfield_sizes_example() {
 
 ```cpp
 void bitfield_masking_example() {
-    hshm::bitfield32_t permissions;
+    ctp::bitfield32_t permissions;
     
     // Define permission masks using MakeMask
-    uint32_t read_mask  = hshm::bitfield32_t::MakeMask(0, 3);  // Bits 0-2
-    uint32_t write_mask = hshm::bitfield32_t::MakeMask(3, 3);  // Bits 3-5
-    uint32_t exec_mask  = hshm::bitfield32_t::MakeMask(6, 3);  // Bits 6-8
-    uint32_t owner_mask = hshm::bitfield32_t::MakeMask(9, 3);  // Bits 9-11
+    uint32_t read_mask  = ctp::bitfield32_t::MakeMask(0, 3);  // Bits 0-2
+    uint32_t write_mask = ctp::bitfield32_t::MakeMask(3, 3);  // Bits 3-5
+    uint32_t exec_mask  = ctp::bitfield32_t::MakeMask(6, 3);  // Bits 6-8
+    uint32_t owner_mask = ctp::bitfield32_t::MakeMask(9, 3);  // Bits 9-11
     
     printf("Permission masks:\n");
     printf("Read:  0x%03X (bits 0-2)\n", read_mask);
@@ -116,7 +116,7 @@ void bitfield_masking_example() {
     printf("Others can exec: %s\n", others_can_exec ? "yes" : "no");
     
     // Copy specific bits between bitfields
-    hshm::bitfield32_t new_permissions;
+    ctp::bitfield32_t new_permissions;
     new_permissions.CopyBits(permissions, read_mask | exec_mask);
     
     printf("Copied R-X permissions: 0x%08X\n", new_permissions.bits_.load());
@@ -134,7 +134,7 @@ void bitfield_masking_example() {
 
 void atomic_bitfield_example() {
     // Atomic bitfield for thread-safe operations
-    hshm::abitfield32_t shared_status;
+    ctp::abitfield32_t shared_status;
     
     constexpr uint32_t WORKER_READY   = BIT_OPT(uint32_t, 0);
     constexpr uint32_t WORKER_BUSY    = BIT_OPT(uint32_t, 1);
@@ -198,7 +198,7 @@ void atomic_bitfield_example() {
 
 ```cpp
 class TaskManager {
-    hshm::abitfield64_t task_status_;  // Track up to 64 tasks
+    ctp::abitfield64_t task_status_;  // Track up to 64 tasks
     
 public:
     bool StartTask(int task_id) {
@@ -302,7 +302,7 @@ void task_management_example() {
 ```cpp
 void big_bitfield_example() {
     // Create a bitfield with 256 bits (8 x 32-bit words)
-    hshm::big_bitfield<256> large_bitfield;
+    ctp::big_bitfield<256> large_bitfield;
     
     printf("Bitfield size: %zu 32-bit words\n", large_bitfield.size());
     
@@ -338,9 +338,9 @@ void big_bitfield_example() {
 ```cpp
 template<size_t NUM_NODES>
 class NodeStatusTracker {
-    hshm::big_bitfield<NUM_NODES> online_nodes_;
-    hshm::big_bitfield<NUM_NODES> healthy_nodes_;
-    hshm::big_bitfield<NUM_NODES> maintenance_nodes_;
+    ctp::big_bitfield<NUM_NODES> online_nodes_;
+    ctp::big_bitfield<NUM_NODES> healthy_nodes_;
+    ctp::big_bitfield<NUM_NODES> maintenance_nodes_;
     
 public:
     void SetNodeOnline(size_t node_id) {
@@ -458,7 +458,7 @@ enum class ProcessState : uint32_t {
 };
 
 class Process {
-    hshm::abitfield32_t state_;
+    ctp::abitfield32_t state_;
     int process_id_;
     
 public:
@@ -550,7 +550,7 @@ void state_machine_example() {
 
 ```cpp
 class FeatureFlags {
-    hshm::bitfield64_t enabled_features_;
+    ctp::bitfield64_t enabled_features_;
     
 public:
     enum Feature : uint64_t {
@@ -662,7 +662,7 @@ void feature_flags_example() {
 
 void serialization_example() {
     // Create and configure bitfield
-    hshm::bitfield32_t config_flags;
+    ctp::bitfield32_t config_flags;
     config_flags.SetBits(0x12345678);
     
     // Serialize to file
@@ -673,7 +673,7 @@ void serialization_example() {
     }
     
     // Deserialize from file
-    hshm::bitfield32_t loaded_flags;
+    ctp::bitfield32_t loaded_flags;
     {
         std::ifstream is("bitfield.bin", std::ios::binary);
         cereal::BinaryInputArchive archive(is);

@@ -17,8 +17,7 @@ The configuration file is located via (in priority order):
 | Source | Priority | Description |
 |--------|----------|-------------|
 | `CHI_SERVER_CONF` env var | **1st** | Checked first. |
-| `WRP_RUNTIME_CONF` env var | **2nd** | Legacy fallback. |
-| `~/.chimaera/chimaera.yaml` | **3rd** | Default created at install time. |
+| `~/.chimaera/chimaera.yaml` | **2nd** | Default created at install time. |
 
 ```bash
 # Use the installed default
@@ -67,17 +66,17 @@ Logging is controlled by HLOG, which reads **environment variables** at process 
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `HSHM_LOG_LEVEL` | `info` (compile-time default) | Runtime log level threshold. Messages below this level are suppressed. Accepts: `debug` (0), `info` (1), `success` (2), `warning` (3), `error` (4), `fatal` (5). Case-insensitive strings or numeric values. |
-| `HSHM_LOG_OUT` | *(none — console only)* | Path to a log file. When set, all log messages are also written to this file (without ANSI color codes). |
+| `CTP_LOG_LEVEL` | `info` (compile-time default) | Runtime log level threshold. Messages below this level are suppressed. Accepts: `debug` (0), `info` (1), `success` (2), `warning` (3), `error` (4), `fatal` (5). Case-insensitive strings or numeric values. |
+| `CTP_LOG_OUT` | *(none — console only)* | Path to a log file. When set, all log messages are also written to this file (without ANSI color codes). |
 
 ```bash
 # Show debug-level output and write to a file
-export HSHM_LOG_LEVEL=debug
-export HSHM_LOG_OUT=/tmp/chimaera.log
+export CTP_LOG_LEVEL=debug
+export CTP_LOG_OUT=/tmp/chimaera.log
 chimaera runtime start
 ```
 
-HLOG also applies a **compile-time** threshold (`HSHM_LOG_LEVEL` CMake define, default `kInfo`). Messages below the compile-time threshold are compiled out entirely and cannot be enabled at runtime. The runtime environment variable can only raise the threshold further (i.e., make output quieter), or match the compile-time level.
+HLOG also applies a **compile-time** threshold (`CTP_LOG_LEVEL` CMake define, default `kInfo`). Messages below the compile-time threshold are compiled out entirely and cannot be enabled at runtime. The runtime environment variable can only raise the threshold further (i.e., make output quieter), or match the compile-time level.
 
 Log routing:
 - `debug`, `info`, `success` messages go to **stdout**.

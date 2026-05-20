@@ -57,7 +57,7 @@ Wraps standard `malloc`/`free`. Used for private (non-shared) memory when no sha
 
 ```cpp
 // Access the global singleton
-auto* alloc = HSHM_MALLOC;
+auto* alloc = CTP_MALLOC;
 
 // Allocate and free
 auto ptr = alloc->AllocateObjs<int>(100);
@@ -67,8 +67,8 @@ alloc->DelObjs<int>(ptr, 100);
 **Characteristics:**
 - No shared memory support (`shm_attach()` throws `SHMEM_NOT_SUPPORTED`)
 - Prepends a `MallocPage` header (magic number + size) to each allocation
-- Available as a global singleton via `HSHM_MALLOC` macro
-- Tracks total allocation size when `HSHM_ALLOC_TRACK_SIZE` is enabled
+- Available as a global singleton via `CTP_MALLOC` macro
+- Tracks total allocation size when `CTP_ALLOC_TRACK_SIZE` is enabled
 
 ### ArenaAllocator
 
@@ -100,7 +100,7 @@ size_t remaining = alloc->GetRemainingSize();
 - No fragmentation
 - No individual free support — use `Reset()` to reclaim all memory
 - Throws `OUT_OF_MEMORY` if arena is exhausted
-- GPU-compatible (`HSHM_CROSS_FUN` annotations)
+- GPU-compatible (`CTP_CROSS_FUN` annotations)
 
 **Best for:** Temporary allocations, scratch buffers, phase-based allocation patterns.
 
@@ -196,7 +196,7 @@ The allocator system is designed for multiple processes to share the same memory
 #include "hermes_shm/memory/allocator/buddy_allocator.h"
 #include "hermes_shm/memory/backend/posix_shm_mmap.h"
 
-using namespace hshm::ipc;
+using namespace ctp::ipc;
 
 constexpr size_t kShmSize = 512 * 1024 * 1024;  // 512 MB
 const std::string kShmUrl = "/buddy_allocator_multiprocess_test";
@@ -242,7 +242,7 @@ int main(int argc, char **argv) {
 #include "hermes_shm/memory/allocator/mp_allocator.h"
 #include "hermes_shm/memory/backend/posix_shm_mmap.h"
 
-using namespace hshm::ipc;
+using namespace ctp::ipc;
 
 constexpr size_t kShmSize = 512 * 1024 * 1024;  // 512 MB
 const std::string kShmUrl = "/mp_allocator_multiprocess_test";

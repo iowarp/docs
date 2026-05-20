@@ -8,7 +8,7 @@ sidebar_position: 3
 
 **Source:** `hermes_shm/data_structures/priv/string.h`
 
-An SSO (Short String Optimization) string backed by `hshm::priv::vector`. Short strings (32 bytes or fewer) are stored inline without heap allocation.
+An SSO (Short String Optimization) string backed by `ctp::priv::vector`. Short strings (32 bytes or fewer) are stored inline without heap allocation.
 
 ## Usage
 
@@ -16,15 +16,15 @@ An SSO (Short String Optimization) string backed by `hshm::priv::vector`. Short 
 #include <hermes_shm/data_structures/priv/string.h>
 
 // Construction
-hshm::string s1("hello");
-hshm::string s2(std::string("world"));
-hshm::string s3(s1);  // Copy
+ctp::string s1("hello");
+ctp::string s2(std::string("world"));
+ctp::string s3(s1);  // Copy
 
 // Standard string API
 s1.append(" world");
 s1 += "!";
 size_t pos = s1.find("world");
-hshm::string sub = s1.substr(0, 5);
+ctp::string sub = s1.substr(0, 5);
 bool eq = (s1 == s2);
 
 // Access
@@ -46,9 +46,9 @@ std::string std_str2 = static_cast<std::string>(s1);
 ## Key Features
 
 - Short strings (32 bytes or fewer) stored inline without heap allocation
-- Longer strings use `hshm::priv::vector` as backing store
+- Longer strings use `ctp::priv::vector` as backing store
 - Full `std::string`-compatible API: `find`, `substr`, `replace`, `starts_with`, `ends_with`
-- Annotated with `HSHM_CROSS_FUN` for GPU compatibility
+- Annotated with `CTP_CROSS_FUN` for GPU compatibility
 - Serialization support via `save()`/`load()`
 
-**Type Alias:** `hshm::string` is a convenience alias for `hshm::priv::basic_string<char>`.
+**Type Alias:** `ctp::string` is a convenience alias for `ctp::priv::basic_string<char>`.

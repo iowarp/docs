@@ -49,10 +49,10 @@ cmake --build build -j$(nproc)
 
 # Or enable FUSE on any existing preset
 cmake -DWRP_CTE_ENABLE_FUSE_ADAPTER=ON ..
-cmake --build . --target wrp_cte_fuse -j$(nproc)
+cmake --build . --target clio_cte_fuse -j$(nproc)
 ```
 
-This produces the `wrp_cte_fuse` binary. The adapter links against `wrp_cte_core_client` and `libfuse3` — it does **not** require MPI or ELF interception.
+This produces the `clio_cte_fuse` binary. The adapter links against `wrp_cte_core_client` and `libfuse3` — it does **not** require MPI or ELF interception.
 
 ### Prerequisites
 
@@ -89,7 +89,7 @@ chimaera runtime start
 mkdir -p /mnt/cte
 
 # Connect as a client to the already-running runtime
-CHI_WITH_RUNTIME=0 wrp_cte_fuse /mnt/cte -f
+CHI_WITH_RUNTIME=0 clio_cte_fuse /mnt/cte -f
 ```
 
 | Flag | Description |
@@ -192,7 +192,7 @@ docker run --cap-add SYS_ADMIN --device /dev/fuse \
   -v /workspace:/workspace \
   iowarp/deps-cpu:latest \
   bash -c "chimaera runtime start & sleep 3 && \
-    CHI_WITH_RUNTIME=0 wrp_cte_fuse /mnt/cte -f"
+    CHI_WITH_RUNTIME=0 clio_cte_fuse /mnt/cte -f"
 ```
 
 A ready-made Docker Compose configuration for integration testing is available at:

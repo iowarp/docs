@@ -159,8 +159,7 @@ The dashboard reads the same config file as the runtime, using the same search o
 | Source | Priority |
 |--------|----------|
 | `CHI_SERVER_CONF` environment variable | **1st** |
-| `WRP_RUNTIME_CONF` environment variable | **2nd** |
-| `~/.chimaera/chimaera.yaml` | **3rd** |
+| `~/.chimaera/chimaera.yaml` | **2nd** |
 
 See [Configuration](./configuration) for details on the config file format.
 

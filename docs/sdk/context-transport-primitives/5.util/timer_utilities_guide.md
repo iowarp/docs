@@ -13,7 +13,7 @@ The Timer Utilities API in Hermes Shared Memory (HSHM) provides high-resolution 
 
 void basic_timing_example() {
     // Create a high-resolution timer
-    hshm::Timer timer;
+    ctp::Timer timer;
     
     // Start timing
     timer.Reset();  // Starts timer and resets accumulated time
@@ -45,17 +45,17 @@ void basic_timing_example() {
 
 ```cpp
 // Different timer implementations
-hshm::HighResCpuTimer cpu_timer;           // std::chrono::high_resolution_clock
-hshm::HighResMonotonicTimer mono_timer;    // std::chrono::steady_clock (recommended)
-hshm::Timer default_timer;                 // Alias for HighResMonotonicTimer
+ctp::HighResCpuTimer cpu_timer;           // std::chrono::high_resolution_clock
+ctp::HighResMonotonicTimer mono_timer;    // std::chrono::steady_clock (recommended)
+ctp::Timer default_timer;                 // Alias for HighResMonotonicTimer
 
 // Timepoint classes for manual timing
-hshm::HighResCpuTimepoint cpu_timepoint;
-hshm::HighResMonotonicTimepoint mono_timepoint;
-hshm::Timepoint default_timepoint;         // Alias for HighResMonotonicTimepoint
+ctp::HighResCpuTimepoint cpu_timepoint;
+ctp::HighResMonotonicTimepoint mono_timepoint;
+ctp::Timepoint default_timepoint;         // Alias for HighResMonotonicTimepoint
 
 void timepoint_example() {
-    hshm::Timepoint start, end;
+    ctp::Timepoint start, end;
     
     start.Now();  // Capture current time
     
@@ -73,9 +73,9 @@ void timepoint_example() {
 ```cpp
 #include "hermes_shm/util/timer_mpi.h"
 
-#if HSHM_ENABLE_MPI
+#if CTP_ENABLE_MPI
 void mpi_timing_example(MPI_Comm comm) {
-    hshm::MpiTimer mpi_timer(comm);
+    ctp::MpiTimer mpi_timer(comm);
     
     // Each rank performs timing
     mpi_timer.Reset();
@@ -123,7 +123,7 @@ void mpi_timing_example(MPI_Comm comm) {
 
 class WorkerPool {
     std::vector<std::thread> workers_;
-    hshm::ThreadTimer thread_timer_;
+    ctp::ThreadTimer thread_timer_;
     
 public:
     explicit WorkerPool(int num_threads) : thread_timer_(num_threads) {
@@ -176,10 +176,10 @@ void thread_timing_example() {
 
 ## Best Practices
 
-1. **Timer Choice**: Use `hshm::Timer` (monotonic) for measuring durations, avoid CPU timers that can be affected by frequency scaling
+1. **Timer Choice**: Use `ctp::Timer` (monotonic) for measuring durations, avoid CPU timers that can be affected by frequency scaling
 2. **MPI Timing**: Use `MpiTimer` for measuring distributed operations and getting consistent timing across ranks
 3. **Thread Safety**: `ThreadTimer` provides thread-local timing; use `TimerPool` for complex multi-threaded scenarios
-4. **Periodic Operations**: Use `HSHM_PERIODIC` macros for regular maintenance tasks without additional timer overhead
+4. **Periodic Operations**: Use `CTP_PERIODIC` macros for regular maintenance tasks without additional timer overhead
 5. **Warm-up**: Always perform warm-up runs before benchmarking to account for CPU frequency scaling and cache effects
 6. **Statistical Analysis**: Use multiple measurements and calculate statistics for reliable performance characterization
 7. **Overhead Awareness**: Be aware of timing overhead (typically 10-100ns) when measuring very short operations

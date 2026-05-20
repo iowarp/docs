@@ -17,17 +17,16 @@ import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
 <Tabs>
-<TabItem value="conda" label="Conda" default>
+<TabItem value="pip" label="Pip" default>
+
+No activation needed -- the `chimaera` CLI and Python modules are
+available once the package is installed in your Python environment.
+
+</TabItem>
+<TabItem value="conda" label="Conda">
 
 ```bash
 conda activate iowarp
-```
-
-</TabItem>
-<TabItem value="spack" label="Spack">
-
-```bash
-spack load iowarp
 ```
 
 </TabItem>
@@ -41,10 +40,11 @@ docker exec -it iowarp bash
 ```
 
 </TabItem>
-<TabItem value="pip" label="Pip">
+<TabItem value="spack" label="Spack">
 
-No activation needed -- the `chimaera` CLI and Python modules are
-available once the package is installed in your Python environment.
+```bash
+spack load iowarp
+```
 
 </TabItem>
 </Tabs>
@@ -177,7 +177,7 @@ Done!
 | `CHI_IPC_MODE` | Transport: `SHM` (shared memory), `TCP` (default), `IPC` (Unix socket) |
 | `CHI_PORT` | Override the RPC port (default: `9413`). Takes priority over YAML config. |
 | `CHI_SERVER_ADDR` | Override the server address clients connect to (default: `127.0.0.1`). |
-| `HSHM_LOG_LEVEL` | Logging verbosity: `debug`, `info`, `warning`, `error`, `fatal` |
+| `CTP_LOG_LEVEL` | Logging verbosity: `debug`, `info`, `warning`, `error`, `fatal` |
 
 ## Next Steps
 

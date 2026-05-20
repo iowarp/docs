@@ -36,7 +36,7 @@ The following environment variables control runtime behavior. Set them before st
 | Variable | Priority | Description |
 |----------|----------|-------------|
 | `CHI_SERVER_CONF` | **Primary** | Path to the Chimaera YAML configuration file. Checked first. |
-| `WRP_RUNTIME_CONF` | Fallback | Used when `CHI_SERVER_CONF` is not set. |
+| `~/.chimaera/chimaera.yaml` | Fallback | Used when `CHI_SERVER_CONF` is not set. |
 
 ```bash
 export CHI_SERVER_CONF=/etc/iowarp/config.yaml

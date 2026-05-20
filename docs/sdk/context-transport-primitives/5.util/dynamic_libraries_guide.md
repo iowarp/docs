@@ -12,9 +12,9 @@ The Dynamic Libraries API in Hermes Shared Memory (HSHM) provides cross-platform
 #include "hermes_shm/introspect/system_info.h"
 
 // Load a shared library
-hshm::SharedLibrary math_lib("./libmymath.so");      // Linux
-// hshm::SharedLibrary math_lib("libmymath.dylib");   // macOS
-// hshm::SharedLibrary math_lib("mymath.dll");        // Windows
+ctp::SharedLibrary math_lib("./libmymath.so");      // Linux
+// ctp::SharedLibrary math_lib("libmymath.dylib");   // macOS
+// ctp::SharedLibrary math_lib("mymath.dll");        // Windows
 
 // Check if loading succeeded
 if (!math_lib.IsNull()) {
@@ -24,10 +24,10 @@ if (!math_lib.IsNull()) {
 }
 
 // Load library with full path
-hshm::SharedLibrary lib("/usr/local/lib/libcustom.so");
+ctp::SharedLibrary lib("/usr/local/lib/libcustom.so");
 
 // Delayed loading
-hshm::SharedLibrary delayed_lib;
+ctp::SharedLibrary delayed_lib;
 // ... some time later ...
 delayed_lib.Load("./plugins/myplugin.so");
 ```
@@ -73,7 +73,7 @@ if (info != nullptr) {
 class SafeLibraryLoader {
 public:
     static bool LoadLibraryWithFallback(
-        hshm::SharedLibrary& lib,
+        ctp::SharedLibrary& lib,
         const std::vector<std::string>& paths) {
         
         for (const auto& path : paths) {
@@ -89,7 +89,7 @@ public:
     }
     
     static void* GetRequiredSymbol(
-        hshm::SharedLibrary& lib,
+        ctp::SharedLibrary& lib,
         const std::string& symbol_name) {
         
         void* symbol = lib.GetSymbol(symbol_name);
@@ -103,7 +103,7 @@ public:
 };
 
 // Usage
-hshm::SharedLibrary my_lib;
+ctp::SharedLibrary my_lib;
 std::vector<std::string> search_paths = {
     "./libmylib.so",
     "/usr/local/lib/libmylib.so",
@@ -171,12 +171,12 @@ public:
     
 private:
     struct LoadedPlugin {
-        hshm::SharedLibrary library;
+        ctp::SharedLibrary library;
         IPlugin* instance;
         DestroyPluginFunc destroy_func;
         PluginInfo info;
         
-        LoadedPlugin(hshm::SharedLibrary&& lib, IPlugin* inst, 
+        LoadedPlugin(ctp::SharedLibrary&& lib, IPlugin* inst, 
                     DestroyPluginFunc destroy, const PluginInfo& info)
             : library(std::move(lib)), instance(inst), 
               destroy_func(destroy), info(info) {}
@@ -199,7 +199,7 @@ public:
         }
         
         // Load the library
-        hshm::SharedLibrary lib(plugin_path);
+        ctp::SharedLibrary lib(plugin_path);
         if (lib.IsNull()) {
             fprintf(stderr, "Failed to load plugin library: %s\n", 
                     lib.GetError().c_str());
@@ -335,7 +335,7 @@ public:
     }
     
 private:
-    bool CheckAPIVersion(hshm::SharedLibrary& lib) {
+    bool CheckAPIVersion(ctp::SharedLibrary& lib) {
         GetPluginAPIVersionFunc get_version = 
             (GetPluginAPIVersionFunc)lib.GetSymbol("GetPluginAPIVersion");
         
@@ -558,7 +558,7 @@ public:
     }
     
     static bool LoadLibrary(const std::string& base_name, 
-                          hshm::SharedLibrary& lib) {
+                          ctp::SharedLibrary& lib) {
         // Build search paths
         std::vector<std::string> search_paths = BuildSearchPaths(base_name);
         
@@ -585,18 +585,18 @@ private:
         paths.push_back("./" + lib_name);
         
         // Application library directory
-        std::string app_lib = hshm::SystemInfo::Getenv("APP_LIB_DIR");
+        std::string app_lib = ctp::SystemInfo::Getenv("APP_LIB_DIR");
         if (!app_lib.empty()) {
             paths.push_back(app_lib + "/" + lib_name);
         }
         
         // LD_LIBRARY_PATH / DYLD_LIBRARY_PATH / PATH
 #ifdef _WIN32
-        std::string env_path = hshm::SystemInfo::Getenv("PATH");
+        std::string env_path = ctp::SystemInfo::Getenv("PATH");
 #elif __APPLE__
-        std::string env_path = hshm::SystemInfo::Getenv("DYLD_LIBRARY_PATH");
+        std::string env_path = ctp::SystemInfo::Getenv("DYLD_LIBRARY_PATH");
 #else
-        std::string env_path = hshm::SystemInfo::Getenv("LD_LIBRARY_PATH");
+        std::string env_path = ctp::SystemInfo::Getenv("LD_LIBRARY_PATH");
 #endif
         
         if (!env_path.empty()) {
@@ -666,7 +666,7 @@ public:
     
     static bool LoadVersionedLibrary(const std::string& base_name,
                                     const Version& min_version,
-                                    hshm::SharedLibrary& lib) {
+                                    ctp::SharedLibrary& lib) {
         // Try exact version first
         std::string versioned_name = base_name + "-" + min_version.ToString();
         if (CrossPlatformLoader::LoadLibrary(versioned_name, lib)) {
@@ -704,7 +704,7 @@ public:
     }
     
 private:
-    static bool CheckVersion(hshm::SharedLibrary& lib, const Version& min_version) {
+    static bool CheckVersion(ctp::SharedLibrary& lib, const Version& min_version) {
         typedef void (*GetVersionFunc)(int*, int*, int*);
         GetVersionFunc get_version = (GetVersionFunc)lib.GetSymbol("GetLibraryVersion");
         
@@ -857,22 +857,22 @@ private:
     
     void SetupPluginEnvironment() {
         // Add plugin directory to library path
-        std::string ld_path = hshm::SystemInfo::Getenv("LD_LIBRARY_PATH");
+        std::string ld_path = ctp::SystemInfo::Getenv("LD_LIBRARY_PATH");
         if (!ld_path.empty()) {
             ld_path = plugin_directory_ + ":" + ld_path;
         } else {
             ld_path = plugin_directory_;
         }
-        hshm::SystemInfo::Setenv("LD_LIBRARY_PATH", ld_path, 1);
+        ctp::SystemInfo::Setenv("LD_LIBRARY_PATH", ld_path, 1);
         
         // Set plugin-specific environment
-        hshm::SystemInfo::Setenv("PLUGIN_API_VERSION", PLUGIN_API_VERSION, 1);
-        hshm::SystemInfo::Setenv("APP_PLUGIN_DIR", plugin_directory_, 1);
+        ctp::SystemInfo::Setenv("PLUGIN_API_VERSION", PLUGIN_API_VERSION, 1);
+        ctp::SystemInfo::Setenv("APP_PLUGIN_DIR", plugin_directory_, 1);
     }
     
     std::string GetPluginDirectory() {
         // Check environment variable
-        std::string dir = hshm::SystemInfo::Getenv("APP_PLUGIN_DIR");
+        std::string dir = ctp::SystemInfo::Getenv("APP_PLUGIN_DIR");
         if (!dir.empty()) {
             return dir;
         }

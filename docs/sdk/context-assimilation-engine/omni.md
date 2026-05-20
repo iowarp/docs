@@ -193,9 +193,9 @@ transfers:
 
 ## Using OMNI Files
 
-### Using the wrp_cae_omni Utility
+### Using the clio_cae_omni Utility
 
-The `wrp_cae_omni` utility is the primary tool for processing OMNI files. It loads the OMNI configuration and schedules assimilation tasks with the CAE runtime.
+The `clio_cae_omni` utility is the primary tool for processing OMNI files. It loads the OMNI configuration and schedules assimilation tasks with the CAE runtime.
 
 #### Prerequisites
 
@@ -206,19 +206,19 @@ The `wrp_cae_omni` utility is the primary tool for processing OMNI files. It loa
 #### Basic Usage
 
 ```bash
-wrp_cae_omni <omni_file_path>
+clio_cae_omni <omni_file_path>
 ```
 
 **Example:**
 ```bash
-wrp_cae_omni /path/to/transfer_config.yaml
+clio_cae_omni /path/to/transfer_config.yaml
 ```
 
 #### Complete Workflow
 
 ```bash
 # 1. Start runtime
-export WRP_RUNTIME_CONF=/etc/iowarp/config.yaml
+export CHI_SERVER_CONF=/etc/iowarp/config.yaml
 chimaera runtime start &
 sleep 2
 
@@ -226,7 +226,7 @@ sleep 2
 chimaera compose /path/to/cae_config.yaml
 
 # 3. Process OMNI file
-wrp_cae_omni /path/to/omni_file.yaml
+clio_cae_omni /path/to/omni_file.yaml
 ```
 
 #### Expected Output

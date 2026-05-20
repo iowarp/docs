@@ -2,7 +2,7 @@
 
 ## Overview
 
-HSHM provides an AES-256-CBC encryption implementation built on top of OpenSSL's EVP API. The `hshm::AES` class handles key derivation from passwords, random initialization vector (IV) generation, and symmetric encrypt/decrypt operations.
+HSHM provides an AES-256-CBC encryption implementation built on top of OpenSSL's EVP API. The `ctp::AES` class handles key derivation from passwords, random initialization vector (IV) generation, and symmetric encrypt/decrypt operations.
 
 **Headers:**
 ```cpp
@@ -10,13 +10,13 @@ HSHM provides an AES-256-CBC encryption implementation built on top of OpenSSL's
 #include <hermes_shm/encrypt/aes.h>       // Direct include
 ```
 
-**Compile-time flag:** `HSHM_ENABLE_ENCRYPT`
+**Compile-time flag:** `CTP_ENABLE_ENCRYPT`
 
 **Dependencies:** OpenSSL (`libssl`, `libcrypto`)
 
 ## API Reference
 
-### hshm::AES
+### ctp::AES
 
 ```cpp
 namespace hshm {
@@ -97,7 +97,7 @@ Both the sender and receiver must use the same key and IV. The key and IV are st
 #include <hermes_shm/encrypt/encrypt.h>
 
 void encrypt_example() {
-    hshm::AES crypto;
+    ctp::AES crypto;
 
     // 1. Setup: derive key and create IV
     crypto.GenerateKey("my_secret_password");
@@ -133,7 +133,7 @@ void encrypt_example() {
 
 ```cpp
 void large_buffer_example() {
-    hshm::AES crypto;
+    ctp::AES crypto;
     crypto.GenerateKey("passwd");
     crypto.CreateInitialVector();
 
@@ -163,7 +163,7 @@ For network communication, the key and IV must be shared between sender and rece
 
 ```cpp
 // Sender
-hshm::AES sender_crypto;
+ctp::AES sender_crypto;
 sender_crypto.GenerateKey("shared_password");
 sender_crypto.CreateInitialVector();
 
@@ -175,7 +175,7 @@ sender_crypto.Encrypt(output, enc_size, input, input_size);
 // The IV can be sent in plaintext — it's not secret
 
 // Receiver
-hshm::AES receiver_crypto;
+ctp::AES receiver_crypto;
 receiver_crypto.GenerateKey("shared_password");
 receiver_crypto.iv_ = sender_crypto.iv_;  // Use sender's IV
 

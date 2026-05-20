@@ -23,7 +23,7 @@ A hash map implementation using a vector of lists design that provides efficient
 #include <hermes_shm/data_structures/priv/unordered_map_ll.h>
 
 // Create map with 32 buckets
-hshm::priv::unordered_map_ll<int, std::string> map(32);
+ctp::priv::unordered_map_ll<int, std::string> map(32);
 
 // Insert
 auto [inserted, ptr] = map.insert(1, "hello");
@@ -48,7 +48,7 @@ map.for_each([](const int& key, std::string& value) {
 ## Constructor
 
 ```cpp
-hshm::priv::unordered_map_ll<Key, T> map(max_concurrency);
+ctp::priv::unordered_map_ll<Key, T> map(max_concurrency);
 ```
 
 **Parameters:**
@@ -86,7 +86,7 @@ Insert operations return `std::pair<bool, T*>` where `first` is `true` if insert
 
 ## Key Differences from std::unordered_map
 
-| Feature | std::unordered_map | hshm::priv::unordered_map_ll |
+| Feature | std::unordered_map | ctp::priv::unordered_map_ll |
 |---------|-------------------|----------------------|
 | Internal Structure | Implementation-defined | Vector of lists (explicit) |
 | Bucket Count | Dynamic rehashing | Fixed at construction |
@@ -98,7 +98,7 @@ Insert operations return `std::pair<bool, T*>` where `first` is `true` if insert
 
 | Scenario | Recommendation |
 |----------|---------------|
-| Runtime container data structures (caches, registries) | `hshm::priv::unordered_map_ll` |
+| Runtime container data structures (caches, registries) | `ctp::priv::unordered_map_ll` |
 | Task input/output parameters | `std::unordered_map` or `chi::ipc::` types |
 | Client-side code | `std::unordered_map` |
 | Data requiring serialization | `std::unordered_map` with cereal |

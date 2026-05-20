@@ -255,13 +255,13 @@ The integration test transfers data from the Materials Science SEM\_103 dataset 
 
 ### Full Test (with Chimaera Runtime)
 
-This runs the end-to-end pipeline: Chimaera runtime (with CTE + CAE pools auto-created via compose), then `wrp_cae_omni`.
+This runs the end-to-end pipeline: Chimaera runtime (with CTE + CAE pools auto-created via compose), then `clio_cae_omni`.
 
 The `run_test.sh` script performs the following steps:
 
 1. Validates that `GLOBUS_ACCESS_TOKEN` is set (also requires `GLOBUS_HTTPS_ACCESS_TOKEN` for HTTPS downloads)
 2. Starts the Chimaera runtime with `wrp_runtime_conf.yaml` (compose section creates CTE pool 512.0 and CAE pool 400.0 automatically)
-3. Processes the OMNI file (`matsci_globus_omni.yaml`) with `wrp_cae_omni`
+3. Processes the OMNI file (`matsci_globus_omni.yaml`) with `clio_cae_omni`
 4. Prints transferred files and shuts down the runtime
 
 Transferred files are written to `/tmp/globus_matsci/`.
@@ -354,7 +354,7 @@ The default timeout is 5 minutes (30 polls at 10-second intervals). For large fi
 Verify that the executables are installed and in your `PATH`:
 
 ```bash
-which chimaera wrp_cae_omni
+which chimaera clio_cae_omni
 ```
 
 Check that `WRP_CTE_CONF` points to a valid configuration file.

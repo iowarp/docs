@@ -2,7 +2,7 @@
 
 ## Overview
 
-`LocalSerialize` and `LocalDeserialize` are lightweight binary serialization classes in the `hshm::ipc` namespace. They serialize C++ objects into a contiguous `std::vector<char>` buffer without requiring external dependencies like cereal. They are used internally by the SHM transport in Lightbeam, and are available for general-purpose binary serialization needs.
+`LocalSerialize` and `LocalDeserialize` are lightweight binary serialization classes in the `ctp::ipc` namespace. They serialize C++ objects into a contiguous `std::vector<char>` buffer without requiring external dependencies like cereal. They are used internally by the SHM transport in Lightbeam, and are available for general-purpose binary serialization needs.
 
 **Header:**
 ```cpp
@@ -11,7 +11,7 @@
 
 ## Core Classes
 
-### hshm::ipc::LocalSerialize
+### ctp::ipc::LocalSerialize
 
 Serializes objects into a contiguous memory buffer:
 
@@ -42,7 +42,7 @@ class LocalSerialize {
 };
 ```
 
-### hshm::ipc::LocalDeserialize
+### ctp::ipc::LocalDeserialize
 
 Deserializes objects from a contiguous memory buffer:
 
@@ -166,7 +166,7 @@ You can detect at compile time whether a type is serializable:
 
 ```cpp
 // True if T can be serialized by archive type Ar
-hshm::ipc::is_serializeable_v<Ar, T>
+ctp::ipc::is_serializeable_v<Ar, T>
 ```
 
 The `is_loading` and `is_saving` type traits distinguish serialization direction:
@@ -187,12 +187,12 @@ int original = 42;
 
 // Serialize
 std::vector<char> buffer;
-hshm::ipc::LocalSerialize<> serializer(buffer);
+ctp::ipc::LocalSerialize<> serializer(buffer);
 serializer << original;
 
 // Deserialize
 int restored = 0;
-hshm::ipc::LocalDeserialize<> deserializer(buffer);
+ctp::ipc::LocalDeserialize<> deserializer(buffer);
 deserializer >> restored;
 
 assert(restored == 42);
@@ -207,12 +207,12 @@ std::string val3 = "hello";
 
 // Serialize using operator()
 std::vector<char> buffer;
-hshm::ipc::LocalSerialize<> serializer(buffer);
+ctp::ipc::LocalSerialize<> serializer(buffer);
 serializer(val1, val2, val3);
 
 // Deserialize using operator()
 int r1; double r2; std::string r3;
-hshm::ipc::LocalDeserialize<> deserializer(buffer);
+ctp::ipc::LocalDeserialize<> deserializer(buffer);
 deserializer(r1, r2, r3);
 
 assert(r1 == 10);
@@ -230,13 +230,13 @@ std::unordered_map<std::string, std::string> map = {
 
 // Serialize
 std::vector<char> buffer;
-hshm::ipc::LocalSerialize<> serializer(buffer);
+ctp::ipc::LocalSerialize<> serializer(buffer);
 serializer << vec << map;
 
 // Deserialize
 std::vector<int> rvec;
 std::unordered_map<std::string, std::string> rmap;
-hshm::ipc::LocalDeserialize<> deserializer(buffer);
+ctp::ipc::LocalDeserialize<> deserializer(buffer);
 deserializer >> rvec >> rmap;
 
 assert(rvec.size() == 5);
@@ -265,12 +265,12 @@ original.data_sizes = {1024, 2048, 4096};
 
 // Serialize
 std::vector<char> buffer;
-hshm::ipc::LocalSerialize<> serializer(buffer);
+ctp::ipc::LocalSerialize<> serializer(buffer);
 serializer << original;
 
 // Deserialize
 RequestMeta restored;
-hshm::ipc::LocalDeserialize<> deserializer(buffer);
+ctp::ipc::LocalDeserialize<> deserializer(buffer);
 deserializer >> restored;
 
 assert(restored.request_id == 42);
@@ -280,7 +280,7 @@ assert(restored.data_sizes.size() == 3);
 
 ## Cereal Compatibility
 
-When `HSHM_ENABLE_CEREAL` is defined, LocalSerialize can also handle `cereal::BinaryData<T>` wrappers for raw binary data blocks. This allows types that use cereal's binary data API to work transparently with LocalSerialize.
+When `CTP_ENABLE_CEREAL` is defined, LocalSerialize can also handle `cereal::BinaryData<T>` wrappers for raw binary data blocks. This allows types that use cereal's binary data API to work transparently with LocalSerialize.
 
 ## Error Handling
 

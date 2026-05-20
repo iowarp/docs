@@ -13,7 +13,7 @@ The `EventManager` class provides an epoll-based event loop for monitoring file 
 Identifies the source of an event:
 
 ```cpp
-namespace hshm::lbm {
+namespace ctp::lbm {
 struct EventTrigger {
   int fd;          // File descriptor that triggered the event
   int event_id;    // Unique event identifier
@@ -26,7 +26,7 @@ struct EventTrigger {
 Abstract base class for event handlers. Subclass this to define custom behavior when an event fires:
 
 ```cpp
-namespace hshm::lbm {
+namespace ctp::lbm {
 struct EventAction {
   virtual void Run(const EventInfo &info) = 0;
 };
@@ -38,7 +38,7 @@ struct EventAction {
 Contains full context for a triggered event:
 
 ```cpp
-namespace hshm::lbm {
+namespace ctp::lbm {
 struct EventInfo {
   EventTrigger trigger;      // Which fd/event fired
   uint32_t epoll_events;     // epoll event flags (EPOLLIN, EPOLLOUT, etc.)
@@ -72,16 +72,16 @@ Register a file descriptor for monitoring.
 
 **Example:**
 ```cpp
-class MyHandler : public hshm::lbm::EventAction {
+class MyHandler : public ctp::lbm::EventAction {
  public:
-  void Run(const hshm::lbm::EventInfo &info) override {
+  void Run(const ctp::lbm::EventInfo &info) override {
     // Handle readable data on info.trigger.fd
     char buf[1024];
     read(info.trigger.fd, buf, sizeof(buf));
   }
 };
 
-hshm::lbm::EventManager em;
+ctp::lbm::EventManager em;
 MyHandler handler;
 em.AddEvent(socket_fd, EPOLLIN, &handler);
 ```
@@ -99,9 +99,9 @@ Register a handler for `SIGUSR1` signals. Uses `signalfd` internally to convert 
 
 **Example:**
 ```cpp
-class WakeupHandler : public hshm::lbm::EventAction {
+class WakeupHandler : public ctp::lbm::EventAction {
  public:
-  void Run(const hshm::lbm::EventInfo &info) override {
+  void Run(const ctp::lbm::EventInfo &info) override {
     // Worker was signaled to wake up
   }
 };
@@ -125,7 +125,7 @@ Send a `SIGUSR1` signal to a specific thread. Uses `tgkill` to target the exact 
 **Example:**
 ```cpp
 // Wake up a sleeping worker thread
-hshm::lbm::EventManager::Signal(getpid(), worker_tid);
+ctp::lbm::EventManager::Signal(getpid(), worker_tid);
 ```
 
 ### Wait
@@ -169,9 +169,9 @@ A typical event loop combines file descriptor events with signal-based wakeups:
 ```cpp
 #include <hermes_shm/lightbeam/event_manager.h>
 
-class ReadHandler : public hshm::lbm::EventAction {
+class ReadHandler : public ctp::lbm::EventAction {
  public:
-  void Run(const hshm::lbm::EventInfo &info) override {
+  void Run(const ctp::lbm::EventInfo &info) override {
     char buf[4096];
     ssize_t n = read(info.trigger.fd, buf, sizeof(buf));
     if (n > 0) {
@@ -180,15 +180,15 @@ class ReadHandler : public hshm::lbm::EventAction {
   }
 };
 
-class SignalHandler : public hshm::lbm::EventAction {
+class SignalHandler : public ctp::lbm::EventAction {
  public:
-  void Run(const hshm::lbm::EventInfo &info) override {
+  void Run(const ctp::lbm::EventInfo &info) override {
     // Woken up by Signal() call - check for new work
   }
 };
 
 void event_loop() {
-  hshm::lbm::EventManager em;
+  ctp::lbm::EventManager em;
 
   ReadHandler read_handler;
   SignalHandler signal_handler;

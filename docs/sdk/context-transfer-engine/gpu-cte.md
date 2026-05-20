@@ -280,7 +280,7 @@ __global__ void safe_kernel(chi::IpcManagerGpu gpu_info,
     // Bypass GPU L2 cache to see CPU-written stop flag
     int stop = atomicAdd_system(const_cast<int *>(d_stop), 0);
     if (stop) return;
-    HSHM_THREAD_MODEL->Yield();
+    CTP_THREAD_MODEL->Yield();
   }
 }
 ```

@@ -52,7 +52,7 @@ backend.shm_attach("/my_shm_region");
 Allocates memory directly on the GPU using `cudaMalloc` (CUDA) or `hipMalloc` (ROCm).
 
 ```cpp
-// Only available when HSHM_ENABLE_CUDA or HSHM_ENABLE_ROCM is set
+// Only available when CTP_ENABLE_CUDA or CTP_ENABLE_ROCM is set
 GpuMalloc backend;
 backend.shm_init(backend_id, data_capacity);
 ```
@@ -67,14 +67,14 @@ GPU Memory: [MemoryBackendHeader | GpuMallocPrivateHeader | Data...]
 - Creates an IPC handle (`GpuIpcMemHandle`) for cross-process GPU memory sharing
 - Enforces minimum 1MB data size
 - Freed via `GpuApi::Free()`
-- Conditionally compiled: `#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM`
+- Conditionally compiled: `#if CTP_ENABLE_CUDA || CTP_ENABLE_ROCM`
 
 ## GpuShmMmap
 
 GPU-accessible POSIX shared memory. Combines host shared memory with GPU registration for zero-copy GPU access.
 
 ```cpp
-// Only available when HSHM_ENABLE_CUDA or HSHM_ENABLE_ROCM is set
+// Only available when CTP_ENABLE_CUDA or CTP_ENABLE_ROCM is set
 GpuShmMmap backend;
 backend.shm_init(backend_id, url, data_capacity);
 ```
@@ -92,7 +92,7 @@ Virtual Memory:  [4KB private header | 4KB shared header | Data...]
 - GPU can access the memory directly without explicit transfers
 - Supports `shm_attach()` for other processes to join
 - Enforces minimum 1MB backend size
-- Conditionally compiled: `#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM`
+- Conditionally compiled: `#if CTP_ENABLE_CUDA || CTP_ENABLE_ROCM`
 
 **Key Difference from GpuMalloc:**
 - Memory lives on the host (CPU) but is GPU-accessible
@@ -119,15 +119,15 @@ The `GpuApi` class provides an abstraction over CUDA and ROCm:
 GPU backends are only compiled when CUDA or ROCm is enabled:
 
 ```cpp
-#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM
+#if CTP_ENABLE_CUDA || CTP_ENABLE_ROCM
   // GPU-specific code
 #endif
 
-#if HSHM_IS_HOST
+#if CTP_IS_HOST
   // Host-only operations (initialization, IPC setup)
 #endif
 
-#if HSHM_IS_GPU
+#if CTP_IS_GPU
   // GPU kernel operations
 #endif
 ```
