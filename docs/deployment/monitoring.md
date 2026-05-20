@@ -19,7 +19,7 @@ Monitoring documentation is being developed. This will cover:
 
 ### Logging
 
-Configure logging in your `wrp_conf.yaml`:
+Configure logging in your `clio_conf.yaml`:
 
 ```yaml
 logging:

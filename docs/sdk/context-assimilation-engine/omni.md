@@ -279,11 +279,11 @@ ParseOmni completed successfully!
 For programmatic access, use the `LoadOmni` function to parse an OMNI file:
 
 ```cpp
-#include <wrp_cae/core/factory/assimilation_ctx.h>
+#include <clio_cae/core/factory/assimilation_ctx.h>
 #include <yaml-cpp/yaml.h>
 #include <vector>
 
-std::vector<wrp_cae::core::AssimilationCtx> LoadOmni(const std::string& omni_path);
+std::vector<clio_cae::core::AssimilationCtx> LoadOmni(const std::string& omni_path);
 
 // Usage
 try {

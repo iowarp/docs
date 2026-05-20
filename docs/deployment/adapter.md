@@ -52,7 +52,7 @@ cmake -DWRP_CTE_ENABLE_FUSE_ADAPTER=ON ..
 cmake --build . --target clio_cte_fuse -j$(nproc)
 ```
 
-This produces the `clio_cte_fuse` binary. The adapter links against `wrp_cte_core_client` and `libfuse3` — it does **not** require MPI or ELF interception.
+This produces the `clio_cte_fuse` binary. The adapter links against `clio_cte_core_client` and `libfuse3` — it does **not** require MPI or ELF interception.
 
 ### Prerequisites
 
@@ -160,7 +160,7 @@ runtime:
   queue_depth: 1024
 
 compose:
-  - mod_name: wrp_cte_core
+  - mod_name: clio_cte_core
     pool_name: cte_main
     pool_query: local
     pool_id: "512.0"

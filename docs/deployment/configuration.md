@@ -112,14 +112,14 @@ The `compose` section declaratively creates module pools at runtime startup. Eac
 
 ```yaml
 compose:
-  - mod_name: wrp_cte_core      # ChiMod shared-library name (e.g., libwrp_cte_core.so)
+  - mod_name: clio_cte_core      # ChiMod shared-library name (e.g., libclio_cte_core.so)
     pool_name: cte_main          # User-defined pool name
     pool_query: local            # Routing: local, dynamic, broadcast
     pool_id: "512.0"             # Unique pool ID
     # ... module-specific parameters
 ```
 
-Only `chimaera_bdev` is required. CTE (`wrp_cte_core`) and CAE (`wrp_cae_core`) are optional — remove their entries if you do not need them.
+Only `chimaera_bdev` is required. CTE (`clio_cte_core`) and CAE (`clio_cae_core`) are optional — remove their entries if you do not need them.
 
 ### Common Compose Fields
 
@@ -172,7 +172,7 @@ For DRAM devices the `pool_name` uses the `ram::<name>` convention. For file-bac
 
 ---
 
-## CTE ChiMod Parameters (`wrp_cte_core`)
+## CTE ChiMod Parameters (`clio_cte_core`)
 
 ### Storage Tiers (`storage`)
 
@@ -237,7 +237,7 @@ All fields are optional and override compile-time defaults.
 
 ---
 
-## CAE ChiMod Parameters (`wrp_cae_core`)
+## CAE ChiMod Parameters (`clio_cae_core`)
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
@@ -246,8 +246,8 @@ All fields are optional and override compile-time defaults.
 | `pool_id` | Yes | Unique pool ID. Default CAE pool ID is `"400.0"`. |
 
 ```yaml
-- mod_name: wrp_cae_core
-  pool_name: wrp_cae_core_pool
+- mod_name: clio_cae_core
+  pool_name: clio_cae_core_pool
   pool_query: local
   pool_id: "400.0"
 ```
@@ -273,7 +273,7 @@ compose:
     bdev_type: ram
     capacity: "512MB"
 
-  - mod_name: wrp_cte_core
+  - mod_name: clio_cte_core
     pool_name: cte_main
     pool_query: local
     pool_id: "512.0"
@@ -304,7 +304,7 @@ compose:
     bdev_type: ram
     capacity: "2GB"
 
-  - mod_name: wrp_cte_core
+  - mod_name: clio_cte_core
     pool_name: cte_main
     pool_query: local
     pool_id: "512.0"
@@ -349,7 +349,7 @@ compose:
     bdev_type: ram
     capacity: "2GB"
 
-  - mod_name: wrp_cte_core
+  - mod_name: clio_cte_core
     pool_name: cte_main
     pool_query: dynamic
     pool_id: "512.0"

@@ -17,8 +17,8 @@ Engine) client API. Two usage patterns are covered:
 #include <chimaera/chimaera.h>
 #include <chimaera/pool_query.h>
 #include <chimaera/singletons.h>
-#include <wrp_cte/core/core_client.h>
-#include <wrp_cte/core/core_tasks.h>
+#include <clio_cte/core/core_client.h>
+#include <clio_cte/core/core_tasks.h>
 
 // GPU memory backends (GPU kernel path only)
 #include <clio_ctp/memory/backend/gpu_shm_mmap.h>
@@ -45,13 +45,13 @@ child process to start before issuing tasks.
 ### 2. Create the CTE Pool
 
 ```cpp
-chi::PoolId core_pool_id = wrp_cte::core::kCtePoolId;
-wrp_cte::core::Client core_client(core_pool_id);
+chi::PoolId core_pool_id = clio_cte::core::kCtePoolId;
+clio_cte::core::Client core_client(core_pool_id);
 
-wrp_cte::core::CreateParams params;
+clio_cte::core::CreateParams params;
 auto create_task = core_client.AsyncCreate(
     chi::PoolQuery::Dynamic(),
-    wrp_cte::core::kCtePoolName, core_pool_id, params);
+    clio_cte::core::kCtePoolName, core_pool_id, params);
 create_task.Wait();
 ```
 
@@ -77,7 +77,7 @@ and GetBlob.
 ```cpp
 auto tag_task = core_client.AsyncGetOrCreateTag("my_gpu_tag");
 tag_task.Wait();
-wrp_cte::core::TagId tag_id = tag_task->tag_id_;
+clio_cte::core::TagId tag_id = tag_task->tag_id_;
 ```
 
 ### 5. AsyncPutBlob
@@ -101,7 +101,7 @@ auto put = core_client.AsyncPutBlob(
     /*size=*/blob_size,
     blob_data,
     /*score=*/-1.0f,      // -1 = auto-place
-    wrp_cte::core::Context(),
+    clio_cte::core::Context(),
     /*flags=*/0,
     chi::PoolQuery::Local());
 put.Wait();
@@ -198,27 +198,27 @@ my_cte_kernel<<<1, 1, 0, stream>>>(gpu_info, pool_id, tag_id);
 ```cpp
 __global__ void my_cte_kernel(chi::IpcManagerGpu gpu_info,
                               chi::PoolId pool_id,
-                              wrp_cte::core::TagId tag_id) {
+                              clio_cte::core::TagId tag_id) {
   // Initialize per-thread GPU allocators and IPC context
   CHIMAERA_GPU_INIT(gpu_info);
 
   // ---- GetOrCreateTag ----
-  auto tag_task = CHI_IPC->NewTask<wrp_cte::core::GetOrCreateTagTask<>>(
+  auto tag_task = CHI_IPC->NewTask<clio_cte::core::GetOrCreateTagTask<>>(
       chi::CreateTaskId(),
       pool_id,
       chi::PoolQuery::ToLocalCpu(),  // route to CPU worker
       "my_gpu_tag",
-      wrp_cte::core::TagId::GetNull());
+      clio_cte::core::TagId::GetNull());
   auto tag_future = CHI_IPC->Send(tag_task);
   tag_future.Wait();
-  wrp_cte::core::TagId result_tag_id = tag_future->tag_id_;
+  clio_cte::core::TagId result_tag_id = tag_future->tag_id_;
 
   // ---- PutBlob ----
   const size_t blob_size = 4096;
   hipc::FullPtr<char> buf = CHI_IPC->AllocateBuffer(blob_size);
   // Fill buffer on device...
 
-  auto put_task = CHI_IPC->NewTask<wrp_cte::core::PutBlobTask>(
+  auto put_task = CHI_IPC->NewTask<clio_cte::core::PutBlobTask>(
       chi::CreateTaskId(),
       pool_id,
       chi::PoolQuery::ToLocalCpu(),
@@ -228,14 +228,14 @@ __global__ void my_cte_kernel(chi::IpcManagerGpu gpu_info,
       /*size=*/(chi::u64)blob_size,
       buf.shm_.Cast<void>(),
       /*score=*/-1.0f,
-      wrp_cte::core::Context(),
+      clio_cte::core::Context(),
       /*flags=*/0U);
   auto put_future = CHI_IPC->Send(put_task);
   put_future.Wait();
 
   // ---- GetBlob ----
   hipc::FullPtr<char> out = CHI_IPC->AllocateBuffer(blob_size);
-  auto get_task = CHI_IPC->NewTask<wrp_cte::core::GetBlobTask>(
+  auto get_task = CHI_IPC->NewTask<clio_cte::core::GetBlobTask>(
       chi::CreateTaskId(),
       pool_id,
       chi::PoolQuery::ToLocalCpu(),
@@ -290,7 +290,7 @@ if the kernel times out.
 
 ## Context Structure
 
-`wrp_cte::core::Context` controls compression and placement behavior. Pass a
+`clio_cte::core::Context` controls compression and placement behavior. Pass a
 default-constructed `Context()` for standard uncompressed I/O.
 
 Key fields:
@@ -310,9 +310,9 @@ GPU CTE kernels must be compiled with CUDA (`*.cu` files or
 
 ```cmake
 target_link_libraries(my_target
-  wrp_cte_core_client   # CTE client library
+  clio_cte_core_client   # CTE client library
   chimaera_cxx          # Chimaera runtime
-  hermes_shm_host       # Shared memory primitives
+  clio_ctp_host       # Shared memory primitives
 )
 ```
 

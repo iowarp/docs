@@ -203,7 +203,7 @@ An interactive test environment is provided that spins up a **4-node Chimaera cl
 context-runtime/test/integration/interactive/
 ├── docker-compose.yml   # 4-node runtime cluster
 ├── hostfile             # Node IP addresses (172.28.0.10-13)
-├── wrp_conf.yaml        # Runtime configuration
+├── clio_conf.yaml        # Runtime configuration
 └── run.sh               # Launcher script
 ```
 

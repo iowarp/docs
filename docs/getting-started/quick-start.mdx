@@ -80,8 +80,8 @@ composes three modules automatically:
 | Module | Purpose |
 |--------|---------|
 | `chimaera_bdev` | 512 MB RAM block device |
-| `wrp_cte_core` | Context Transfer Engine with a 512 MB RAM cache |
-| `wrp_cae_core` | Context Assimilation Engine |
+| `clio_cte_core` | Context Transfer Engine with a 512 MB RAM cache |
+| `clio_cae_core` | Context Assimilation Engine |
 
 ## 3. Start the Runtime
 
@@ -110,7 +110,7 @@ Save the following as **`cee_quickstart.py`**:
 import os
 import tempfile
 
-import wrp_cee as cee
+import clio_cee as cee
 
 # -- 1. Create a sample file -------------------------------------------
 data = b"Hello from IOWarp! " * 50_000          # ~950 KB

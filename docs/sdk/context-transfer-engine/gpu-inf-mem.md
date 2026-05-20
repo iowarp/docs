@@ -1,6 +1,6 @@
 # GPU Infinite Memory (UVM)
 
-The `wrp_cte_uvm` module provides a **software-managed GPU demand-paging
+The `clio_cte_uvm` module provides a **software-managed GPU demand-paging
 system** built on the CUDA Driver API's virtual memory management (VMM)
 primitives.  It lets you reserve an enormous virtual address space (up to
 512 GB by default) on the GPU while backing only the pages that are
@@ -11,10 +11,10 @@ host RAM (or to a CTE blob store) and transparently restored on next access.
 ## Headers
 
 ```cpp
-#include <wrp_cte/uvm/gpu_vmm.h>
+#include <clio_cte/uvm/gpu_vmm.h>
 ```
 
-Link against `wrp_cte_uvm`.  Requires `WRP_CORE_ENABLE_CUDA=ON`.
+Link against `clio_cte_uvm`.  Requires `WRP_CORE_ENABLE_CUDA=ON`.
 
 ## Core Concepts
 
@@ -30,7 +30,7 @@ Link against `wrp_cte_uvm`.  Requires `WRP_CORE_ENABLE_CUDA=ON`.
 ## Configuration
 
 ```cpp
-wrp_cte::uvm::GpuVmmConfig cfg;
+clio_cte::uvm::GpuVmmConfig cfg;
 cfg.va_size_bytes    = 512ULL * 1024 * 1024 * 1024; // 512 GB virtual space
 cfg.page_size        = 2 * 1024 * 1024;              // 2 MB pages
 cfg.fill_value       = 0;                            // newly-mapped page fill
@@ -45,7 +45,7 @@ uses 512 GB / 2 MB pages / device 0 / host-RAM backing.
 ## Initialization and Teardown
 
 ```cpp
-wrp_cte::uvm::GpuVirtualMemoryManager vmm;
+clio_cte::uvm::GpuVirtualMemoryManager vmm;
 
 vmm.init(cfg);   // reserve VA, create streams, verify hardware granularity
 // ... use vmm ...
@@ -149,14 +149,14 @@ stream.
 ## Full Example
 
 ```cpp
-#include <wrp_cte/uvm/gpu_vmm.h>
+#include <clio_cte/uvm/gpu_vmm.h>
 
 // 1. Configure a 4 GB virtual address space with 2 MB pages
-wrp_cte::uvm::GpuVmmConfig cfg;
+clio_cte::uvm::GpuVmmConfig cfg;
 cfg.va_size_bytes   = 4ULL * 1024 * 1024 * 1024;
 cfg.prefetch_window = 2;
 
-wrp_cte::uvm::GpuVirtualMemoryManager vmm;
+clio_cte::uvm::GpuVirtualMemoryManager vmm;
 vmm.init(cfg);
 
 // 2. Touch page 0 — physical memory allocated, filled with cfg.fill_value
@@ -181,9 +181,9 @@ vmm.destroy();
 ## CMake Integration
 
 ```cmake
-find_package(wrp_cte REQUIRED)
+find_package(clio_cte REQUIRED)
 
-target_link_libraries(my_target PRIVATE wrp_cte_uvm)
+target_link_libraries(my_target PRIVATE clio_cte_uvm)
 enable_language(CUDA)
 set_target_properties(my_target PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 ```

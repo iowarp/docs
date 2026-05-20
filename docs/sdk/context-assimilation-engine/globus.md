@@ -260,7 +260,7 @@ This runs the end-to-end pipeline: Chimaera runtime (with CTE + CAE pools auto-c
 The `run_test.sh` script performs the following steps:
 
 1. Validates that `GLOBUS_ACCESS_TOKEN` is set (also requires `GLOBUS_HTTPS_ACCESS_TOKEN` for HTTPS downloads)
-2. Starts the Chimaera runtime with `wrp_runtime_conf.yaml` (compose section creates CTE pool 512.0 and CAE pool 400.0 automatically)
+2. Starts the Chimaera runtime with `clio_runtime_conf.yaml` (compose section creates CTE pool 512.0 and CAE pool 400.0 automatically)
 3. Processes the OMNI file (`matsci_globus_omni.yaml`) with `clio_cae_omni`
 4. Prints transferred files and shuts down the runtime
 
@@ -370,8 +370,8 @@ All test files are located in `context-assimilation-engine/test/integration/glob
 | `get_oauth_token.py` | OAuth2 token generation (requires `globus-sdk`) |
 | `setup_collection_consent.py` | Helper to set up collection consent scopes |
 | `matsci_globus_omni.yaml` | OMNI config for Materials Science dataset |
-| `wrp_runtime_conf.yaml` | Chimaera runtime config with CTE + CAE compose |
-| `wrp_conf.yaml` | CTE-only config (legacy, not used by `run_test.sh`) |
+| `clio_runtime_conf.yaml` | Chimaera runtime config with CTE + CAE compose |
+| `clio_conf.yaml` | CTE-only config (legacy, not used by `run_test.sh`) |
 | `REST_AUTH_GUIDE.md` | Detailed OAuth2 REST API reference |
 
 ## Related Documentation

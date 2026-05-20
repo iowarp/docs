@@ -6,18 +6,18 @@ sidebar_position: 1
 
 ## Introduction
 
-The Context Assimilation Engine (CAE) is a Chimaera module (`wrp_cae::core`) that ingests external data sources into the IOWarp runtime. It reads data from files, HDF5 datasets, or remote Globus endpoints and stores them as blobs in the Context Transfer Engine (CTE). The CAE is registered as a ChiMod container with pool ID `400.0`.
+The Context Assimilation Engine (CAE) is a Chimaera module (`clio_cae::core`) that ingests external data sources into the IOWarp runtime. It reads data from files, HDF5 datasets, or remote Globus endpoints and stores them as blobs in the Context Transfer Engine (CTE). The CAE is registered as a ChiMod container with pool ID `400.0`.
 
 ## Architecture
 
 ```
                 +-----------+
-                |   Client  |  (wrp_cae::core::Client)
+                |   Client  |  (clio_cae::core::Client)
                 +-----+-----+
                       | AsyncParseOmni / AsyncProcessHdf5Dataset
                       v
            +----------+-----------+
-           |       Runtime        |  (wrp_cae::core::Runtime : chi::Container)
+           |       Runtime        |  (clio_cae::core::Runtime : chi::Container)
            +----------+-----------+
                       |
           +-----------+-----------+
@@ -37,7 +37,7 @@ Assimilator Assimilator Assimilator
     +-----+-----+-----+
           |
           v
-  CTE Client (wrp_cte::core::Client)
+  CTE Client (clio_cte::core::Client)
   Put / Get blob operations
 ```
 
@@ -45,17 +45,17 @@ Assimilator Assimilator Assimilator
 
 | Component | Header | Description |
 |-----------|--------|-------------|
-| `Runtime` | `wrp_cae/core/core_runtime.h` | Container server-side logic |
-| `Client` | `wrp_cae/core/core_client.h` | Client-side async API |
-| `AssimilatorFactory` | `wrp_cae/core/factory/assimilator_factory.h` | Creates assimilators by source protocol |
-| `BaseAssimilator` | `wrp_cae/core/factory/base_assimilator.h` | Abstract interface for all assimilators |
-| `AssimilationCtx` | `wrp_cae/core/factory/assimilation_ctx.h` | Serializable transfer descriptor |
+| `Runtime` | `clio_cae/core/core_runtime.h` | Container server-side logic |
+| `Client` | `clio_cae/core/core_client.h` | Client-side async API |
+| `AssimilatorFactory` | `clio_cae/core/factory/assimilator_factory.h` | Creates assimilators by source protocol |
+| `BaseAssimilator` | `clio_cae/core/factory/base_assimilator.h` | Abstract interface for all assimilators |
+| `AssimilationCtx` | `clio_cae/core/factory/assimilation_ctx.h` | Serializable transfer descriptor |
 
 ### Namespace and Pool ID
 
-- **Namespace:** `wrp_cae::core`
+- **Namespace:** `clio_cae::core`
 - **Pool ID:** `constexpr chi::PoolId kCaePoolId(400, 0)` (defined in `constants.h`)
-- **ChiMod library name:** Derived from `chimaera_mod.yaml` (`module_name: core`, `namespace: wrp_cae`)
+- **ChiMod library name:** Derived from `chimaera_mod.yaml` (`module_name: core`, `namespace: clio_cae`)
 
 ## Factory Pattern
 
@@ -138,7 +138,7 @@ Defined in `chimaera_mod.yaml`:
 ### 1. Client Initialization
 
 ```cpp
-#include <wrp_cae/core/core_client.h>
+#include <clio_cae/core/core_client.h>
 
 // Initialize the global CAE client singleton
 // This also initializes the CTE client internally
@@ -148,7 +148,7 @@ WRP_CAE_CLIENT_INIT(config_path);
 auto* client = WRP_CAE_CLIENT;
 ```
 
-`WRP_CAE_CLIENT_INIT` creates the CAE container pool via `AsyncCreate`, which triggers `Runtime::Create` on the server side. The runtime initializes its internal CTE client using `wrp_cte::core::kCtePoolId`.
+`WRP_CAE_CLIENT_INIT` creates the CAE container pool via `AsyncCreate`, which triggers `Runtime::Create` on the server side. The runtime initializes its internal CTE client using `clio_cte::core::kCtePoolId`.
 
 ### 2. Load and Parse OMNI File
 
@@ -238,16 +238,16 @@ Processes a single HDF5 dataset. Use `PoolQuery::Physical(node_id)` to route to 
 
 To add support for a new data source protocol:
 
-1. **Create a header** in `core/include/wrp_cae/core/factory/`:
+1. **Create a header** in `core/include/clio_cae/core/factory/`:
 
 ```cpp
 class MyAssimilator : public BaseAssimilator {
  public:
-  explicit MyAssimilator(std::shared_ptr<wrp_cte::core::Client> cte_client);
+  explicit MyAssimilator(std::shared_ptr<clio_cte::core::Client> cte_client);
   chi::TaskResume Schedule(const AssimilationCtx& ctx,
                            int& error_code) override;
  private:
-  std::shared_ptr<wrp_cte::core::Client> cte_client_;
+  std::shared_ptr<clio_cte::core::Client> cte_client_;
 };
 ```
 
