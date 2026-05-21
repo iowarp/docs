@@ -32,7 +32,7 @@ IOWarp is released under the [BSD 3-Clause License](https://opensource.org/licen
 This error occurs when another process is using the port the CLIO Runtime is trying to bind to:
 
 ```
-clio_run runtime start
+clio_run start
 ERROR: Could not start TCP server on any host from hostfile
 Port attempted: 9128
 ```
@@ -51,12 +51,12 @@ Port attempted: 9128
 
 2. Stop the existing CLIO Runtime:
    ```bash
-   clio_run runtime stop
+   clio_run stop
    ```
 
 3. Or kill the process directly:
    ```bash
-   pkill -9 clio_run runtime start
+   pkill -9 clio_run start
    ```
 
 :::warning

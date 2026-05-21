@@ -87,7 +87,7 @@ This variable is read by `CHIMAERA_INIT()`. If unset, the value of the `default_
 export CLIO_SERVER_CONF=/etc/iowarp/config.yaml
 
 # 2. Start the runtime in the background
-clio_run runtime start &
+clio_run start &
 
 # 4. (Optional) Create pools from the compose section
 clio_run compose $CLIO_SERVER_CONF
@@ -126,14 +126,14 @@ Use `parallel-ssh` (pssh) to launch the runtime simultaneously across the cluste
 ```bash
 parallel-ssh -i -h hostfile \
   -x "-o SendEnv=PATH -o SendEnv=CLIO_SERVER_CONF" \
-  "clio_run runtime start &"
+  "clio_run start &"
 ```
 
 If your SSH environment does not forward variables reliably, inline them:
 
 ```bash
 parallel-ssh -i -h hostfile \
-  "export CLIO_SERVER_CONF=/etc/iowarp/config.yaml && clio_run runtime start &"
+  "export CLIO_SERVER_CONF=/etc/iowarp/config.yaml && clio_run start &"
 ```
 
 ### Verifying the Cluster
@@ -147,7 +147,7 @@ chimaera_pool_list
 ### Stopping the Runtime
 
 ```bash
-parallel-ssh -i -h hostfile "clio_run runtime stop"
+parallel-ssh -i -h hostfile "clio_run stop"
 ```
 
 ---

@@ -52,7 +52,7 @@ configuration, and the active YAML config.
 ### Prerequisites
 
 - IOWarp installed with Python support (`CLIO_CORE_ENABLE_PYTHON=ON`)
-- A running CLIO Runtime (`clio_run runtime start`)
+- A running CLIO Runtime (`clio_run start`)
 - Python dependencies: `flask`, `pyyaml`, `msgpack`
 
 Install the Python dependencies with any of:
@@ -156,7 +156,7 @@ All pages are backed by a JSON API. You can query these endpoints directly for s
 | `/api/topology/node/<id>/shutdown` | POST | Gracefully shut down a node via SSH |
 | `/api/topology/node/<id>/restart` | POST | Restart a node via SSH |
 
-Shutdown and restart are performed by SSHing from the dashboard host to the target node and running `clio_run runtime stop` or `clio_run runtime restart`. This avoids the problem of a node killing itself mid-RPC. The SSH connection uses `StrictHostKeyChecking=no` and `ConnectTimeout=5`.
+Shutdown and restart are performed by SSHing from the dashboard host to the target node and running `clio_run stop` or `clio_run restart`. This avoids the problem of a node killing itself mid-RPC. The SSH connection uses `StrictHostKeyChecking=no` and `ConnectTimeout=5`.
 
 **Shutdown response:**
 ```json
@@ -227,7 +227,7 @@ services:
       - "9413:9413"   # CLIO Runtime RPC
       - "5000:5000"   # Dashboard
     command: >
-      bash -c "clio_run runtime start &
+      bash -c "clio_run start &
                python -m context_visualizer --host 0.0.0.0"
 ```
 

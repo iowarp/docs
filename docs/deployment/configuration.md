@@ -24,11 +24,11 @@ The configuration file is located via (in priority order, first hit wins):
 
 ```bash
 # Use the installed default
-clio_run runtime start
+clio_run start
 
 # Or override with a custom config
 export CLIO_SERVER_CONF=/etc/iowarp/chimaera.yaml
-clio_run runtime start
+clio_run start
 ```
 
 Size values throughout the file accept: `B`, `KB`, `MB`, `GB`, `TB` (case-insensitive).
@@ -76,7 +76,7 @@ Logging is controlled by HLOG, which reads **environment variables** at process 
 # Show debug-level output and write to a file
 export CTP_LOG_LEVEL=debug
 export CTP_LOG_OUT=/tmp/chimaera.log
-clio_run runtime start
+clio_run start
 ```
 
 HLOG also applies a **compile-time** threshold (`CTP_LOG_LEVEL` CMake define, default `kInfo`). Messages below the compile-time threshold are compiled out entirely and cannot be enabled at runtime. The runtime environment variable can only raise the threshold further (i.e., make output quieter), or match the compile-time level.

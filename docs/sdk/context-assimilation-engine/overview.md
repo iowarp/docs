@@ -152,10 +152,10 @@ auto* client = WRP_CAE_CLIENT;
 
 ### 2. Load and Parse OMNI File
 
-The typical entry point is the `clio_cae_omni` utility:
+The typical entry point is the `clio_cae` utility:
 
 ```bash
-clio_cae_omni /path/to/transfers.yaml
+clio_cae /path/to/transfers.yaml
 ```
 
 Programmatically:

@@ -193,9 +193,9 @@ transfers:
 
 ## Using OMNI Files
 
-### Using the clio_cae_omni Utility
+### Using the clio_cae Utility
 
-The `clio_cae_omni` utility is the primary tool for processing OMNI files. It loads the OMNI configuration and schedules assimilation tasks with the CAE runtime.
+The `clio_cae` utility is the primary tool for processing OMNI files. It loads the OMNI configuration and schedules assimilation tasks with the CAE runtime.
 
 #### Prerequisites
 
@@ -206,12 +206,12 @@ The `clio_cae_omni` utility is the primary tool for processing OMNI files. It lo
 #### Basic Usage
 
 ```bash
-clio_cae_omni <omni_file_path>
+clio_cae <omni_file_path>
 ```
 
 **Example:**
 ```bash
-clio_cae_omni /path/to/transfer_config.yaml
+clio_cae /path/to/transfer_config.yaml
 ```
 
 #### Complete Workflow
@@ -219,14 +219,14 @@ clio_cae_omni /path/to/transfer_config.yaml
 ```bash
 # 1. Start runtime
 export CLIO_SERVER_CONF=/etc/iowarp/config.yaml
-clio_run runtime start &
+clio_run start &
 sleep 2
 
 # 2. Create CAE container (if not already created)
 clio_run compose /path/to/cae_config.yaml
 
 # 3. Process OMNI file
-clio_cae_omni /path/to/omni_file.yaml
+clio_cae /path/to/omni_file.yaml
 ```
 
 #### Expected Output
@@ -264,7 +264,7 @@ ParseOmni completed successfully!
 
 **Error: "CLIO Runtime IPC not initialized. Is the runtime running?"**
 - **Cause**: Runtime not started
-- **Solution**: Start runtime with `clio_run runtime start`
+- **Solution**: Start runtime with `clio_run start`
 
 **Error: "Failed to load OMNI file"**
 - **Cause**: Invalid YAML syntax or missing file

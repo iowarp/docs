@@ -73,14 +73,14 @@ The CLIO Runtime must also be installed. See [Configuration](./configuration.md)
 ### 1. Start the CLIO Runtime
 
 ```bash
-clio_run runtime start
+clio_run start
 ```
 
 Or with a custom configuration:
 
 ```bash
 export CLIO_SERVER_CONF=/path/to/config.yaml
-clio_run runtime start
+clio_run start
 ```
 
 ### 2. Mount the FUSE filesystem
@@ -191,7 +191,7 @@ docker run --cap-add SYS_ADMIN --device /dev/fuse \
   --security-opt seccomp=unconfined \
   -v /workspace:/workspace \
   iowarp/deps-cpu:latest \
-  bash -c "clio_run runtime start & sleep 3 && \
+  bash -c "clio_run start & sleep 3 && \
     CLIO_WITH_RUNTIME=0 clio_cte_fuse /mnt/cte -f"
 ```
 
