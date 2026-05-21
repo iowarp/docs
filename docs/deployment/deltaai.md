@@ -155,88 +155,25 @@ We have ~1,000 GPU Hours. Use interactive sessions for debugging, batch for real
 
 ---
 
-## Step 5: Set Up Python / Conda
+### Interactive job
 
-DeltaAI doesn't have Anaconda. Install Miniconda:
-
-```bash
-curl -L -o /tmp/mc.sh https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-aarch64.sh
-bash /tmp/mc.sh -b -p $HOME/miniconda3
-source $HOME/miniconda3/etc/profile.d/conda.sh
-conda init bash
+```
+  srun --account=bekn-delta-cpu \
+       --partition=cpu-interactive \
+       --nodes=1 \
+       --ntasks=1 \
+       --cpus-per-task=8 \
+       --time=01:00:00 \
+       --pty bash
 ```
 
-Create an environment:
-```bash
-conda create -n myenv python=3.11 -y
-conda activate myenv
-conda install -c conda-forge pytorch numpy scipy matplotlib -y
-```
+## Step 5: Install IOWarp
 
-For large environments, install to `/work` to avoid HOME quota:
-```bash
-conda create --prefix /work/hdd/bekn/$USER/envs/myenv python=3.11 -y
-```
+Install iowarp using any of the methods described in the installation guide.
+You can do this on an interactive node.
+Avoid building on the head nodes.
 
----
-
-## Step 6: Build IOWarp Clio Core
-
-:::warning ARM Architecture
-DeltaAI uses aarch64 ARM CPUs. The default system GCC is 7.5 (too old). You **must** use `gcc-13`/`g++-13` explicitly.
-:::
-
-```bash
-# Activate conda with all deps
-source ~/miniconda3/etc/profile.d/conda.sh
-conda activate iowarp
-
-# Clone
-cd /work/hdd/bekn/$USER
-git clone --recurse-submodules https://github.com/iowarp/clio-core.git
-cd clio-core
-
-# Build (must use gcc-13 explicitly!)
-cmake \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_C_COMPILER=/usr/bin/gcc-13 \
-  -DCMAKE_CXX_COMPILER=/usr/bin/g++-13 \
-  -DCMAKE_C_FLAGS="-I$CONDA_PREFIX/include" \
-  -DCMAKE_CXX_FLAGS="-I$CONDA_PREFIX/include" \
-  -DCMAKE_EXE_LINKER_FLAGS="-L$CONDA_PREFIX/lib" \
-  -DCMAKE_SHARED_LINKER_FLAGS="-L$CONDA_PREFIX/lib" \
-  -DCMAKE_PREFIX_PATH=$CONDA_PREFIX \
-  -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX \
-  -DWRP_CORE_ENABLE_RUNTIME=ON -DWRP_CORE_ENABLE_CTE=ON \
-  -DWRP_CORE_ENABLE_CAE=ON -DWRP_CORE_ENABLE_CEE=ON \
-  -DWRP_CORE_ENABLE_TESTS=OFF -DWRP_CORE_ENABLE_PYTHON=OFF \
-  -DWRP_CORE_ENABLE_MPI=OFF -DWRP_CORE_ENABLE_IO_URING=OFF \
-  -DWRP_CORE_ENABLE_ZMQ=ON -DWRP_CORE_ENABLE_CEREAL=ON \
-  -DWRP_CORE_ENABLE_HDF5=ON \
-  -Wno-dev -B build -G Ninja
-
-cmake --build build -j16
-cmake --install build
-```
-
-### Known build issues
-
-- **msgpack cmake naming** — conda `msgpack-cxx` provides `msgpack-cxx-config.cmake` but CMake expects `msgpackConfig.cmake`. Create symlinks:
-  ```bash
-  mkdir -p $CONDA_PREFIX/lib/cmake/msgpack
-  ln -sf $CONDA_PREFIX/lib/cmake/msgpack-cxx/msgpack-cxx-config.cmake \
-    $CONDA_PREFIX/lib/cmake/msgpack/msgpackConfig.cmake
-  ln -sf $CONDA_PREFIX/lib/cmake/msgpack-cxx/msgpack-cxx-config-version.cmake \
-    $CONDA_PREFIX/lib/cmake/msgpack/msgpackConfigVersion.cmake
-  ln -sf $CONDA_PREFIX/lib/cmake/msgpack-cxx/msgpack-cxx-targets.cmake \
-    $CONDA_PREFIX/lib/cmake/msgpack/msgpack-cxx-targets.cmake
-  ```
-- **No io_uring** — SLES 15.6 kernel may not support it. Disable with `-DWRP_CORE_ENABLE_IO_URING=OFF`.
-- **Ninja from conda** — system cmake is 3.20 (old). Install cmake + ninja from conda for better compatibility.
-
----
-
-## Step 7 (Optional): Install AI Coding Agents
+## Step 6 (Optional): Install AI Coding Agents
 
 DeltaAI does not ship with Node.js. If you want to use terminal-based coding agents, install Node.js first via [nvm](https://github.com/nvm-sh/nvm):
 
