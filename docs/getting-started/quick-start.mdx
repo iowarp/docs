@@ -19,8 +19,9 @@ import TabItem from '@theme/TabItem';
 <Tabs>
 <TabItem value="pip" label="Pip" default>
 
-No activation needed -- the `chimaera` CLI and Python modules are
-available once the package is installed in your Python environment.
+No activation needed -- the `clio_run` CLI (and its legacy `chimaera`
+alias) and Python modules are available once the package is installed
+in your Python environment.
 
 </TabItem>
 <TabItem value="conda" label="Conda">
@@ -52,27 +53,32 @@ spack load iowarp
 Verify the environment is active:
 
 ```bash
-chimaera --help
+clio_run --help
 ```
 
 ## 2. Default Configuration
 
-During installation a default configuration file is placed at:
+During installation the default configuration is seeded into **both** of
+these locations with identical content:
 
 ```
-~/.chimaera/chimaera.yaml
+~/.clio/clio.yaml          (new canonical, preferred)
+~/.chimaera/chimaera.yaml  (legacy, kept for backward compat)
 ```
 
-This file is only created if it does not already exist, so your customisations
-are never overwritten.
+Existing files are never overwritten, so your customisations to either are
+preserved.
 
-The runtime resolves its configuration in this order:
+The runtime resolves its configuration in this order (first hit wins):
 
 | Priority | Source |
 |----------|--------|
-| 1 | `CLIO_SERVER_CONF` environment variable |
-| 2 | `~/.chimaera/chimaera.yaml` |
-| 3 | Built-in defaults |
+| 1 | `CLIO_SERVER_CONF` env var (legacy `CHI_SERVER_CONF` also honored) |
+| 2 | `~/.clio/clio.yaml` |
+| 3 | `~/.clio/chimaera.yaml` |
+| 4 | `~/.chimaera/clio.yaml` |
+| 5 | `~/.chimaera/chimaera.yaml` |
+| 6 | Built-in defaults |
 
 The default configuration starts **4 worker threads** on **port 9413** and
 composes three modules automatically:
@@ -175,13 +181,13 @@ Done!
 |----------|-------------|
 | `CLIO_SERVER_CONF` | Path to YAML configuration file (highest priority) |
 | `CLIO_IPC_MODE` | Transport: `SHM` (shared memory), `TCP` (default), `IPC` (Unix socket) |
-| `CHI_PORT` | Override the RPC port (default: `9413`). Takes priority over YAML config. |
-| `CHI_SERVER_ADDR` | Override the server address clients connect to (default: `127.0.0.1`). |
+| `CLIO_PORT` | Override the RPC port (default: `9413`). Takes priority over YAML config. |
+| `CLIO_SERVER_ADDR` | Override the server address clients connect to (default: `127.0.0.1`). |
 | `CTP_LOG_LEVEL` | Logging verbosity: `debug`, `info`, `warning`, `error`, `fatal` |
 
 ## Next Steps
 
-- Edit `~/.chimaera/chimaera.yaml` to tune thread counts, storage tiers,
+- Edit `~/.clio/clio.yaml` (legacy: `~/.chimaera/chimaera.yaml`) to tune thread counts, storage tiers,
   or add file-backed block devices
 - [Configuration Reference](../deployment/configuration) -- full parameter
   documentation

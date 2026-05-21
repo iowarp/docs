@@ -35,8 +35,9 @@ The following environment variables control runtime behavior. Set them before st
 
 | Variable | Priority | Description |
 |----------|----------|-------------|
-| `CLIO_SERVER_CONF` | **Primary** | Path to the Chimaera YAML configuration file. Checked first. |
-| `~/.chimaera/chimaera.yaml` | Fallback | Used when `CLIO_SERVER_CONF` is not set. |
+| `CLIO_SERVER_CONF` (legacy `CHI_SERVER_CONF` also honored) | **Primary** | Path to the Clio YAML configuration file. Checked first. |
+| `~/.clio/clio.yaml` | Fallback (preferred) | Per-user default. Seeded at install time. |
+| `~/.chimaera/chimaera.yaml` | Fallback (legacy) | Also seeded at install time for backward compat. |
 
 ```bash
 export CLIO_SERVER_CONF=/etc/iowarp/config.yaml
@@ -46,8 +47,8 @@ export CLIO_SERVER_CONF=/etc/iowarp/config.yaml
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CHI_PORT` | `9413` | Override the RPC port. Takes priority over the YAML `networking.port` setting. |
-| `CHI_SERVER_ADDR` | `127.0.0.1` | Override the server address that clients connect to. |
+| `CLIO_PORT` | `9413` | Override the RPC port. Takes priority over the YAML `networking.port` setting. |
+| `CLIO_SERVER_ADDR` | `127.0.0.1` | Override the server address that clients connect to. |
 
 ### IPC Transport Mode
 

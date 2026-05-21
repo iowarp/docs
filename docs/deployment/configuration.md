@@ -10,14 +10,17 @@ description: Complete configuration reference for IOWarp runtime and module depl
 
 IOWarp uses a single YAML file to configure the Clio runtime and any modules (ChiMods) that are created at startup via the `compose` section.
 
-When you install IOWarp, a default configuration is created at `~/.chimaera/chimaera.yaml`. You can edit this file directly or override it with an environment variable.
+When you install IOWarp, the default configuration is seeded into **both** `~/.clio/clio.yaml` (preferred) and `~/.chimaera/chimaera.yaml` (legacy) with identical content. You can edit either file directly or override with an environment variable.
 
-The configuration file is located via (in priority order):
+The configuration file is located via (in priority order, first hit wins):
 
 | Source | Priority | Description |
 |--------|----------|-------------|
-| `CLIO_SERVER_CONF` env var | **1st** | Checked first. |
-| `~/.chimaera/chimaera.yaml` | **2nd** | Default created at install time. |
+| `CLIO_SERVER_CONF` env var (legacy `CHI_SERVER_CONF` also honored) | **1st** | Checked first. |
+| `~/.clio/clio.yaml` | **2nd** | Preferred per-user default. Seeded at install time. |
+| `~/.clio/chimaera.yaml` | **3rd** | Legacy filename in the new directory. |
+| `~/.chimaera/clio.yaml` | **4th** | New filename in the legacy directory. |
+| `~/.chimaera/chimaera.yaml` | **5th** | Legacy per-user default. Also seeded at install time. |
 
 ```bash
 # Use the installed default
@@ -36,7 +39,7 @@ Size values throughout the file accept: `B`, `KB`, `MB`, `GB`, `TB` (case-insens
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `port` | `9413` | ZeroMQ RPC listener port. Must match across all cluster nodes. Can be overridden by `CHI_PORT` env var. |
+| `port` | `9413` | ZeroMQ RPC listener port. Must match across all cluster nodes. Can be overridden by `CLIO_PORT` env var. |
 | `neighborhood_size` | `32` | Maximum nodes queried when splitting range queries. |
 | `hostfile` | *(none)* | Path to a file listing cluster node IPs/hostnames, one per line. Required for multi-node deployments. |
 | `wait_for_restart` | `30` | Seconds to wait for peer nodes during startup. |
