@@ -199,7 +199,7 @@ The `clio_cae_omni` utility is the primary tool for processing OMNI files. It lo
 
 #### Prerequisites
 
-1. **Clio runtime must be running**
+1. **CLIO Runtime must be running**
 2. **CAE container must be created** using `clio_run compose` (see [Configuration](../../deployment/configuration))
 3. **CTE container must be configured** for blob storage
 
@@ -262,7 +262,7 @@ ParseOmni completed successfully!
 
 #### Common Errors
 
-**Error: "Chimaera IPC not initialized. Is the runtime running?"**
+**Error: "CLIO Runtime IPC not initialized. Is the runtime running?"**
 - **Cause**: Runtime not started
 - **Solution**: Start runtime with `clio_run runtime start`
 
@@ -378,7 +378,7 @@ Planned enhancements to the OMNI format:
 
 - [Deployment Configuration](../../deployment/configuration) - How to launch CAE using clio_run compose
 - [CTE Documentation](../context-transfer-engine/cte) - CTE storage documentation
-- [Chimaera Compose](../context-runtime/2.module_dev_guide.md) - Compose configuration format
+- [CLIO Runtime Compose](../context-runtime/2.module_dev_guide.md) - Compose configuration format
 - [Module Development Guide](../context-runtime/2.module_dev_guide.md) - Module development
 
 ---

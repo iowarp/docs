@@ -11,7 +11,7 @@ The Content Transfer Engine (CTE) Core is a high-performance distributed storage
 - **Configurable Data Placement**: Multiple data placement algorithms (random, round-robin, max bandwidth)
 - **Asynchronous Operations**: Async-only API with C++20 coroutine support
 
-CTE Core implements a Module (Chimaera Module) that integrates with the Chimaera distributed runtime system, providing scalable data management across multiple nodes in a cluster.
+CTE Core implements a Module (CLIO Runtime Module) that integrates with the CLIO Runtime distributed runtime system, providing scalable data management across multiple nodes in a cluster.
 
 ## Installation & Linking
 
@@ -73,7 +73,7 @@ target_link_libraries(my_app
 
 #### Package and Target Naming
 
-CTE Core follows the Chimaera Module naming conventions:
+CTE Core follows the CLIO Runtime Module naming conventions:
 
 - **Package Name**: `clio_cte_core` (for `find_package(clio_cte_core REQUIRED)`)
 - **Target Aliases**: `clio_cte::core_client`, `clio_cte::core_runtime` (recommended for linking)
@@ -85,7 +85,7 @@ CTE Core follows the Chimaera Module naming conventions:
 
 The CTE Core Module targets automatically include all required dependencies:
 
-- **Core Chimaera Framework**: Automatically linked via `clio_cte::core_client` target
+- **Core CLIO Runtime Framework**: Automatically linked via `clio_cte::core_client` target
 - **Admin Module**: Available via `chimaera::admin_client` if needed
 - **Include Paths**: Automatically configured by Module targets
 - **System Dependencies**: Handled by the build system (threading, YAML, etc.)
@@ -1478,7 +1478,7 @@ if (size_task->size_ != size) {
 
 CTE Core supports distributed deployment across multiple nodes:
 
-1. Configure Chimaera for multi-node operation
+1. Configure CLIO Runtime for multi-node operation
 2. Use appropriate PoolQuery values:
    - `chi::PoolQuery::Local()` - Local node only
    - `chi::PoolQuery::Global()` - All nodes
@@ -1534,7 +1534,7 @@ if (task->return_code_ != 0) {
 ### Common Issues
 
 1. **Initialization Failures**
-   - Ensure Clio runtime is initialized first
+   - Ensure CLIO Runtime is initialized first
    - Check configuration file path and format
    - Verify storage paths have appropriate permissions
 

@@ -49,8 +49,8 @@ The pip wheel ships the **portable feature set**:
 - **Python API** — `import iowarp_core` and `import clio_cee` for the
   Context Exploration Engine
 - **CLI** — `chimaera` command for runtime management
-- **Core engines** — Clio runtime, CTE, CAE, CEE
-- **Shared libraries** — every IOWarp runtime library bundled in the
+- **Core engines** — CLIO Runtime, CTE, CAE, CEE
+- **Shared libraries** — every CLIO Runtime library bundled in the
   wheel; no system installs needed
 
 ### When You'll Need a Source Build
@@ -105,7 +105,7 @@ Pass a variant name to enable additional features:
 
 ```bash
 conda activate iowarp
-chimaera --help
+clio_run --help
 ```
 
 </TabItem>
@@ -138,7 +138,7 @@ services:
     ports:
       - "9413:9413"
     mem_limit: 8g
-    command: ["chimaera", "runtime", "start"]
+    command: ["clio_run", "runtime", "start"]
     restart: unless-stopped
 ```
 

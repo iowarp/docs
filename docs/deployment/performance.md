@@ -12,7 +12,7 @@ IOWarp performance can be optimized by tuning three main categories: worker thre
 
 ## Worker Threads
 
-Worker threads handle task scheduling and execution in the IOWarp runtime.
+Worker threads handle task scheduling and execution in the CLIO Runtime.
 
 ```yaml
 workers:

@@ -10,7 +10,7 @@ description: API reference for data assimilation, querying, retrieval, and clean
 
 The `clio_cee` Python module provides a high-level API for managing and exploring data contexts in IOWarp. It offers a simple interface for data assimilation, querying, retrieval, and cleanup operations.
 
-**Key Feature:** The API automatically initializes the IOWarp runtime when you create a `ContextInterface` instance. You don't need to manually initialize Chimaera, CTE, or CAE — the `ContextInterface` constructor handles all of this internally.
+**Key Feature:** The API automatically initializes the CLIO Runtime when you create a `ContextInterface` instance. You don't need to manually initialize the CLIO Runtime, CTE, or CAE — the `ContextInterface` constructor handles all of this internally.
 
 ## Module: `clio_cee`
 
@@ -141,7 +141,7 @@ ctx3 = cee.AssimilationCtx(
 
 Main API for context exploration and management operations.
 
-**Important:** The `ContextInterface` constructor automatically initializes the IOWarp runtime (Chimaera + CTE + CAE). This initialization happens once when you create the first `ContextInterface` instance. Subsequent instances will use the already-initialized runtime.
+**Important:** The `ContextInterface` constructor automatically initializes the CLIO Runtime (runtime core + CTE + CAE). This initialization happens once when you create the first `ContextInterface` instance. Subsequent instances will use the already-initialized runtime.
 
 ### Constructor
 
@@ -152,7 +152,7 @@ ctx_interface = clio_cee.ContextInterface()
 **Parameters:** None
 
 **Notes:**
-- Automatically initializes the full IOWarp runtime stack
+- Automatically initializes the full CLIO Runtime stack
 - Requires runtime configuration via environment variables (e.g., `CLIO_SERVER_CONF`)
 
 **Typical Environment Setup:**
@@ -452,7 +452,7 @@ dst="iowarp://my_tag"              # Wrong! Don't use ://
 
 The Python API assumes:
 
-1. **Runtime is Started:** The IOWarp runtime should be running, or will be started by the `ContextInterface` constructor.
+1. **Runtime is Started:** The CLIO Runtime should be running, or will be started by the `ContextInterface` constructor.
 
 2. **Configuration Available:** Runtime configuration is available via environment variable:
    ```bash

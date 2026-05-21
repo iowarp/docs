@@ -6,7 +6,7 @@ sidebar_position: 1
 
 ## Introduction
 
-The Context Assimilation Engine (CAE) is a Chimaera module (`clio_cae::core`) that ingests external data sources into the IOWarp runtime. It reads data from files, HDF5 datasets, or remote Globus endpoints and stores them as blobs in the Context Transfer Engine (CTE). The CAE is registered as a Module container with pool ID `400.0`.
+The Context Assimilation Engine (CAE) is a CLIO Runtime module (`clio_cae::core`) that ingests external data sources into the CLIO Runtime. It reads data from files, HDF5 datasets, or remote Globus endpoints and stores them as blobs in the Context Transfer Engine (CTE). The CAE is registered as a Module container with pool ID `400.0`.
 
 ## Architecture
 
@@ -171,7 +171,7 @@ future.Wait();
 
 ### 3. Runtime Processes Transfers
 
-`Runtime::ParseOmni` executes on a Chimaera worker thread as a coroutine:
+`Runtime::ParseOmni` executes on a CLIO Runtime worker thread as a coroutine:
 
 1. **Deserialize** the `std::vector<AssimilationCtx>` from the task's binary payload
 2. **Create** an `AssimilatorFactory` with the CTE client
@@ -197,7 +197,7 @@ auto future = client->AsyncProcessHdf5Dataset(
 
 ### 5. Coroutine Execution Model
 
-All runtime methods are C++20 coroutines returning `chi::TaskResume`. When an assimilator needs to perform an async CTE operation (e.g., put a blob), it uses `co_await` to suspend execution. The Chimaera scheduler resumes the coroutine when the CTE operation completes, allowing the worker thread to process other tasks while waiting.
+All runtime methods are C++20 coroutines returning `chi::TaskResume`. When an assimilator needs to perform an async CTE operation (e.g., put a blob), it uses `co_await` to suspend execution. The CLIO Runtime scheduler resumes the coroutine when the CTE operation completes, allowing the worker thread to process other tasks while waiting.
 
 ## Client API Reference
 

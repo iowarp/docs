@@ -48,7 +48,7 @@ cmake --preset release-fuse
 cmake --build build -j$(nproc)
 
 # Or enable FUSE on any existing preset
-cmake -DWRP_CTE_ENABLE_FUSE_ADAPTER=ON ..
+cmake -DCLIO_CTE_ENABLE_FUSE_ADAPTER=ON ..
 cmake --build . --target clio_cte_fuse -j$(nproc)
 ```
 
@@ -64,13 +64,13 @@ ls -l /dev/fuse
 fusermount3 --version
 ```
 
-The IOWarp runtime must also be installed. See [Configuration](./configuration.md) for details.
+The CLIO Runtime must also be installed. See [Configuration](./configuration.md) for details.
 
 ---
 
 ## Usage
 
-### 1. Start the IOWarp runtime
+### 1. Start the CLIO Runtime
 
 ```bash
 clio_run runtime start
@@ -150,7 +150,7 @@ cd context-transfer-engine/test/integration/fuse-manual
 
 ## Configuration
 
-The FUSE adapter inherits its CTE configuration from the running IOWarp runtime. The runtime's `compose` section controls storage backends, tiering, and placement policy. No FUSE-specific configuration file is needed.
+The FUSE adapter inherits its CTE configuration from the running CLIO Runtime. The runtime's `compose` section controls storage backends, tiering, and placement policy. No FUSE-specific configuration file is needed.
 
 Example runtime config (`~/.clio/clio.yaml` (legacy: `~/.chimaera/chimaera.yaml`)):
 

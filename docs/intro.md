@@ -24,7 +24,7 @@ IOWarp consists of three layers:
 
 1. **CLIO Agent** — The orchestration intelligence. Coordinates AI agents with scientific workflows through context engineering.
 2. **CLIO Kit** — 16 MCP servers with 150+ tools for scientific computing (HDF5, Slurm, ParaView, Pandas, ArXiv, and more).
-3. **IOWarp Runtime** (Chimaera) — High-performance distributed task execution framework with the Context Transfer Engine (CTE) and Context Assimilation Engine (CAE).
+3. **CLIO Runtime** — High-performance distributed task execution framework with the Context Transfer Engine (CTE) and Context Assimilation Engine (CAE).
 
 ## Key Capabilities
 

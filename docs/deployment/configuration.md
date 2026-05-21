@@ -1,14 +1,14 @@
 ---
 sidebar_position: 1
 title: Configuration
-description: Complete configuration reference for IOWarp runtime and module deployments.
+description: Complete configuration reference for CLIO Runtime and module deployments.
 ---
 
 # Configuration Reference
 
 ## Overview
 
-IOWarp uses a single YAML file to configure the Clio runtime and any modules (ChiMods) that are created at startup via the `compose` section.
+IOWarp uses a single YAML file to configure the CLIO Runtime and any modules (ChiMods) that are created at startup via the `compose` section.
 
 When you install IOWarp, the default configuration is seeded into **both** `~/.clio/clio.yaml` (preferred) and `~/.chimaera/chimaera.yaml` (legacy) with identical content. You can edit either file directly or override with an environment variable.
 
@@ -387,7 +387,7 @@ services:
     ports:
       - "9413:9413"
     mem_limit: 8g
-    command: ["chimaera", "runtime", "start"]
+    command: ["clio_run", "runtime", "start"]
     restart: unless-stopped
 ```
 

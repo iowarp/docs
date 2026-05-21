@@ -6,7 +6,7 @@ description: Monitoring and debugging Clio deployments — logging, the runtime 
 
 # Monitoring & Debugging
 
-This page covers everything you need to observe a running Clio runtime
+This page covers everything you need to observe a running CLIO Runtime
 cluster: structured logging, the real-time runtime dashboard
 (`context_visualizer`), and external I/O analysis via Darshan.
 
@@ -43,7 +43,7 @@ docker exec iowarp-runtime chimaera_pool_list
 ## Runtime Dashboard
 
 The `context_visualizer` package provides a lightweight Flask web
-application that lets you inspect and manage a live Clio runtime cluster
+application that lets you inspect and manage a live CLIO Runtime cluster
 from your browser. It connects to the runtime using the same client API
 used by application code and surfaces cluster topology, per-node worker
 statistics, system resource utilization, block device stats, pool
@@ -52,7 +52,7 @@ configuration, and the active YAML config.
 ### Prerequisites
 
 - IOWarp installed with Python support (`CLIO_CORE_ENABLE_PYTHON=ON`)
-- A running Clio runtime (`clio_run runtime start`)
+- A running CLIO Runtime (`clio_run runtime start`)
 - Python dependencies: `flask`, `pyyaml`, `msgpack`
 
 Install the Python dependencies with any of:
@@ -224,7 +224,7 @@ services:
   iowarp:
     image: iowarp/deploy-cpu:latest
     ports:
-      - "9413:9413"   # Clio runtime RPC
+      - "9413:9413"   # CLIO Runtime RPC
       - "5000:5000"   # Dashboard
     command: >
       bash -c "clio_run runtime start &
@@ -237,7 +237,7 @@ The dashboard has no authentication. Do not expose it on a public network withou
 
 ### Try it: interactive Docker cluster {#interactive-cluster}
 
-An interactive test environment is provided that spins up a **4-node Clio runtime cluster** with the dashboard so you can explore all features from your browser.
+An interactive test environment is provided that spins up a **4-node CLIO Runtime cluster** with the dashboard so you can explore all features from your browser.
 
 #### Location
 
@@ -251,7 +251,7 @@ context-runtime/test/integration/interactive/
 
 #### How it works
 
-- **4 Docker containers** (`iowarp-interactive-node1` through `node4`) run the Clio runtime on a private `172.28.0.0/16` network, each with `sshd` for SSH-based shutdown/restart
+- **4 Docker containers** (`iowarp-interactive-node1` through `node4`) run the CLIO Runtime on a private `172.28.0.0/16` network, each with `sshd` for SSH-based shutdown/restart
 - **Node 1** also runs the dashboard alongside its runtime
 - The script connects the devcontainer to the Docker network and starts a local port-forward so that `localhost:5000` reaches the dashboard inside Docker — VS Code then auto-forwards this to your host browser
 - SSH keys are distributed via a shared Docker volume so the dashboard can authenticate to all nodes

@@ -6,7 +6,7 @@ description: Deploying IOWarp manually on HPC clusters and bare-metal nodes.
 
 # HPC Cluster Deployment
 
-This guide covers manual deployment of the IOWarp runtime on bare-metal HPC clusters using the unified utility scripts included with the installation.
+This guide covers manual deployment of the CLIO Runtime on bare-metal HPC clusters using the unified utility scripts included with the installation.
 
 ## Prerequisites
 
