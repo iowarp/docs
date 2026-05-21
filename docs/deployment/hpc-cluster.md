@@ -35,11 +35,11 @@ The following environment variables control runtime behavior. Set them before st
 
 | Variable | Priority | Description |
 |----------|----------|-------------|
-| `CHI_SERVER_CONF` | **Primary** | Path to the Chimaera YAML configuration file. Checked first. |
-| `~/.chimaera/chimaera.yaml` | Fallback | Used when `CHI_SERVER_CONF` is not set. |
+| `CLIO_SERVER_CONF` | **Primary** | Path to the Chimaera YAML configuration file. Checked first. |
+| `~/.chimaera/chimaera.yaml` | Fallback | Used when `CLIO_SERVER_CONF` is not set. |
 
 ```bash
-export CHI_SERVER_CONF=/etc/iowarp/config.yaml
+export CLIO_SERVER_CONF=/etc/iowarp/config.yaml
 ```
 
 ### Networking Overrides
@@ -53,7 +53,7 @@ export CHI_SERVER_CONF=/etc/iowarp/config.yaml
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CHI_IPC_MODE` | `TCP` | Transport used by clients to reach the runtime server. |
+| `CLIO_IPC_MODE` | `TCP` | Transport used by clients to reach the runtime server. |
 
 | Value | Mode | When to Use |
 |-------|------|-------------|
@@ -63,17 +63,17 @@ export CHI_SERVER_CONF=/etc/iowarp/config.yaml
 
 ```bash
 # Same-node, lowest latency
-export CHI_IPC_MODE=SHM
+export CLIO_IPC_MODE=SHM
 
 # Cross-node (default)
-export CHI_IPC_MODE=TCP
+export CLIO_IPC_MODE=TCP
 ```
 
 ### Runtime Mode
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `CHI_WITH_RUNTIME` | *(unset)* | When set to `1`, starts the runtime server in-process. When `0`, client-only mode. |
+| `CLIO_WITH_RUNTIME` | *(unset)* | When set to `1`, starts the runtime server in-process. When `0`, client-only mode. |
 
 This variable is read by `CHIMAERA_INIT()`. If unset, the value of the `default_with_runtime` argument passed to `CHIMAERA_INIT()` is used instead.
 
@@ -83,13 +83,13 @@ This variable is read by `CHIMAERA_INIT()`. If unset, the value of the `default_
 
 ```bash
 # 1. Set configuration
-export CHI_SERVER_CONF=/etc/iowarp/config.yaml
+export CLIO_SERVER_CONF=/etc/iowarp/config.yaml
 
 # 2. Start the runtime in the background
-chimaera runtime start &
+clio_run runtime start &
 
 # 4. (Optional) Create pools from the compose section
-chimaera compose $CHI_SERVER_CONF
+clio_run compose $CLIO_SERVER_CONF
 
 # 5. Run your application
 my_iowarp_app
@@ -120,19 +120,19 @@ networking:
 
 ### Starting the Runtime on All Nodes
 
-Use `parallel-ssh` (pssh) to launch the runtime simultaneously across the cluster. Forwarding `PATH` and `CHI_SERVER_CONF` ensures each node picks up the right binary and config:
+Use `parallel-ssh` (pssh) to launch the runtime simultaneously across the cluster. Forwarding `PATH` and `CLIO_SERVER_CONF` ensures each node picks up the right binary and config:
 
 ```bash
 parallel-ssh -i -h hostfile \
-  -x "-o SendEnv=PATH -o SendEnv=CHI_SERVER_CONF" \
-  "chimaera runtime start &"
+  -x "-o SendEnv=PATH -o SendEnv=CLIO_SERVER_CONF" \
+  "clio_run runtime start &"
 ```
 
 If your SSH environment does not forward variables reliably, inline them:
 
 ```bash
 parallel-ssh -i -h hostfile \
-  "export CHI_SERVER_CONF=/etc/iowarp/config.yaml && chimaera runtime start &"
+  "export CLIO_SERVER_CONF=/etc/iowarp/config.yaml && clio_run runtime start &"
 ```
 
 ### Verifying the Cluster
@@ -146,7 +146,7 @@ chimaera_pool_list
 ### Stopping the Runtime
 
 ```bash
-parallel-ssh -i -h hostfile "chimaera runtime stop"
+parallel-ssh -i -h hostfile "clio_run runtime stop"
 ```
 
 ---

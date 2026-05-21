@@ -1,14 +1,14 @@
 ---
 sidebar_position: 2
 title: Quick Start
-description: Start the Chimaera runtime and run your first CEE example.
+description: Start the Clio runtime and run your first CEE example.
 ---
 
 # Quick Start
 
 This guide assumes you have already [installed IOWarp](./installation).
 It walks you through activating your environment, the default
-configuration, starting the Chimaera runtime, and running a Context
+configuration, starting the Clio runtime, and running a Context
 Exploration Engine (CEE) example.
 
 ## 1. Activate Your Environment
@@ -70,7 +70,7 @@ The runtime resolves its configuration in this order:
 
 | Priority | Source |
 |----------|--------|
-| 1 | `CHI_SERVER_CONF` environment variable |
+| 1 | `CLIO_SERVER_CONF` environment variable |
 | 2 | `~/.chimaera/chimaera.yaml` |
 | 3 | Built-in defaults |
 
@@ -87,13 +87,13 @@ composes three modules automatically:
 
 ```bash
 # Start in the background
-chimaera runtime start &
+clio_run runtime start &
 
 # Verify it is running
-chimaera monitor --once
+clio_run monitor --once
 
 # When done
-chimaera runtime stop
+clio_run runtime stop
 ```
 
 ## 4. Context Exploration Engine Example
@@ -120,7 +120,7 @@ tmp.close()
 print(f"Created test file: {tmp.name} ({len(data):,} bytes)")
 
 # -- 2. Initialise the CEE interface -----------------------------------
-#    ContextInterface connects to the running Chimaera runtime.
+#    ContextInterface connects to the running Clio runtime.
 iface = cee.ContextInterface()
 
 # -- 3. Bundle (assimilate) the file -----------------------------------
@@ -173,8 +173,8 @@ Done!
 
 | Variable | Description |
 |----------|-------------|
-| `CHI_SERVER_CONF` | Path to YAML configuration file (highest priority) |
-| `CHI_IPC_MODE` | Transport: `SHM` (shared memory), `TCP` (default), `IPC` (Unix socket) |
+| `CLIO_SERVER_CONF` | Path to YAML configuration file (highest priority) |
+| `CLIO_IPC_MODE` | Transport: `SHM` (shared memory), `TCP` (default), `IPC` (Unix socket) |
 | `CHI_PORT` | Override the RPC port (default: `9413`). Takes priority over YAML config. |
 | `CHI_SERVER_ADDR` | Override the server address clients connect to (default: `127.0.0.1`). |
 | `CTP_LOG_LEVEL` | Logging verbosity: `debug`, `info`, `warning`, `error`, `fatal` |

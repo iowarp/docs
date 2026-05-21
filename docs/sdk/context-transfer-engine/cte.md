@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Content Transfer Engine (CTE) Core is a high-performance distributed storage middleware system built on the Chimaera framework. It provides a flexible blob storage API with advanced features including:
+The Content Transfer Engine (CTE) Core is a high-performance distributed storage middleware system built on the Clio framework. It provides a flexible blob storage API with advanced features including:
 
 - **Multi-target Storage Management**: Register and manage multiple storage backends (file, RAM, NVMe)
 - **Blob Storage with Tags**: Store and retrieve data blobs with tag-based organization
@@ -11,7 +11,7 @@ The Content Transfer Engine (CTE) Core is a high-performance distributed storage
 - **Configurable Data Placement**: Multiple data placement algorithms (random, round-robin, max bandwidth)
 - **Asynchronous Operations**: Async-only API with C++20 coroutine support
 
-CTE Core implements a ChiMod (Chimaera Module) that integrates with the Chimaera distributed runtime system, providing scalable data management across multiple nodes in a cluster.
+CTE Core implements a Module (Chimaera Module) that integrates with the Chimaera distributed runtime system, providing scalable data management across multiple nodes in a cluster.
 
 ## Installation & Linking
 
@@ -19,7 +19,7 @@ CTE Core implements a ChiMod (Chimaera Module) that integrates with the Chimaera
 
 - CMake 3.20 or higher
 - C++17 compatible compiler
-- Chimaera framework (chimaera and chimaera_admin packages)
+- Clio framework (chimaera and chimaera_admin packages)
 - yaml-cpp library
 - Python 3.7+ (for Python bindings)
 - nanobind (for Python bindings)
@@ -49,12 +49,12 @@ sudo make install
 To use CTE Core in your CMake project, follow the patterns established in the MODULE_DEVELOPMENT_GUIDE.md. Add the following to your `CMakeLists.txt`:
 
 ```cmake
-# Find required Chimaera framework packages
-find_package(chimaera REQUIRED)              # Core Chimaera framework
-find_package(chimaera_admin REQUIRED)        # Admin ChiMod (required)
+# Find required Clio framework packages
+find_package(chimaera REQUIRED)              # Core Clio framework
+find_package(chimaera_admin REQUIRED)        # Admin Module (required)
 
-# Find CTE Core ChiMod package
-find_package(clio_cte_core REQUIRED)          # CTE Core ChiMod
+# Find CTE Core Module package
+find_package(clio_cte_core REQUIRED)          # CTE Core Module
 
 # Create your executable or library
 add_executable(my_app main.cpp)
@@ -67,13 +67,13 @@ target_link_libraries(my_app
     # chimaera::admin_client                 # Optional - if you need admin functionality
 )
 
-# Note: Include directories are handled automatically by the ChiMod targets
+# Note: Include directories are handled automatically by the Module targets
 # No manual target_include_directories() call needed
 ```
 
 #### Package and Target Naming
 
-CTE Core follows the Chimaera ChiMod naming conventions:
+CTE Core follows the Chimaera Module naming conventions:
 
 - **Package Name**: `clio_cte_core` (for `find_package(clio_cte_core REQUIRED)`)
 - **Target Aliases**: `clio_cte::core_client`, `clio_cte::core_runtime` (recommended for linking)
@@ -83,18 +83,18 @@ CTE Core follows the Chimaera ChiMod naming conventions:
 
 #### Dependency Management
 
-The CTE Core ChiMod targets automatically include all required dependencies:
+The CTE Core Module targets automatically include all required dependencies:
 
 - **Core Chimaera Framework**: Automatically linked via `clio_cte::core_client` target
-- **Admin ChiMod**: Available via `chimaera::admin_client` if needed
-- **Include Paths**: Automatically configured by ChiMod targets
+- **Admin Module**: Available via `chimaera::admin_client` if needed
+- **Include Paths**: Automatically configured by Module targets
 - **System Dependencies**: Handled by the build system (threading, YAML, etc.)
 
 External applications only need to link against the CTE Core targets - all framework dependencies are resolved automatically.
 
 ### Runtime Dependencies
 
-The CTE Core runtime library (`libclio_cte_core_runtime.so`) must be available at runtime. It will be automatically loaded by the Chimaera framework when the CTE Core container is created.
+The CTE Core runtime library (`libclio_cte_core_runtime.so`) must be available at runtime. It will be automatically loaded by the Clio framework when the CTE Core container is created.
 
 ### External Application Example
 
@@ -109,9 +109,9 @@ set(CMAKE_CXX_STANDARD_20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Find required packages
-find_package(chimaera REQUIRED)              # Core Chimaera framework
-find_package(chimaera_admin REQUIRED)        # Admin ChiMod
-find_package(clio_cte_core REQUIRED)          # CTE Core ChiMod
+find_package(chimaera REQUIRED)              # Core Clio framework
+find_package(chimaera_admin REQUIRED)        # Admin Module
+find_package(clio_cte_core REQUIRED)          # CTE Core Module
 
 # Find additional dependencies
 find_package(yaml-cpp REQUIRED)
@@ -435,7 +435,7 @@ auto *client = WRP_CTE_CLIENT;
 - `WRP_CTE_CLIENT_INIT` automatically calls `chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true)` internally
 - You do NOT need to call `chi::CHIMAERA_INIT` separately when using CTE Core
 - Configuration is managed per-Runtime instance (no global ConfigManager singleton)
-- The config file path can also be specified via the `CHI_SERVER_CONF` environment variable
+- The config file path can also be specified via the `CLIO_SERVER_CONF` environment variable
 
 ## Usage Examples
 
@@ -982,7 +982,7 @@ my_tag.ReorganizeBlob("cold_archive", 0.2f);  // Move to cold tier
 
 CTE Core uses YAML configuration files for runtime parameters. Configuration can be loaded from:
 1. A file path specified during initialization
-2. Environment variable `CHI_SERVER_CONF`
+2. Environment variable `CLIO_SERVER_CONF`
 3. Programmatically via the Config API
 
 ### Configuration File Format
@@ -1058,8 +1058,8 @@ Configuration in CTE Core is now managed per-Runtime instance, not through a glo
 // Configuration is passed to the Runtime during creation
 bool success = clio_cte::core::WRP_CTE_CLIENT_INIT("/path/to/config.yaml");
 
-// Or use environment variable CHI_SERVER_CONF
-// export CHI_SERVER_CONF=/path/to/config.yaml
+// Or use environment variable CLIO_SERVER_CONF
+// export CLIO_SERVER_CONF=/path/to/config.yaml
 success = clio_cte::core::WRP_CTE_CLIENT_INIT();
 
 // Configuration is now embedded in the Runtime instance
@@ -1070,7 +1070,7 @@ success = clio_cte::core::WRP_CTE_CLIENT_INIT();
 - Loaded once during `WRP_CTE_CLIENT_INIT`
 - Embedded in the CTE Runtime instance via `CreateParams`
 - Immutable after initialization
-- Can be specified via file path parameter or `CHI_SERVER_CONF` environment variable
+- Can be specified via file path parameter or `CLIO_SERVER_CONF` environment variable
 
 ### Queue Priority Options
 
@@ -1534,7 +1534,7 @@ if (task->return_code_ != 0) {
 ### Common Issues
 
 1. **Initialization Failures**
-   - Ensure Chimaera runtime is initialized first
+   - Ensure Clio runtime is initialized first
    - Check configuration file path and format
    - Verify storage paths have appropriate permissions
 

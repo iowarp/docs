@@ -6,7 +6,7 @@ sidebar_position: 1
 
 ## Introduction
 
-The Context Assimilation Engine (CAE) is a Chimaera module (`clio_cae::core`) that ingests external data sources into the IOWarp runtime. It reads data from files, HDF5 datasets, or remote Globus endpoints and stores them as blobs in the Context Transfer Engine (CTE). The CAE is registered as a ChiMod container with pool ID `400.0`.
+The Context Assimilation Engine (CAE) is a Chimaera module (`clio_cae::core`) that ingests external data sources into the IOWarp runtime. It reads data from files, HDF5 datasets, or remote Globus endpoints and stores them as blobs in the Context Transfer Engine (CTE). The CAE is registered as a Module container with pool ID `400.0`.
 
 ## Architecture
 
@@ -55,7 +55,7 @@ Assimilator Assimilator Assimilator
 
 - **Namespace:** `clio_cae::core`
 - **Pool ID:** `constexpr chi::PoolId kCaePoolId(400, 0)` (defined in `constants.h`)
-- **ChiMod library name:** Derived from `chimaera_mod.yaml` (`module_name: core`, `namespace: clio_cae`)
+- **Module library name:** Derived from `clio_mod.yaml` (`module_name: core`, `namespace: clio_cae`)
 
 ## Factory Pattern
 
@@ -123,7 +123,7 @@ Serialization uses the [cereal](https://uscilab.github.io/cereal/) library with 
 
 ## Method IDs
 
-Defined in `chimaera_mod.yaml`:
+Defined in `clio_mod.yaml`:
 
 | Method | ID | Description |
 |--------|----|-------------|
@@ -273,5 +273,5 @@ class MyAssimilator : public BaseAssimilator {
 ## Related Documentation
 
 - [OMNI File Format](omni.md) - YAML configuration for data transfers
-- [Module Development Guide](../context-runtime/2.module_dev_guide.md) - ChiMod development
+- [Module Development Guide](../context-runtime/2.module_dev_guide.md) - Module development
 - [CTE Documentation](../context-transfer-engine/cte.md) - CTE storage documentation

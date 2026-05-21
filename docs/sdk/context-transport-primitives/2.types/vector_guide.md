@@ -6,7 +6,7 @@ sidebar_position: 1
 
 ## Overview
 
-HSHM provides two vector variants: `ctp::ipc::vector` for shared memory and `ctp::priv::vector` for private memory. For standard ChiMod development, use `std::vector`. The HSHM vectors are needed when data must be accessible from GPU kernels or live in shared memory across processes.
+HSHM provides two vector variants: `ctp::ipc::vector` for shared memory and `ctp::priv::vector` for private memory. For standard Module development, use `std::vector`. The HSHM vectors are needed when data must be accessible from GPU kernels or live in shared memory across processes.
 
 ## ctp::ipc::vector
 
@@ -78,7 +78,7 @@ for (auto it = vec.rbegin(); it != vec.rend(); ++it) {
 
 | Variant | Use Case |
 |---------|----------|
-| `std::vector` | Default choice for ChiMod task data |
+| `std::vector` | Default choice for Module task data |
 | `ctp::priv::vector` | Private memory with serialization support or GPU access |
 | `ctp::ipc::vector` | Cross-process shared memory regions |
 

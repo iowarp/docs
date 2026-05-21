@@ -5,7 +5,7 @@ This guide describes how to call `AsyncPutBlob`, `AsyncGetBlob`, and
 Engine) client API. Two usage patterns are covered:
 
 1. **CPU-side with fork client** -- the simpler path where a CPU test process
-   launches a background Chimaera runtime and issues CTE calls from host code
+   launches a background Clio runtime and issues CTE calls from host code
    using shared-memory buffers.
 2. **GPU kernel-side** -- the advanced path where a CUDA `__global__` kernel
    allocates tasks, submits them through the GPU-to-CPU queue, and waits for
@@ -29,7 +29,7 @@ Engine) client API. Two usage patterns are covered:
 ## CPU-Side Usage (Fork Client)
 
 This is the recommended starting point. A fork client spawns a background
-Chimaera runtime in a child process, then the parent issues CTE calls from
+Clio runtime in a child process, then the parent issues CTE calls from
 normal host code. Blob data is allocated in shared memory so the runtime
 workers can access it directly.
 
@@ -311,7 +311,7 @@ GPU CTE kernels must be compiled with CUDA (`*.cu` files or
 ```cmake
 target_link_libraries(my_target
   clio_cte_core_client   # CTE client library
-  chimaera_cxx          # Chimaera runtime
+  chimaera_cxx          # Clio runtime
   clio_ctp_host       # Shared memory primitives
 )
 ```

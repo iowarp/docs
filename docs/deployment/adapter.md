@@ -73,14 +73,14 @@ The IOWarp runtime must also be installed. See [Configuration](./configuration.m
 ### 1. Start the IOWarp runtime
 
 ```bash
-chimaera runtime start
+clio_run runtime start
 ```
 
 Or with a custom configuration:
 
 ```bash
-export CHI_SERVER_CONF=/path/to/config.yaml
-chimaera runtime start
+export CLIO_SERVER_CONF=/path/to/config.yaml
+clio_run runtime start
 ```
 
 ### 2. Mount the FUSE filesystem
@@ -89,7 +89,7 @@ chimaera runtime start
 mkdir -p /mnt/cte
 
 # Connect as a client to the already-running runtime
-CHI_WITH_RUNTIME=0 clio_cte_fuse /mnt/cte -f
+CLIO_WITH_RUNTIME=0 clio_cte_fuse /mnt/cte -f
 ```
 
 | Flag | Description |
@@ -99,7 +99,7 @@ CHI_WITH_RUNTIME=0 clio_cte_fuse /mnt/cte -f
 | `-o allow_other` | Allow other users to access the mount (requires `user_allow_other` in `/etc/fuse.conf`). |
 | `-s` | Single-threaded mode. By default FUSE is multi-threaded. |
 
-Set `CHI_WITH_RUNTIME=0` so the FUSE daemon connects as a pure client to the existing runtime instead of trying to start its own.
+Set `CLIO_WITH_RUNTIME=0` so the FUSE daemon connects as a pure client to the existing runtime instead of trying to start its own.
 
 ### 3. Use it
 
@@ -191,8 +191,8 @@ docker run --cap-add SYS_ADMIN --device /dev/fuse \
   --security-opt seccomp=unconfined \
   -v /workspace:/workspace \
   iowarp/deps-cpu:latest \
-  bash -c "chimaera runtime start & sleep 3 && \
-    CHI_WITH_RUNTIME=0 clio_cte_fuse /mnt/cte -f"
+  bash -c "clio_run runtime start & sleep 3 && \
+    CLIO_WITH_RUNTIME=0 clio_cte_fuse /mnt/cte -f"
 ```
 
 A ready-made Docker Compose configuration for integration testing is available at:

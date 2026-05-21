@@ -153,20 +153,20 @@ ctx_interface = clio_cee.ContextInterface()
 
 **Notes:**
 - Automatically initializes the full IOWarp runtime stack
-- Requires runtime configuration via environment variables (e.g., `CHI_SERVER_CONF`)
+- Requires runtime configuration via environment variables (e.g., `CLIO_SERVER_CONF`)
 
 **Typical Environment Setup:**
 
 The runtime needs to know where to find its configuration. This is typically set via environment variable:
 
 ```bash
-export CHI_SERVER_CONF=/path/to/config.yaml
+export CLIO_SERVER_CONF=/path/to/config.yaml
 ```
 
 Or in Python:
 ```python
 import os
-os.environ['CHI_SERVER_CONF'] = '/path/to/config.yaml'
+os.environ['CLIO_SERVER_CONF'] = '/path/to/config.yaml'
 
 import clio_cee
 ctx_interface = clio_cee.ContextInterface()
@@ -456,7 +456,7 @@ The Python API assumes:
 
 2. **Configuration Available:** Runtime configuration is available via environment variable:
    ```bash
-   export CHI_SERVER_CONF=/path/to/config.yaml
+   export CLIO_SERVER_CONF=/path/to/config.yaml
    ```
 
 3. **Proper Permissions:** Your Python process has permission to access shared memory segments and connect to the runtime.

@@ -199,8 +199,8 @@ The `clio_cae_omni` utility is the primary tool for processing OMNI files. It lo
 
 #### Prerequisites
 
-1. **Chimaera runtime must be running**
-2. **CAE container must be created** using `chimaera compose` (see [Configuration](../../deployment/configuration))
+1. **Clio runtime must be running**
+2. **CAE container must be created** using `clio_run compose` (see [Configuration](../../deployment/configuration))
 3. **CTE container must be configured** for blob storage
 
 #### Basic Usage
@@ -218,12 +218,12 @@ clio_cae_omni /path/to/transfer_config.yaml
 
 ```bash
 # 1. Start runtime
-export CHI_SERVER_CONF=/etc/iowarp/config.yaml
-chimaera runtime start &
+export CLIO_SERVER_CONF=/etc/iowarp/config.yaml
+clio_run runtime start &
 sleep 2
 
 # 2. Create CAE container (if not already created)
-chimaera compose /path/to/cae_config.yaml
+clio_run compose /path/to/cae_config.yaml
 
 # 3. Process OMNI file
 clio_cae_omni /path/to/omni_file.yaml
@@ -264,7 +264,7 @@ ParseOmni completed successfully!
 
 **Error: "Chimaera IPC not initialized. Is the runtime running?"**
 - **Cause**: Runtime not started
-- **Solution**: Start runtime with `chimaera runtime start`
+- **Solution**: Start runtime with `clio_run runtime start`
 
 **Error: "Failed to load OMNI file"**
 - **Cause**: Invalid YAML syntax or missing file
@@ -376,10 +376,10 @@ Planned enhancements to the OMNI format:
 
 ## Related Documentation
 
-- [Deployment Configuration](../../deployment/configuration) - How to launch CAE using chimaera compose
+- [Deployment Configuration](../../deployment/configuration) - How to launch CAE using clio_run compose
 - [CTE Documentation](../context-transfer-engine/cte) - CTE storage documentation
 - [Chimaera Compose](../context-runtime/2.module_dev_guide.md) - Compose configuration format
-- [Module Development Guide](../context-runtime/2.module_dev_guide.md) - ChiMod development
+- [Module Development Guide](../context-runtime/2.module_dev_guide.md) - Module development
 
 ---
 

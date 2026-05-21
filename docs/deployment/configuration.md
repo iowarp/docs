@@ -8,7 +8,7 @@ description: Complete configuration reference for IOWarp runtime and module depl
 
 ## Overview
 
-IOWarp uses a single YAML file to configure the Chimaera runtime and any modules (ChiMods) that are created at startup via the `compose` section.
+IOWarp uses a single YAML file to configure the Clio runtime and any modules (ChiMods) that are created at startup via the `compose` section.
 
 When you install IOWarp, a default configuration is created at `~/.chimaera/chimaera.yaml`. You can edit this file directly or override it with an environment variable.
 
@@ -16,16 +16,16 @@ The configuration file is located via (in priority order):
 
 | Source | Priority | Description |
 |--------|----------|-------------|
-| `CHI_SERVER_CONF` env var | **1st** | Checked first. |
+| `CLIO_SERVER_CONF` env var | **1st** | Checked first. |
 | `~/.chimaera/chimaera.yaml` | **2nd** | Default created at install time. |
 
 ```bash
 # Use the installed default
-chimaera runtime start
+clio_run runtime start
 
 # Or override with a custom config
-export CHI_SERVER_CONF=/etc/iowarp/chimaera.yaml
-chimaera runtime start
+export CLIO_SERVER_CONF=/etc/iowarp/chimaera.yaml
+clio_run runtime start
 ```
 
 Size values throughout the file accept: `B`, `KB`, `MB`, `GB`, `TB` (case-insensitive).
@@ -73,7 +73,7 @@ Logging is controlled by HLOG, which reads **environment variables** at process 
 # Show debug-level output and write to a file
 export CTP_LOG_LEVEL=debug
 export CTP_LOG_OUT=/tmp/chimaera.log
-chimaera runtime start
+clio_run runtime start
 ```
 
 HLOG also applies a **compile-time** threshold (`CTP_LOG_LEVEL` CMake define, default `kInfo`). Messages below the compile-time threshold are compiled out entirely and cannot be enabled at runtime. The runtime environment variable can only raise the threshold further (i.e., make output quieter), or match the compile-time level.
@@ -112,7 +112,7 @@ The `compose` section declaratively creates module pools at runtime startup. Eac
 
 ```yaml
 compose:
-  - mod_name: clio_cte_core      # ChiMod shared-library name (e.g., libclio_cte_core.so)
+  - mod_name: clio_cte_core      # Module shared-library name (e.g., libclio_cte_core.so)
     pool_name: cte_main          # User-defined pool name
     pool_query: local            # Routing: local, dynamic, broadcast
     pool_id: "512.0"             # Unique pool ID
@@ -125,7 +125,7 @@ Only `chimaera_bdev` is required. CTE (`clio_cte_core`) and CAE (`clio_cae_core`
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `mod_name` | Yes | Name of the ChiMod shared library (without `lib` prefix and `.so` suffix). |
+| `mod_name` | Yes | Name of the Module shared library (without `lib` prefix and `.so` suffix). |
 | `pool_name` | Yes | User-defined pool name. |
 | `pool_query` | Yes | Routing policy (see below). |
 | `pool_id` | Yes | Unique pool ID string (format: `"<major>.<minor>"`). |
@@ -140,7 +140,7 @@ Only `chimaera_bdev` is required. CTE (`clio_cte_core`) and CAE (`clio_cae_core`
 
 ---
 
-## Block Device ChiMod (`chimaera_bdev`)
+## Block Device Module (`chimaera_bdev`)
 
 Block devices provide the shared memory allocator used by other modules. At least one DRAM block device is required.
 
@@ -172,7 +172,7 @@ For DRAM devices the `pool_name` uses the `ram::<name>` convention. For file-bac
 
 ---
 
-## CTE ChiMod Parameters (`clio_cte_core`)
+## CTE Module Parameters (`clio_cte_core`)
 
 ### Storage Tiers (`storage`)
 
@@ -237,7 +237,7 @@ All fields are optional and override compile-time defaults.
 
 ---
 
-## CAE ChiMod Parameters (`clio_cae_core`)
+## CAE Module Parameters (`clio_cae_core`)
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
