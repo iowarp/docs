@@ -152,7 +152,7 @@ cd context-transfer-engine/test/integration/fuse-manual
 
 The FUSE adapter inherits its CTE configuration from the running CLIO Runtime. The runtime's `compose` section controls storage backends, tiering, and placement policy. No FUSE-specific configuration file is needed.
 
-Example runtime config (`~/.clio/clio.yaml` (legacy: `~/.chimaera/chimaera.yaml`)):
+Example runtime config (`~/.clio/clio.yaml`):
 
 ```yaml
 runtime:

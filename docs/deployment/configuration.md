@@ -10,17 +10,17 @@ description: Complete configuration reference for CLIO Runtime and module deploy
 
 IOWarp uses a single YAML file to configure the CLIO Runtime and any modules (ChiMods) that are created at startup via the `compose` section.
 
-When you install IOWarp, the default configuration is seeded into **both** `~/.clio/clio.yaml` (preferred) and `~/.chimaera/chimaera.yaml` (legacy) with identical content. You can edit either file directly or override with an environment variable.
+When you install IOWarp, a default `~/.clio/clio.yaml` is seeded for you. You can edit it directly or override the path with `CLIO_SERVER_CONF`.
 
 The configuration file is located via (in priority order, first hit wins):
 
 | Source | Priority | Description |
 |--------|----------|-------------|
-| `CLIO_SERVER_CONF` env var (legacy `CHI_SERVER_CONF` also honored) | **1st** | Checked first. |
-| `~/.clio/clio.yaml` | **2nd** | Preferred per-user default. Seeded at install time. |
-| `~/.clio/chimaera.yaml` | **3rd** | Legacy filename in the new directory. |
-| `~/.chimaera/clio.yaml` | **4th** | New filename in the legacy directory. |
-| `~/.chimaera/chimaera.yaml` | **5th** | Legacy per-user default. Also seeded at install time. |
+| `CLIO_SERVER_CONF` env var | **1st** | Checked first. |
+| `~/.clio/clio.yaml` | **2nd** | Per-user default. Seeded at install time. |
+| Built-in defaults | **3rd** | Compiled-in fallback. |
+
+A handful of legacy paths (`~/.clio/chimaera.yaml`, `~/.chimaera/clio.yaml`, `~/.chimaera/chimaera.yaml`) are also accepted for backward compat — see [Deprecation Notes](../deprecation-notes) for the full lookup order.
 
 ```bash
 # Use the installed default

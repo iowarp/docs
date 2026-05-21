@@ -35,9 +35,10 @@ The following environment variables control runtime behavior. Set them before st
 
 | Variable | Priority | Description |
 |----------|----------|-------------|
-| `CLIO_SERVER_CONF` (legacy `CHI_SERVER_CONF` also honored) | **Primary** | Path to the Clio YAML configuration file. Checked first. |
-| `~/.clio/clio.yaml` | Fallback (preferred) | Per-user default. Seeded at install time. |
-| `~/.chimaera/chimaera.yaml` | Fallback (legacy) | Also seeded at install time for backward compat. |
+| `CLIO_SERVER_CONF` | **Primary** | Path to the Clio YAML configuration file. Checked first. |
+| `~/.clio/clio.yaml` | Fallback | Per-user default. Seeded at install time. |
+
+Legacy paths and env vars are also accepted; see [Deprecation Notes](../deprecation-notes) for the full list.
 
 ```bash
 export CLIO_SERVER_CONF=/etc/iowarp/config.yaml

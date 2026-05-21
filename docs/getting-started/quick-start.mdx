@@ -19,9 +19,8 @@ import TabItem from '@theme/TabItem';
 <Tabs>
 <TabItem value="pip" label="Pip" default>
 
-No activation needed -- the `clio_run` CLI (and its legacy `chimaera`
-alias) and Python modules are available once the package is installed
-in your Python environment.
+No activation needed -- the `clio_run` CLI and Python modules are
+available once the package is installed in your Python environment.
 
 </TabItem>
 <TabItem value="conda" label="Conda">
@@ -58,27 +57,10 @@ clio_run --help
 
 ## 2. Default Configuration
 
-During installation the default configuration is seeded into **both** of
-these locations with identical content:
-
-```
-~/.clio/clio.yaml          (new canonical, preferred)
-~/.chimaera/chimaera.yaml  (legacy, kept for backward compat)
-```
-
-Existing files are never overwritten, so your customisations to either are
-preserved.
-
-The runtime resolves its configuration in this order (first hit wins):
-
-| Priority | Source |
-|----------|--------|
-| 1 | `CLIO_SERVER_CONF` env var (legacy `CHI_SERVER_CONF` also honored) |
-| 2 | `~/.clio/clio.yaml` |
-| 3 | `~/.clio/chimaera.yaml` |
-| 4 | `~/.chimaera/clio.yaml` |
-| 5 | `~/.chimaera/chimaera.yaml` |
-| 6 | Built-in defaults |
+During installation a default `~/.clio/clio.yaml` is seeded for you.
+You can edit it directly or point the runtime at a custom file with
+`CLIO_SERVER_CONF=/path/to/config.yaml`. Existing files are never
+overwritten on reinstall.
 
 The default configuration starts **4 worker threads** on **port 9413** and
 composes three modules automatically:
@@ -187,14 +169,16 @@ Done!
 
 ## Next Steps
 
-- Edit `~/.clio/clio.yaml` (legacy: `~/.chimaera/chimaera.yaml`) to tune thread counts, storage tiers,
-  or add file-backed block devices
+- Edit `~/.clio/clio.yaml` to tune thread counts, storage tiers, or add
+  file-backed block devices
 - [Configuration Reference](../deployment/configuration) -- full parameter
   documentation
 - [HPC Deployment](../deployment/hpc-cluster) -- multi-node cluster setup
 - [CLIO Kit](../clio-kit/mcp-servers) -- MCP servers for AI-powered
   scientific computing
 - [SDK Reference](../sdk/) -- component APIs and development guides
+- [Deprecation Notes](../deprecation-notes) -- legacy CLI / env / config
+  names that still work as aliases
 
 ## Support
 

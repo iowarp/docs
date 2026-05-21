@@ -70,6 +70,7 @@ const sidebars: SidebarsConfig = {
     },
     'faq',
     'tutorials',
+    'deprecation-notes',
   ],
 };
 
