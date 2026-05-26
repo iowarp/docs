@@ -142,7 +142,7 @@ parallel-ssh -i -h hostfile \
 After startup, verify all nodes joined the cluster from any node:
 
 ```bash
-chimaera_pool_list
+clio_run monitor
 ```
 
 ### Stopping the Runtime

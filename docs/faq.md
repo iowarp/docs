@@ -60,5 +60,5 @@ Port attempted: 9128
    ```
 
 :::warning
-When using SSH/pssh in distributed environments, avoid wildcard patterns like `pkill chimaera_*`. Use the full executable name to prevent killing the SSH connection before the runtime.
+When using SSH/pssh in distributed environments, avoid wildcard patterns like `pkill clio_*`. Use the full executable name to prevent killing the SSH connection before the runtime.
 :::
