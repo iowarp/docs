@@ -27,7 +27,7 @@ A handful of legacy paths (`~/.clio/chimaera.yaml`, `~/.chimaera/clio.yaml`, `~/
 clio_run start
 
 # Or override with a custom config
-export CLIO_SERVER_CONF=/etc/iowarp/chimaera.yaml
+export CLIO_SERVER_CONF=/etc/iowarp/clio.yaml
 clio_run start
 ```
 
@@ -383,11 +383,11 @@ services:
     container_name: iowarp
     hostname: iowarp
     volumes:
-      - ./chimaera.yaml:/home/iowarp/.chimaera/chimaera.yaml:ro
+      - ./clio.yaml:/home/iowarp/.clio/clio.yaml:ro
     ports:
       - "9413:9413"
     mem_limit: 8g
-    command: ["clio_run", "runtime", "start"]
+    command: ["clio_run", "start"]
     restart: unless-stopped
 ```
 
