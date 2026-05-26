@@ -75,7 +75,7 @@ Logging is controlled by HLOG, which reads **environment variables** at process 
 ```bash
 # Show debug-level output and write to a file
 export CTP_LOG_LEVEL=debug
-export CTP_LOG_OUT=/tmp/chimaera.log
+export CTP_LOG_OUT=/tmp/clio.log
 clio_run start
 ```
 
@@ -122,7 +122,7 @@ compose:
     # ... module-specific parameters
 ```
 
-Only `chimaera_bdev` is required. CTE (`clio_cte_core`) and CAE (`clio_cae_core`) are optional — remove their entries if you do not need them.
+Only `clio_bdev` is required. CTE (`clio_cte_core`) and CAE (`clio_cae_core`) are optional — remove their entries if you do not need them.
 
 ### Common Compose Fields
 
@@ -143,7 +143,7 @@ Only `chimaera_bdev` is required. CTE (`clio_cte_core`) and CAE (`clio_cae_core`
 
 ---
 
-## Block Device Module (`chimaera_bdev`)
+## Block Device Module (`clio_bdev`)
 
 Block devices provide the shared memory allocator used by other modules. At least one DRAM block device is required.
 
@@ -155,7 +155,7 @@ Block devices provide the shared memory allocator used by other modules. At leas
 ```yaml
 compose:
   # DRAM block device (required)
-  - mod_name: chimaera_bdev
+  - mod_name: clio_bdev
     pool_name: "ram::chi_default_bdev"
     pool_query: local
     pool_id: "301.0"
@@ -163,7 +163,7 @@ compose:
     capacity: "512MB"
 
   # File-backed block device (optional — for NVMe, HDD, etc.)
-  # - mod_name: chimaera_bdev
+  # - mod_name: clio_bdev
   #   pool_name: "/mnt/nvme/chi_bdev"
   #   pool_query: local
   #   pool_id: "302.0"
@@ -269,7 +269,7 @@ runtime:
   num_threads: 4
 
 compose:
-  - mod_name: chimaera_bdev
+  - mod_name: clio_bdev
     pool_name: "ram::chi_default_bdev"
     pool_query: local
     pool_id: "301.0"
@@ -300,7 +300,7 @@ runtime:
   queue_depth: 1024
 
 compose:
-  - mod_name: chimaera_bdev
+  - mod_name: clio_bdev
     pool_name: "ram::chi_default_bdev"
     pool_query: local
     pool_id: "301.0"
@@ -345,7 +345,7 @@ runtime:
   queue_depth: 1024
 
 compose:
-  - mod_name: chimaera_bdev
+  - mod_name: clio_bdev
     pool_name: "ram::chi_default_bdev"
     pool_query: local
     pool_id: "301.0"

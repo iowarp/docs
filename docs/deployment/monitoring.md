@@ -25,7 +25,7 @@ Configure logging in your `clio_conf.yaml`:
 ```yaml
 logging:
   level: info          # debug, info, warn, error
-  file: /tmp/chimaera.log
+  file: /tmp/clio.log
 ```
 
 ### Docker health checks
@@ -34,8 +34,8 @@ logging:
 # Check container logs
 docker logs iowarp-runtime
 
-# List active pools
-docker exec iowarp-runtime chimaera_pool_list
+# Active worker / pool stats
+docker exec iowarp-runtime clio_run monitor
 ```
 
 ---

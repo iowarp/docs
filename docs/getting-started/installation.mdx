@@ -32,7 +32,7 @@ print(iowarp_core.get_version())
 
 ### Start the Runtime
 
-The package installs the `chimaera` CLI on your `PATH`:
+The package installs the `clio_run` CLI on your `PATH`:
 
 ```bash
 clio_run start
@@ -48,7 +48,7 @@ The pip wheel ships the **portable feature set**:
 
 - **Python API** — `import iowarp_core` and `import clio_cee` for the
   Context Exploration Engine
-- **CLI** — `chimaera` command for runtime management
+- **CLI** — `clio_run` command for runtime management
 - **Core engines** — CLIO Runtime, CTE, CAE, CEE
 - **Shared libraries** — every CLIO Runtime library bundled in the
   wheel; no system installs needed
@@ -134,11 +134,11 @@ services:
     container_name: iowarp
     hostname: iowarp
     volumes:
-      - ./chimaera.yaml:/home/iowarp/.chimaera/chimaera.yaml:ro
+      - ./clio.yaml:/home/iowarp/.clio/clio.yaml:ro
     ports:
       - "9413:9413"
     mem_limit: 8g
-    command: ["clio_run", "runtime", "start"]
+    command: ["clio_run", "start"]
     restart: unless-stopped
 ```
 
