@@ -9,26 +9,26 @@ The Atomic Types API in Hermes Shared Memory (HSHM) provides cross-platform atom
 ### Platform-Specific Atomic Types
 
 ```cpp
-#include "hermes_shm/types/atomic.h"
+#include "clio_ctp/types/atomic.h"
 
 void atomic_variants_example() {
     // Standard atomic (uses std::atomic on host, GPU atomics on device)
-    hshm::ipc::atomic<int> standard_atomic(42);
+    ctp::ipc::atomic<int> standard_atomic(42);
     
     // Non-atomic (for single-threaded or externally synchronized code)
-    hshm::ipc::nonatomic<int> non_atomic_value(100);
+    ctp::ipc::nonatomic<int> non_atomic_value(100);
     
     // Explicit GPU atomic (CUDA/ROCm specific)
-#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM
-    hshm::ipc::rocm_atomic<int> gpu_atomic(200);
+#if CTP_ENABLE_CUDA || CTP_ENABLE_ROCM
+    ctp::ipc::rocm_atomic<int> gpu_atomic(200);
 #endif
     
     // Explicit standard library atomic
-    hshm::ipc::std_atomic<int> std_lib_atomic(300);
+    ctp::ipc::std_atomic<int> std_lib_atomic(300);
     
     // Conditional atomic - chooses atomic or non-atomic based on template parameter
-    hshm::ipc::opt_atomic<int, true>  conditional_atomic(400);     // Uses atomic
-    hshm::ipc::opt_atomic<int, false> conditional_nonatomic(500); // Uses nonatomic
+    ctp::ipc::opt_atomic<int, true>  conditional_atomic(400);     // Uses atomic
+    ctp::ipc::opt_atomic<int, false> conditional_nonatomic(500); // Uses nonatomic
     
     printf("Standard atomic: %d\n", standard_atomic.load());
     printf("Non-atomic: %d\n", non_atomic_value.load());
@@ -42,7 +42,7 @@ void atomic_variants_example() {
 
 ```cpp
 void basic_atomic_operations() {
-    hshm::ipc::atomic<int> counter(0);
+    ctp::ipc::atomic<int> counter(0);
     
     // Load value
     int current = counter.load();
@@ -73,7 +73,7 @@ void basic_atomic_operations() {
 
 ```cpp
 void arithmetic_operations_example() {
-    hshm::ipc::atomic<int> counter(10);
+    ctp::ipc::atomic<int> counter(10);
     
     // Fetch and add
     int old_val = counter.fetch_add(5);
@@ -110,7 +110,7 @@ void arithmetic_operations_example() {
 
 ```cpp
 void bitwise_operations_example() {
-    hshm::ipc::atomic<uint32_t> flags(0xF0F0F0F0);
+    ctp::ipc::atomic<uint32_t> flags(0xF0F0F0F0);
     
     printf("Initial flags: 0x%08X\n", flags.load());
     
@@ -143,7 +143,7 @@ void bitwise_operations_example() {
 ```cpp
 template<bool THREAD_SAFE>
 class ConfigurableCounter {
-    hshm::ipc::opt_atomic<int, THREAD_SAFE> count_;
+    ctp::ipc::opt_atomic<int, THREAD_SAFE> count_;
     
 public:
     ConfigurableCounter() : count_(0) {}
@@ -206,8 +206,8 @@ void conditional_atomic_example() {
 #include <cereal/archives/binary.hpp>
 
 void atomic_serialization_example() {
-    hshm::ipc::atomic<int> counter(12345);
-    hshm::ipc::nonatomic<double> value(3.14159);
+    ctp::ipc::atomic<int> counter(12345);
+    ctp::ipc::nonatomic<double> value(3.14159);
     
     // Serialize to binary stream
     std::stringstream ss;
@@ -217,8 +217,8 @@ void atomic_serialization_example() {
     }
     
     // Deserialize from binary stream
-    hshm::ipc::atomic<int> loaded_counter;
-    hshm::ipc::nonatomic<double> loaded_value;
+    ctp::ipc::atomic<int> loaded_counter;
+    ctp::ipc::nonatomic<double> loaded_value;
     {
         cereal::BinaryInputArchive archive(ss);
         archive(loaded_counter, loaded_value);
@@ -233,7 +233,7 @@ void atomic_serialization_example() {
 
 ## Best Practices
 
-1. **Platform Selection**: Use `hshm::ipc::atomic<T>` for automatic platform selection (CPU vs GPU)
+1. **Platform Selection**: Use `ctp::ipc::atomic<T>` for automatic platform selection (CPU vs GPU)
 2. **Performance**: Use `nonatomic<T>` for single-threaded code or when external synchronization is provided
 3. **Memory Ordering**: Specify appropriate memory ordering for performance-critical code
 4. **GPU Compatibility**: Use HSHM atomic types for code that runs on both CPU and GPU

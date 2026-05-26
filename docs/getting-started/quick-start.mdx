@@ -1,14 +1,14 @@
 ---
 sidebar_position: 2
 title: Quick Start
-description: Start the Chimaera runtime and run your first CEE example.
+description: Start the CLIO Runtime and run your first CEE example.
 ---
 
 # Quick Start
 
 This guide assumes you have already [installed IOWarp](./installation).
 It walks you through activating your environment, the default
-configuration, starting the Chimaera runtime, and running a Context
+configuration, starting the CLIO Runtime, and running a Context
 Exploration Engine (CEE) example.
 
 ## 1. Activate Your Environment
@@ -17,17 +17,16 @@ import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
 <Tabs>
-<TabItem value="conda" label="Conda" default>
+<TabItem value="pip" label="Pip" default>
+
+No activation needed -- the `clio_run` CLI and Python modules are
+available once the package is installed in your Python environment.
+
+</TabItem>
+<TabItem value="conda" label="Conda">
 
 ```bash
 conda activate iowarp
-```
-
-</TabItem>
-<TabItem value="spack" label="Spack">
-
-```bash
-spack load iowarp
 ```
 
 </TabItem>
@@ -41,10 +40,11 @@ docker exec -it iowarp bash
 ```
 
 </TabItem>
-<TabItem value="pip" label="Pip">
+<TabItem value="spack" label="Spack">
 
-No activation needed -- the `chimaera` CLI and Python modules are
-available once the package is installed in your Python environment.
+```bash
+spack load iowarp
+```
 
 </TabItem>
 </Tabs>
@@ -52,27 +52,15 @@ available once the package is installed in your Python environment.
 Verify the environment is active:
 
 ```bash
-chimaera --help
+clio_run --help
 ```
 
 ## 2. Default Configuration
 
-During installation a default configuration file is placed at:
-
-```
-~/.chimaera/chimaera.yaml
-```
-
-This file is only created if it does not already exist, so your customisations
-are never overwritten.
-
-The runtime resolves its configuration in this order:
-
-| Priority | Source |
-|----------|--------|
-| 1 | `CHI_SERVER_CONF` environment variable |
-| 2 | `~/.chimaera/chimaera.yaml` |
-| 3 | Built-in defaults |
+During installation a default `~/.clio/clio.yaml` is seeded for you.
+You can edit it directly or point the runtime at a custom file with
+`CLIO_SERVER_CONF=/path/to/config.yaml`. Existing files are never
+overwritten on reinstall.
 
 The default configuration starts **4 worker threads** on **port 9413** and
 composes three modules automatically:
@@ -80,20 +68,20 @@ composes three modules automatically:
 | Module | Purpose |
 |--------|---------|
 | `chimaera_bdev` | 512 MB RAM block device |
-| `wrp_cte_core` | Context Transfer Engine with a 512 MB RAM cache |
-| `wrp_cae_core` | Context Assimilation Engine |
+| `clio_cte_core` | Context Transfer Engine with a 512 MB RAM cache |
+| `clio_cae_core` | Context Assimilation Engine |
 
 ## 3. Start the Runtime
 
 ```bash
 # Start in the background
-chimaera runtime start &
+clio_run start &
 
 # Verify it is running
-chimaera monitor --once
+clio_run monitor --once
 
 # When done
-chimaera runtime stop
+clio_run stop
 ```
 
 ## 4. Context Exploration Engine Example
@@ -110,7 +98,7 @@ Save the following as **`cee_quickstart.py`**:
 import os
 import tempfile
 
-import wrp_cee as cee
+import clio_cee as cee
 
 # -- 1. Create a sample file -------------------------------------------
 data = b"Hello from IOWarp! " * 50_000          # ~950 KB
@@ -120,7 +108,7 @@ tmp.close()
 print(f"Created test file: {tmp.name} ({len(data):,} bytes)")
 
 # -- 2. Initialise the CEE interface -----------------------------------
-#    ContextInterface connects to the running Chimaera runtime.
+#    ContextInterface connects to the running CLIO Runtime.
 iface = cee.ContextInterface()
 
 # -- 3. Bundle (assimilate) the file -----------------------------------
@@ -173,22 +161,24 @@ Done!
 
 | Variable | Description |
 |----------|-------------|
-| `CHI_SERVER_CONF` | Path to YAML configuration file (highest priority) |
-| `CHI_IPC_MODE` | Transport: `SHM` (shared memory), `TCP` (default), `IPC` (Unix socket) |
-| `CHI_PORT` | Override the RPC port (default: `9413`). Takes priority over YAML config. |
-| `CHI_SERVER_ADDR` | Override the server address clients connect to (default: `127.0.0.1`). |
-| `HSHM_LOG_LEVEL` | Logging verbosity: `debug`, `info`, `warning`, `error`, `fatal` |
+| `CLIO_SERVER_CONF` | Path to YAML configuration file (highest priority) |
+| `CLIO_IPC_MODE` | Transport: `SHM` (shared memory), `TCP` (default), `IPC` (Unix socket) |
+| `CLIO_PORT` | Override the RPC port (default: `9413`). Takes priority over YAML config. |
+| `CLIO_SERVER_ADDR` | Override the server address clients connect to (default: `127.0.0.1`). |
+| `CTP_LOG_LEVEL` | Logging verbosity: `debug`, `info`, `warning`, `error`, `fatal` |
 
 ## Next Steps
 
-- Edit `~/.chimaera/chimaera.yaml` to tune thread counts, storage tiers,
-  or add file-backed block devices
+- Edit `~/.clio/clio.yaml` to tune thread counts, storage tiers, or add
+  file-backed block devices
 - [Configuration Reference](../deployment/configuration) -- full parameter
   documentation
 - [HPC Deployment](../deployment/hpc-cluster) -- multi-node cluster setup
 - [CLIO Kit](../clio-kit/mcp-servers) -- MCP servers for AI-powered
   scientific computing
 - [SDK Reference](../sdk/) -- component APIs and development guides
+- [Deprecation Notes](../deprecation-notes) -- legacy CLI / env / config
+  names that still work as aliases
 
 ## Support
 

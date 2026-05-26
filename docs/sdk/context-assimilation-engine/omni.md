@@ -193,40 +193,40 @@ transfers:
 
 ## Using OMNI Files
 
-### Using the wrp_cae_omni Utility
+### Using the clio_cae Utility
 
-The `wrp_cae_omni` utility is the primary tool for processing OMNI files. It loads the OMNI configuration and schedules assimilation tasks with the CAE runtime.
+The `clio_cae` utility is the primary tool for processing OMNI files. It loads the OMNI configuration and schedules assimilation tasks with the CAE runtime.
 
 #### Prerequisites
 
-1. **Chimaera runtime must be running**
-2. **CAE container must be created** using `chimaera compose` (see [Configuration](../../deployment/configuration))
+1. **CLIO Runtime must be running**
+2. **CAE container must be created** using `clio_run compose` (see [Configuration](../../deployment/configuration))
 3. **CTE container must be configured** for blob storage
 
 #### Basic Usage
 
 ```bash
-wrp_cae_omni <omni_file_path>
+clio_cae <omni_file_path>
 ```
 
 **Example:**
 ```bash
-wrp_cae_omni /path/to/transfer_config.yaml
+clio_cae /path/to/transfer_config.yaml
 ```
 
 #### Complete Workflow
 
 ```bash
 # 1. Start runtime
-export WRP_RUNTIME_CONF=/etc/iowarp/config.yaml
-chimaera runtime start &
+export CLIO_SERVER_CONF=/etc/iowarp/config.yaml
+clio_run start &
 sleep 2
 
 # 2. Create CAE container (if not already created)
-chimaera compose /path/to/cae_config.yaml
+clio_run compose /path/to/cae_config.yaml
 
 # 3. Process OMNI file
-wrp_cae_omni /path/to/omni_file.yaml
+clio_cae /path/to/omni_file.yaml
 ```
 
 #### Expected Output
@@ -262,9 +262,9 @@ ParseOmni completed successfully!
 
 #### Common Errors
 
-**Error: "Chimaera IPC not initialized. Is the runtime running?"**
+**Error: "CLIO Runtime IPC not initialized. Is the runtime running?"**
 - **Cause**: Runtime not started
-- **Solution**: Start runtime with `chimaera runtime start`
+- **Solution**: Start runtime with `clio_run start`
 
 **Error: "Failed to load OMNI file"**
 - **Cause**: Invalid YAML syntax or missing file
@@ -279,11 +279,11 @@ ParseOmni completed successfully!
 For programmatic access, use the `LoadOmni` function to parse an OMNI file:
 
 ```cpp
-#include <wrp_cae/core/factory/assimilation_ctx.h>
+#include <clio_cae/core/factory/assimilation_ctx.h>
 #include <yaml-cpp/yaml.h>
 #include <vector>
 
-std::vector<wrp_cae::core::AssimilationCtx> LoadOmni(const std::string& omni_path);
+std::vector<clio_cae::core::AssimilationCtx> LoadOmni(const std::string& omni_path);
 
 // Usage
 try {
@@ -376,10 +376,10 @@ Planned enhancements to the OMNI format:
 
 ## Related Documentation
 
-- [Deployment Configuration](../../deployment/configuration) - How to launch CAE using chimaera compose
+- [Deployment Configuration](../../deployment/configuration) - How to launch CAE using clio_run compose
 - [CTE Documentation](../context-transfer-engine/cte) - CTE storage documentation
-- [Chimaera Compose](../context-runtime/2.module_dev_guide.md) - Compose configuration format
-- [Module Development Guide](../context-runtime/2.module_dev_guide.md) - ChiMod development
+- [CLIO Runtime Compose](../context-runtime/2.module_dev_guide.md) - Compose configuration format
+- [Module Development Guide](../context-runtime/2.module_dev_guide.md) - Module development
 
 ---
 

@@ -29,7 +29,7 @@ IOWarp Core is a unified framework that integrates five high-performance compone
                     ┌─────────────────┐
                     │  Context        │
                     │  Runtime        │
-                    │  (ChiMod System)│
+                    │  (Module System)│
                     └─────────────────┘
                               │
                 ┌─────────────────────────┐
@@ -47,7 +47,7 @@ High-performance modular runtime for scientific computing and storage systems wi
 
 **Key Features:**
 - Ultra-high performance task execution (< 10μs latency)
-- Modular ChiMod system for dynamic extensibility
+- Modular Module system for dynamic extensibility
 - Coroutine-aware synchronization (CoMutex, CoRwLock)
 - Distributed architecture with shared memory IPC
 - Built-in storage backends (RAM, file-based, custom block devices)

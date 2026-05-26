@@ -6,19 +6,19 @@ sidebar_position: 1
 
 ## Overview
 
-HSHM provides two vector variants: `hshm::ipc::vector` for shared memory and `hshm::priv::vector` for private memory. For standard ChiMod development, use `std::vector`. The HSHM vectors are needed when data must be accessible from GPU kernels or live in shared memory across processes.
+HSHM provides two vector variants: `ctp::ipc::vector` for shared memory and `ctp::priv::vector` for private memory. For standard Module development, use `std::vector`. The HSHM vectors are needed when data must be accessible from GPU kernels or live in shared memory across processes.
 
-## hshm::ipc::vector
+## ctp::ipc::vector
 
-**Source:** `hermes_shm/data_structures/ipc/vector.h`
+**Source:** `clio_ctp/data_structures/ipc/vector.h`
 
 A dynamic array stored in shared memory using offset-based pointers (`OffsetPtr<T>`) for process-independent addressing.
 
 ```cpp
-#include <hermes_shm/data_structures/ipc/vector.h>
+#include <clio_ctp/data_structures/ipc/vector.h>
 
 // Create with an allocator
-hshm::ipc::vector<int, AllocT> vec(alloc, 10);  // 10 elements
+ctp::ipc::vector<int, AllocT> vec(alloc, 10);  // 10 elements
 
 // Standard vector operations
 vec.push_back(42);
@@ -42,20 +42,20 @@ for (auto it = vec.begin(); it != vec.end(); ++it) {
 - Requires an allocator at construction time
 - Uses `OffsetPtr<T>` internally instead of raw pointers
 - Safe for cross-process access in shared memory
-- Annotated with `HSHM_CROSS_FUN` for GPU compatibility
+- Annotated with `CTP_CROSS_FUN` for GPU compatibility
 
-## hshm::priv::vector
+## ctp::priv::vector
 
-**Source:** `hermes_shm/data_structures/priv/vector.h`
+**Source:** `clio_ctp/data_structures/priv/vector.h`
 
 A private-memory vector with allocator integration. Supports the same API as `std::vector` plus serialization.
 
 ```cpp
-#include <hermes_shm/data_structures/priv/vector.h>
+#include <clio_ctp/data_structures/priv/vector.h>
 
 // Standard construction
-hshm::priv::vector<int> vec = {1, 2, 3, 4, 5};
-hshm::priv::vector<int> vec2(10, 0);  // 10 zeros
+ctp::priv::vector<int> vec = {1, 2, 3, 4, 5};
+ctp::priv::vector<int> vec2(10, 0);  // 10 zeros
 
 // Full STL-compatible API
 vec.push_back(6);
@@ -72,15 +72,15 @@ for (auto it = vec.rbegin(); it != vec.rend(); ++it) {
 **Optimizations:**
 - Uses `memcpy`/`memmove` for trivially copyable types (POD optimization)
 - Exponential capacity growth strategy
-- Annotated with `HSHM_CROSS_FUN` for GPU compatibility
+- Annotated with `CTP_CROSS_FUN` for GPU compatibility
 
 ## When to Use Each
 
 | Variant | Use Case |
 |---------|----------|
-| `std::vector` | Default choice for ChiMod task data |
-| `hshm::priv::vector` | Private memory with serialization support or GPU access |
-| `hshm::ipc::vector` | Cross-process shared memory regions |
+| `std::vector` | Default choice for Module task data |
+| `ctp::priv::vector` | Private memory with serialization support or GPU access |
+| `ctp::ipc::vector` | Cross-process shared memory regions |
 
 ## Related Documentation
 

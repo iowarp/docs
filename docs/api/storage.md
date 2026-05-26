@@ -25,7 +25,7 @@ Storage operations are currently available through:
 
 ## Configuration
 
-Storage tiers are configured in `wrp_conf.yaml`. See the [Configuration Reference](../deployment/configuration) for details on:
+Storage tiers are configured in `clio_conf.yaml`. See the [Configuration Reference](../deployment/configuration) for details on:
 
 - RAM, NVMe, SSD, and HDD tier setup
 - Data placement engine (`max_bw`, `round_robin`, `random`)

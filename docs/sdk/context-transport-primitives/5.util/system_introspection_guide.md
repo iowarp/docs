@@ -7,13 +7,13 @@ The System Introspection API in Hermes Shared Memory (HSHM) provides cross-platf
 ## Accessing SystemInfo
 
 ```cpp
-#include "hermes_shm/introspect/system_info.h"
+#include "clio_ctp/introspect/system_info.h"
 
 // Get the singleton instance
-auto sys_info = HSHM_SYSTEM_INFO;  // Returns SystemInfo*
+auto sys_info = CTP_SYSTEM_INFO;  // Returns SystemInfo*
 
 // Or create your own instance
-hshm::SystemInfo local_info;
+ctp::SystemInfo local_info;
 ```
 
 ## System Resource Information
@@ -45,13 +45,13 @@ For one-time queries without creating an instance:
 
 ```cpp
 // Static methods for system information
-int total_cpus = hshm::SystemInfo::GetCpuCount();
-int page_sz = hshm::SystemInfo::GetPageSize();
-int current_tid = hshm::SystemInfo::GetTid();               // Thread ID
-int current_pid = hshm::SystemInfo::GetPid();               // Process ID
-int current_uid = hshm::SystemInfo::GetUid();               // User ID
-int current_gid = hshm::SystemInfo::GetGid();               // Group ID
-size_t ram_bytes = hshm::SystemInfo::GetRamCapacity();
+int total_cpus = ctp::SystemInfo::GetCpuCount();
+int page_sz = ctp::SystemInfo::GetPageSize();
+int current_tid = ctp::SystemInfo::GetTid();               // Thread ID
+int current_pid = ctp::SystemInfo::GetPid();               // Process ID
+int current_uid = ctp::SystemInfo::GetUid();               // User ID
+int current_gid = ctp::SystemInfo::GetGid();               // Group ID
+size_t ram_bytes = ctp::SystemInfo::GetRamCapacity();
 
 // Display current process/thread information
 printf("Process Information:\n");
@@ -100,7 +100,7 @@ for (int cpu = 0; cpu < sys_info->ncpu_; ++cpu) {
 
 ```cpp
 // Yield current thread to scheduler
-hshm::SystemInfo::YieldThread();
+ctp::SystemInfo::YieldThread();
 
 // Thread affinity example (platform-specific)
 #ifdef __linux__
@@ -115,7 +115,7 @@ pthread_setaffinity_np(pthread_self(), sizeof(cpuset), &cpuset);
 ### Thread-Local Storage (TLS)
 
 ```cpp
-#include "hermes_shm/thread/thread_model/thread_model.h"
+#include "clio_ctp/thread/thread_model/thread_model.h"
 
 // Define thread-specific data structure
 struct ThreadData {
@@ -125,13 +125,13 @@ struct ThreadData {
 };
 
 // Create and manage thread-local storage keys
-hshm::ThreadLocalKey tls_key;
+ctp::ThreadLocalKey tls_key;
 ThreadData thread_data;
-thread_data.thread_id = hshm::SystemInfo::GetTid();
+thread_data.thread_id = ctp::SystemInfo::GetTid();
 thread_data.processed_items = 0;
 
 // Create TLS key and set initial data
-if (hshm::SystemInfo::CreateTls(tls_key, &thread_data)) {
+if (ctp::SystemInfo::CreateTls(tls_key, &thread_data)) {
     printf("TLS key created successfully for thread %d\n", thread_data.thread_id);
 }
 
@@ -139,11 +139,11 @@ if (hshm::SystemInfo::CreateTls(tls_key, &thread_data)) {
 void thread_worker() {
     // Set thread-specific data
     ThreadData my_data;
-    my_data.thread_id = hshm::SystemInfo::GetTid();
-    hshm::SystemInfo::SetTls(tls_key, &my_data);
+    my_data.thread_id = ctp::SystemInfo::GetTid();
+    ctp::SystemInfo::SetTls(tls_key, &my_data);
     
     // Later, retrieve thread-specific data
-    ThreadData* retrieved = static_cast<ThreadData*>(hshm::SystemInfo::GetTls(tls_key));
+    ThreadData* retrieved = static_cast<ThreadData*>(ctp::SystemInfo::GetTls(tls_key));
     if (retrieved) {
         retrieved->processed_items++;
         printf("Thread %d processed %zu items\n", 
@@ -154,7 +154,7 @@ void thread_worker() {
 
 ## Best Practices
 
-1. **Singleton Usage**: Use `HSHM_SYSTEM_INFO` for application-wide system information
+1. **Singleton Usage**: Use `CTP_SYSTEM_INFO` for application-wide system information
 2. **Error Handling**: Always check return values and handle platform differences gracefully
 3. **Privilege Requirements**: CPU frequency modification requires root/admin privileges
 4. **Resource Validation**: Verify system resources before allocation

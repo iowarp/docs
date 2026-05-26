@@ -48,11 +48,11 @@ cmake --preset release-fuse
 cmake --build build -j$(nproc)
 
 # Or enable FUSE on any existing preset
-cmake -DWRP_CTE_ENABLE_FUSE_ADAPTER=ON ..
-cmake --build . --target wrp_cte_fuse -j$(nproc)
+cmake -DCLIO_CTE_ENABLE_FUSE_ADAPTER=ON ..
+cmake --build . --target clio_cte_fuse -j$(nproc)
 ```
 
-This produces the `wrp_cte_fuse` binary. The adapter links against `wrp_cte_core_client` and `libfuse3` — it does **not** require MPI or ELF interception.
+This produces the `clio_cte_fuse` binary. The adapter links against `clio_cte_core_client` and `libfuse3` — it does **not** require MPI or ELF interception.
 
 ### Prerequisites
 
@@ -64,23 +64,23 @@ ls -l /dev/fuse
 fusermount3 --version
 ```
 
-The IOWarp runtime must also be installed. See [Configuration](./configuration.md) for details.
+The CLIO Runtime must also be installed. See [Configuration](./configuration.md) for details.
 
 ---
 
 ## Usage
 
-### 1. Start the IOWarp runtime
+### 1. Start the CLIO Runtime
 
 ```bash
-chimaera runtime start
+clio_run start
 ```
 
 Or with a custom configuration:
 
 ```bash
-export CHI_SERVER_CONF=/path/to/config.yaml
-chimaera runtime start
+export CLIO_SERVER_CONF=/path/to/config.yaml
+clio_run start
 ```
 
 ### 2. Mount the FUSE filesystem
@@ -89,7 +89,7 @@ chimaera runtime start
 mkdir -p /mnt/cte
 
 # Connect as a client to the already-running runtime
-CHI_WITH_RUNTIME=0 wrp_cte_fuse /mnt/cte -f
+CLIO_WITH_RUNTIME=0 clio_cte_fuse /mnt/cte -f
 ```
 
 | Flag | Description |
@@ -99,7 +99,7 @@ CHI_WITH_RUNTIME=0 wrp_cte_fuse /mnt/cte -f
 | `-o allow_other` | Allow other users to access the mount (requires `user_allow_other` in `/etc/fuse.conf`). |
 | `-s` | Single-threaded mode. By default FUSE is multi-threaded. |
 
-Set `CHI_WITH_RUNTIME=0` so the FUSE daemon connects as a pure client to the existing runtime instead of trying to start its own.
+Set `CLIO_WITH_RUNTIME=0` so the FUSE daemon connects as a pure client to the existing runtime instead of trying to start its own.
 
 ### 3. Use it
 
@@ -150,9 +150,9 @@ cd context-transfer-engine/test/integration/fuse-manual
 
 ## Configuration
 
-The FUSE adapter inherits its CTE configuration from the running IOWarp runtime. The runtime's `compose` section controls storage backends, tiering, and placement policy. No FUSE-specific configuration file is needed.
+The FUSE adapter inherits its CTE configuration from the running CLIO Runtime. The runtime's `compose` section controls storage backends, tiering, and placement policy. No FUSE-specific configuration file is needed.
 
-Example runtime config (`~/.chimaera/chimaera.yaml`):
+Example runtime config (`~/.clio/clio.yaml`):
 
 ```yaml
 runtime:
@@ -160,7 +160,7 @@ runtime:
   queue_depth: 1024
 
 compose:
-  - mod_name: wrp_cte_core
+  - mod_name: clio_cte_core
     pool_name: cte_main
     pool_query: local
     pool_id: "512.0"
@@ -191,8 +191,8 @@ docker run --cap-add SYS_ADMIN --device /dev/fuse \
   --security-opt seccomp=unconfined \
   -v /workspace:/workspace \
   iowarp/deps-cpu:latest \
-  bash -c "chimaera runtime start & sleep 3 && \
-    CHI_WITH_RUNTIME=0 wrp_cte_fuse /mnt/cte -f"
+  bash -c "clio_run start & sleep 3 && \
+    CLIO_WITH_RUNTIME=0 clio_cte_fuse /mnt/cte -f"
 ```
 
 A ready-made Docker Compose configuration for integration testing is available at:

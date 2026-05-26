@@ -29,10 +29,10 @@ IOWarp is released under the [BSD 3-Clause License](https://opensource.org/licen
 
 ### "Could not start TCP server on any host from hostfile"
 
-This error occurs when another process is using the port Chimaera is trying to bind to:
+This error occurs when another process is using the port the CLIO Runtime is trying to bind to:
 
 ```
-chimaera runtime start
+clio_run start
 ERROR: Could not start TCP server on any host from hostfile
 Port attempted: 9128
 ```
@@ -49,14 +49,14 @@ Port attempted: 9128
    sudo lsof -nP -iTCP:9128 | grep LISTEN
    ```
 
-2. Stop the existing Chimaera runtime:
+2. Stop the existing CLIO Runtime:
    ```bash
-   chimaera runtime stop
+   clio_run stop
    ```
 
 3. Or kill the process directly:
    ```bash
-   pkill -9 chimaera runtime start
+   pkill -9 clio_run start
    ```
 
 :::warning

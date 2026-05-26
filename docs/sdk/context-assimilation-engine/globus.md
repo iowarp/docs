@@ -253,22 +253,22 @@ The integration test transfers data from the Materials Science SEM\_103 dataset 
 | Dataset path | `/SEM_103/` |
 | Web UI | [Browse on Globus](https://app.globus.org/file-manager?origin_id=e8cf0e9a-f96a-11ed-9a83-83ef71fbf0ae&origin_path=%2FSEM_103%2F) |
 
-### Full Test (with Chimaera Runtime)
+### Full Test (with CLIO Runtime)
 
-This runs the end-to-end pipeline: Chimaera runtime (with CTE + CAE pools auto-created via compose), then `wrp_cae_omni`.
+This runs the end-to-end pipeline: CLIO Runtime (with CTE + CAE pools auto-created via compose), then `clio_cae`.
 
 The `run_test.sh` script performs the following steps:
 
 1. Validates that `GLOBUS_ACCESS_TOKEN` is set (also requires `GLOBUS_HTTPS_ACCESS_TOKEN` for HTTPS downloads)
-2. Starts the Chimaera runtime with `wrp_runtime_conf.yaml` (compose section creates CTE pool 512.0 and CAE pool 400.0 automatically)
-3. Processes the OMNI file (`matsci_globus_omni.yaml`) with `wrp_cae_omni`
+2. Starts the CLIO Runtime with `clio_runtime_conf.yaml` (compose section creates CTE pool 512.0 and CAE pool 400.0 automatically)
+3. Processes the OMNI file (`matsci_globus_omni.yaml`) with `clio_cae`
 4. Prints transferred files and shuts down the runtime
 
 Transferred files are written to `/tmp/globus_matsci/`.
 
 ### HTTPS Download Test (Standalone)
 
-This lighter test downloads a file directly from a Globus endpoint's HTTPS server, without the Chimaera runtime. It is useful for verifying that your tokens work before running the full test.
+This lighter test downloads a file directly from a Globus endpoint's HTTPS server, without the CLIO Runtime. It is useful for verifying that your tokens work before running the full test.
 
 ```bash
 cd context-assimilation-engine/test/integration/globus_matsci
@@ -354,7 +354,7 @@ The default timeout is 5 minutes (30 polls at 10-second intervals). For large fi
 Verify that the executables are installed and in your `PATH`:
 
 ```bash
-which chimaera wrp_cae_omni
+which clio_run clio_cae
 ```
 
 Check that `WRP_CTE_CONF` points to a valid configuration file.
@@ -370,8 +370,8 @@ All test files are located in `context-assimilation-engine/test/integration/glob
 | `get_oauth_token.py` | OAuth2 token generation (requires `globus-sdk`) |
 | `setup_collection_consent.py` | Helper to set up collection consent scopes |
 | `matsci_globus_omni.yaml` | OMNI config for Materials Science dataset |
-| `wrp_runtime_conf.yaml` | Chimaera runtime config with CTE + CAE compose |
-| `wrp_conf.yaml` | CTE-only config (legacy, not used by `run_test.sh`) |
+| `clio_runtime_conf.yaml` | CLIO Runtime config with CTE + CAE compose |
+| `clio_conf.yaml` | CTE-only config (legacy, not used by `run_test.sh`) |
 | `REST_AUTH_GUIDE.md` | Detailed OAuth2 REST API reference |
 
 ## Related Documentation

@@ -12,7 +12,7 @@ IOWarp performance can be optimized by tuning three main categories: worker thre
 
 ## Worker Threads
 
-Worker threads handle task scheduling and execution in the IOWarp runtime.
+Worker threads handle task scheduling and execution in the CLIO Runtime.
 
 ```yaml
 workers:
@@ -31,7 +31,7 @@ The DPE determines how data is placed across storage tiers.
 
 ```yaml
 compose:
-  - mod_name: wrp_cte_core
+  - mod_name: clio_cte_core
     pool_name: cte_main
     dpe:
       dpe_type: max_bw  # Options: max_bw, round_robin, random
@@ -48,7 +48,7 @@ Storage tiers define the cache hierarchy with priority scores.
 
 ```yaml
 compose:
-  - mod_name: wrp_cte_core
+  - mod_name: clio_cte_core
     storage:
       # RAM tier (fastest, most precious)
       - path: "ram::cte_ram"

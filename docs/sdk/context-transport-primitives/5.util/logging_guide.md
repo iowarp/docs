@@ -130,15 +130,15 @@ HILOG_PERIODIC(kInfo, unique_id, interval_seconds, "Status update: {}", status);
 ### Environment Configuration
 
 #### Disabling Log Codes
-Set `HSHM_LOG_EXCLUDE` to a comma-separated list of log codes to disable:
+Set `CTP_LOG_EXCLUDE` to a comma-separated list of log codes to disable:
 ```bash
-export HSHM_LOG_EXCLUDE="251,252"  # Disable kInfo and kWarning
+export CTP_LOG_EXCLUDE="251,252"  # Disable kInfo and kWarning
 ```
 
 #### Log File Output
-Set `HSHM_LOG_OUT` to write logs to a file (in addition to console):
+Set `CTP_LOG_OUT` to write logs to a file (in addition to console):
 ```bash
-export HSHM_LOG_OUT="/tmp/hermes_shm.log"
+export CTP_LOG_OUT="/tmp/clio_ctp.log"
 ```
 
 ### Debug Builds
@@ -173,5 +173,5 @@ The logging system is thread-safe and automatically includes thread IDs in log o
 ## Performance Considerations
 
 - Log messages are formatted only when the log level is enabled
-- Disabled log codes (via `HSHM_LOG_EXCLUDE`) have minimal runtime overhead
+- Disabled log codes (via `CTP_LOG_EXCLUDE`) have minimal runtime overhead
 - Debug logs have zero overhead in release builds due to compile-time optimization

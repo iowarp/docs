@@ -6,11 +6,11 @@ HSHM provides a unified compression framework that wraps multiple lossless and l
 
 **Headers:**
 ```cpp
-#include <hermes_shm/compress/compress.h>          // Base interface
-#include <hermes_shm/compress/compress_factory.h>   // Factory + presets
+#include <clio_ctp/compress/compress.h>          // Base interface
+#include <clio_ctp/compress/compress_factory.h>   // Factory + presets
 ```
 
-**Compile-time flag:** `HSHM_ENABLE_COMPRESS`
+**Compile-time flag:** `CTP_ENABLE_COMPRESS`
 
 ## Supported Libraries
 
@@ -34,7 +34,7 @@ HSHM provides a unified compression framework that wraps multiple lossless and l
 
 ### Lossy Compressors (via LibPressio)
 
-Requires `HSHM_ENABLE_LIBPRESSIO` in addition to `HSHM_ENABLE_COMPRESS`.
+Requires `CTP_ENABLE_LIBPRESSIO` in addition to `CTP_ENABLE_COMPRESS`.
 
 | Library | Compressor ID |
 |---------|--------------|
@@ -48,19 +48,19 @@ These classes can be used directly without the factory:
 
 | Library | Class | Header |
 |---------|-------|--------|
-| bzip2 | `hshm::Bzip2` | `<hermes_shm/compress/bzip2.h>` |
-| zstd | `hshm::Zstd` | `<hermes_shm/compress/zstd.h>` |
-| lz4 | `hshm::Lz4` | `<hermes_shm/compress/lz4.h>` |
-| zlib | `hshm::Zlib` | `<hermes_shm/compress/zlib.h>` |
-| lzma | `hshm::Lzma` | `<hermes_shm/compress/lzma.h>` |
-| brotli | `hshm::Brotli` | `<hermes_shm/compress/brotli.h>` |
-| snappy | `hshm::Snappy` | `<hermes_shm/compress/snappy.h>` |
-| blosc2 | `hshm::Blosc` | `<hermes_shm/compress/blosc.h>` |
-| lzo | `hshm::Lzo` | `<hermes_shm/compress/lzo.h>` |
+| bzip2 | `ctp::Bzip2` | `<clio_ctp/compress/bzip2.h>` |
+| zstd | `ctp::Zstd` | `<clio_ctp/compress/zstd.h>` |
+| lz4 | `ctp::Lz4` | `<clio_ctp/compress/lz4.h>` |
+| zlib | `ctp::Zlib` | `<clio_ctp/compress/zlib.h>` |
+| lzma | `ctp::Lzma` | `<clio_ctp/compress/lzma.h>` |
+| brotli | `ctp::Brotli` | `<clio_ctp/compress/brotli.h>` |
+| snappy | `ctp::Snappy` | `<clio_ctp/compress/snappy.h>` |
+| blosc2 | `ctp::Blosc` | `<clio_ctp/compress/blosc.h>` |
+| lzo | `ctp::Lzo` | `<clio_ctp/compress/lzo.h>` |
 
 ## API Reference
 
-### hshm::Compressor (Base Interface)
+### ctp::Compressor (Base Interface)
 
 ```cpp
 namespace hshm {
@@ -95,7 +95,7 @@ class Compressor {
 }  // namespace hshm
 ```
 
-### hshm::CompressionPreset
+### ctp::CompressionPreset
 
 ```cpp
 enum class CompressionPreset {
@@ -106,7 +106,7 @@ enum class CompressionPreset {
 };
 ```
 
-### hshm::CompressionFactory
+### ctp::CompressionFactory
 
 ```cpp
 class CompressionFactory {
@@ -155,10 +155,10 @@ class CompressionFactory {
 ### Direct Usage (No Factory)
 
 ```cpp
-#include <hermes_shm/compress/zstd.h>
+#include <clio_ctp/compress/zstd.h>
 
 void direct_compress_example() {
-    hshm::Zstd zstd;
+    ctp::Zstd zstd;
 
     std::string raw = "Hello, World!";
     std::vector<char> compressed(1024);
@@ -184,12 +184,12 @@ void direct_compress_example() {
 ### Factory with Presets
 
 ```cpp
-#include <hermes_shm/compress/compress_factory.h>
+#include <clio_ctp/compress/compress_factory.h>
 
 void factory_compress_example() {
     // Create a fast zstd compressor
-    auto compressor = hshm::CompressionFactory::GetPreset(
-        "zstd", hshm::CompressionPreset::FAST);
+    auto compressor = ctp::CompressionFactory::GetPreset(
+        "zstd", ctp::CompressionPreset::FAST);
     assert(compressor != nullptr);
 
     std::string raw = "Hello, World!";
@@ -211,21 +211,21 @@ void factory_compress_example() {
 ### Library ID Encoding
 
 ```cpp
-#include <hermes_shm/compress/compress_factory.h>
+#include <clio_ctp/compress/compress_factory.h>
 
 void library_id_example() {
     // Encode: zstd + FAST -> integer ID
-    int id = hshm::CompressionFactory::GetLibraryId("zstd",
-                 hshm::CompressionPreset::FAST);
+    int id = ctp::CompressionFactory::GetLibraryId("zstd",
+                 ctp::CompressionPreset::FAST);
     // id == 21 (base_id=2 * 10 + preset=1)
 
     // Decode: integer ID -> (name, preset)
-    auto [name, preset] = hshm::CompressionFactory::GetLibraryInfo(id);
+    auto [name, preset] = ctp::CompressionFactory::GetLibraryInfo(id);
     assert(name == "zstd");
-    assert(preset == hshm::CompressionPreset::FAST);
+    assert(preset == ctp::CompressionPreset::FAST);
 
     // Get preset name
-    std::string preset_name = hshm::CompressionFactory::GetPresetName(preset);
+    std::string preset_name = ctp::CompressionFactory::GetPresetName(preset);
     assert(preset_name == "fast");
 }
 ```
@@ -243,8 +243,8 @@ void try_all_compressors() {
     std::vector<char> decompressed(1024);
 
     for (const auto& lib : libraries) {
-        auto compressor = hshm::CompressionFactory::GetPreset(
-            lib, hshm::CompressionPreset::BALANCED);
+        auto compressor = ctp::CompressionFactory::GetPreset(
+            lib, ctp::CompressionPreset::BALANCED);
         if (!compressor) continue;
 
         size_t csz = compressed.size();

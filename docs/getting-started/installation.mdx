@@ -1,7 +1,7 @@
 ---
 sidebar_position: 1
 title: Installation
-description: Install IOWarp via Conda, Docker, Spack, or pip.
+description: Install CLIO Core via pip (portable) or build from source via Conda, Docker, or Spack.
 ---
 
 # Installation
@@ -12,11 +12,68 @@ import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
 <Tabs>
-<TabItem value="conda" label="Conda (Recommended)" default>
+<TabItem value="pip" label="Pip (Recommended)" default>
 
-Clone and build IOWarp Core from source using the automated installer.
-This uses conda internally to manage dependencies and produces a full-featured
-build with all optional components.
+The pip package is the easiest way to get CLIO Core. It ships a
+**portable, self-contained build** with everything statically linked, so
+no system dependencies are required beyond a standard C/C++ runtime
+(glibc) and Python 3.10+.
+
+```bash
+pip install iowarp-core
+```
+
+Verify the installation:
+
+```python
+import iowarp_core
+print(iowarp_core.get_version())
+```
+
+### Start the Runtime
+
+The package installs the `chimaera` CLI on your `PATH`:
+
+```bash
+clio_run start
+```
+
+A default `~/.clio/clio.yaml` is seeded on first import so the runtime
+works out of the box. See the [Quick Start](./quick-start) for the next
+steps.
+
+### What's Included
+
+The pip wheel ships the **portable feature set**:
+
+- **Python API** — `import iowarp_core` and `import clio_cee` for the
+  Context Exploration Engine
+- **CLI** — `chimaera` command for runtime management
+- **Core engines** — CLIO Runtime, CTE, CAE, CEE
+- **Shared libraries** — every CLIO Runtime library bundled in the
+  wheel; no system installs needed
+
+### When You'll Need a Source Build
+
+Newer extensions and advanced/accelerated features are not in the
+portable wheel. Switch to one of the source-build methods below if you
+need:
+
+- **NVIDIA GPU (CUDA)** or **AMD GPU (ROCm)** acceleration
+- **MPI** for distributed multi-node deployment
+- **HDF5** scientific data ingestion
+- **ADIOS2** adapter for streaming analytics
+- **Compression** backends (LibPressio, Blosc, etc.)
+- **FUSE** adapter
+- **Custom ChiMods** you intend to compile against the C++ headers
+- **Sanitizer / debug builds** for development
+
+</TabItem>
+<TabItem value="conda" label="Conda">
+
+The Conda installer builds CLIO Core from source with all optional
+components enabled. It is the fastest path to a full-featured build
+that includes GPU, MPI, HDF5, and adapter support.
 
 ```bash
 git clone --recurse-submodules https://github.com/iowarp/clio-core.git
@@ -42,29 +99,19 @@ Pass a variant name to enable additional features:
 | ROCm | `./install.sh rocm` | AMD GPU acceleration |
 | MPI | `./install.sh mpi` | Distributed multi-node |
 | Full | `./install.sh full` | CUDA + MPI + everything |
+| FUSE | `./install.sh release-fuse` | FUSE adapter for POSIX |
 
 ### Verify the installation
 
 ```bash
 conda activate iowarp
-chimaera --help
+clio_run --help
 ```
-
-### What's Included
-
-The Conda install provides the complete IOWarp stack:
-
-- **All engines** — CTE, CAE, CEE with full feature support
-- **Python API** — `import wrp_cee` for context management
-- **CLI** — `chimaera` command for runtime management
-- **GPU support** — CUDA and ROCm variants available
-- **MPI support** — Distributed multi-node deployments
-- **HDF5 support** — Scientific data format ingestion
 
 </TabItem>
 <TabItem value="docker" label="Docker">
 
-Pull and run the IOWarp Docker image:
+Pull and run the CLIO Core Docker image:
 
 ```bash
 docker pull iowarp/deploy-cpu:latest
@@ -73,7 +120,7 @@ docker pull iowarp/deploy-cpu:latest
 Run the container:
 
 ```bash
-docker run -d -p 9413:9413 --memory=8g --name iowarp iowarp/deploy-cpu:latest chimaera runtime start
+docker run -d -p 9413:9413 --memory=8g --name iowarp iowarp/deploy-cpu:latest clio_run start
 ```
 
 ### Using Docker Compose
@@ -91,7 +138,7 @@ services:
     ports:
       - "9413:9413"
     mem_limit: 8g
-    command: ["chimaera", "runtime", "start"]
+    command: ["clio_run", "runtime", "start"]
     restart: unless-stopped
 ```
 
@@ -102,7 +149,7 @@ docker compose up -d
 ```
 
 :::info
-IOWarp uses `memfd_create()` for shared memory, so no special `/dev/shm` configuration is needed. Only `mem_limit` matters for resource control. See the [Configuration Reference](../deployment/configuration) for details.
+CLIO Core uses `memfd_create()` for shared memory, so no special `/dev/shm` configuration is needed. Only `mem_limit` matters for resource control. See the [Configuration Reference](../deployment/configuration) for details.
 :::
 
 </TabItem>
@@ -125,53 +172,11 @@ cd clio-core
 spack repo add installers/spack
 ```
 
-3. Install IOWarp:
+3. Install CLIO Core:
 
 ```bash
 spack install iowarp
 ```
-
-</TabItem>
-<TabItem value="pip" label="Pip (Experimental)">
-
-:::caution Experimental
-The pip package is experimental. It does not include GPU (CUDA/ROCm),
-MPI, or HDF5 support. For production use, prefer the
-[Conda install](#) method.
-:::
-
-Install the IOWarp Python package:
-
-```bash
-pip install iowarp-core
-```
-
-Verify the installation:
-
-```python
-import iowarp_core
-print(iowarp_core.get_version())
-```
-
-### Start the Runtime
-
-IOWarp includes the `chimaera` CLI for managing the runtime:
-
-```bash
-chimaera runtime start
-```
-
-### What's Included
-
-The pip package is self-contained with all dependencies statically linked. It includes:
-
-- **Python API** — `import iowarp_core` and `import wrp_cee` for context management
-- **CLI** — `chimaera` command for runtime management
-- **Shared libraries** — All IOWarp runtime libraries bundled in the package
-
-:::info
-No system dependencies are required beyond a standard C/C++ runtime (glibc). The package works on any Linux x86_64 or aarch64 system with Python 3.10+.
-:::
 
 </TabItem>
 </Tabs>

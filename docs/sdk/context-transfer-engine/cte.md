@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Content Transfer Engine (CTE) Core is a high-performance distributed storage middleware system built on the Chimaera framework. It provides a flexible blob storage API with advanced features including:
+The Content Transfer Engine (CTE) Core is a high-performance distributed storage middleware system built on the Clio framework. It provides a flexible blob storage API with advanced features including:
 
 - **Multi-target Storage Management**: Register and manage multiple storage backends (file, RAM, NVMe)
 - **Blob Storage with Tags**: Store and retrieve data blobs with tag-based organization
@@ -11,7 +11,7 @@ The Content Transfer Engine (CTE) Core is a high-performance distributed storage
 - **Configurable Data Placement**: Multiple data placement algorithms (random, round-robin, max bandwidth)
 - **Asynchronous Operations**: Async-only API with C++20 coroutine support
 
-CTE Core implements a ChiMod (Chimaera Module) that integrates with the Chimaera distributed runtime system, providing scalable data management across multiple nodes in a cluster.
+CTE Core implements a Module (CLIO Runtime Module) that integrates with the CLIO Runtime distributed runtime system, providing scalable data management across multiple nodes in a cluster.
 
 ## Installation & Linking
 
@@ -19,7 +19,7 @@ CTE Core implements a ChiMod (Chimaera Module) that integrates with the Chimaera
 
 - CMake 3.20 or higher
 - C++17 compatible compiler
-- Chimaera framework (chimaera and chimaera_admin packages)
+- Clio framework (chimaera and chimaera_admin packages)
 - yaml-cpp library
 - Python 3.7+ (for Python bindings)
 - nanobind (for Python bindings)
@@ -49,12 +49,12 @@ sudo make install
 To use CTE Core in your CMake project, follow the patterns established in the MODULE_DEVELOPMENT_GUIDE.md. Add the following to your `CMakeLists.txt`:
 
 ```cmake
-# Find required Chimaera framework packages
-find_package(chimaera REQUIRED)              # Core Chimaera framework
-find_package(chimaera_admin REQUIRED)        # Admin ChiMod (required)
+# Find required Clio framework packages
+find_package(chimaera REQUIRED)              # Core Clio framework
+find_package(chimaera_admin REQUIRED)        # Admin Module (required)
 
-# Find CTE Core ChiMod package
-find_package(wrp_cte_core REQUIRED)          # CTE Core ChiMod
+# Find CTE Core Module package
+find_package(clio_cte_core REQUIRED)          # CTE Core Module
 
 # Create your executable or library
 add_executable(my_app main.cpp)
@@ -62,39 +62,39 @@ add_executable(my_app main.cpp)
 # Link against CTE Core libraries using modern target aliases
 target_link_libraries(my_app 
   PRIVATE 
-    wrp_cte::core_client                     # CTE Core client library
-    # wrp_cte::core_runtime                  # Optional - if you need runtime functionality
+    clio_cte::core_client                     # CTE Core client library
+    # clio_cte::core_runtime                  # Optional - if you need runtime functionality
     # chimaera::admin_client                 # Optional - if you need admin functionality
 )
 
-# Note: Include directories are handled automatically by the ChiMod targets
+# Note: Include directories are handled automatically by the Module targets
 # No manual target_include_directories() call needed
 ```
 
 #### Package and Target Naming
 
-CTE Core follows the Chimaera ChiMod naming conventions:
+CTE Core follows the CLIO Runtime Module naming conventions:
 
-- **Package Name**: `wrp_cte_core` (for `find_package(wrp_cte_core REQUIRED)`)
-- **Target Aliases**: `wrp_cte::core_client`, `wrp_cte::core_runtime` (recommended for linking)
-- **Actual Targets**: `wrp_cte_core_client`, `wrp_cte_core_runtime`
-- **Library Files**: `libwrp_cte_core_client.so`, `libwrp_cte_core_runtime.so`
-- **Include Path**: `wrp_cte/core/` (e.g., `#include <wrp_cte/core/core_client.h>`)
+- **Package Name**: `clio_cte_core` (for `find_package(clio_cte_core REQUIRED)`)
+- **Target Aliases**: `clio_cte::core_client`, `clio_cte::core_runtime` (recommended for linking)
+- **Actual Targets**: `clio_cte_core_client`, `clio_cte_core_runtime`
+- **Library Files**: `libclio_cte_core_client.so`, `libclio_cte_core_runtime.so`
+- **Include Path**: `clio_cte/core/` (e.g., `#include <clio_cte/core/core_client.h>`)
 
 #### Dependency Management
 
-The CTE Core ChiMod targets automatically include all required dependencies:
+The CTE Core Module targets automatically include all required dependencies:
 
-- **Core Chimaera Framework**: Automatically linked via `wrp_cte::core_client` target
-- **Admin ChiMod**: Available via `chimaera::admin_client` if needed
-- **Include Paths**: Automatically configured by ChiMod targets
+- **Core CLIO Runtime Framework**: Automatically linked via `clio_cte::core_client` target
+- **Admin Module**: Available via `chimaera::admin_client` if needed
+- **Include Paths**: Automatically configured by Module targets
 - **System Dependencies**: Handled by the build system (threading, YAML, etc.)
 
 External applications only need to link against the CTE Core targets - all framework dependencies are resolved automatically.
 
 ### Runtime Dependencies
 
-The CTE Core runtime library (`libwrp_cte_core_runtime.so`) must be available at runtime. It will be automatically loaded by the Chimaera framework when the CTE Core container is created.
+The CTE Core runtime library (`libclio_cte_core_runtime.so`) must be available at runtime. It will be automatically loaded by the Clio framework when the CTE Core container is created.
 
 ### External Application Example
 
@@ -109,9 +109,9 @@ set(CMAKE_CXX_STANDARD_20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Find required packages
-find_package(chimaera REQUIRED)              # Core Chimaera framework
-find_package(chimaera_admin REQUIRED)        # Admin ChiMod
-find_package(wrp_cte_core REQUIRED)          # CTE Core ChiMod
+find_package(chimaera REQUIRED)              # Core Clio framework
+find_package(chimaera_admin REQUIRED)        # Admin Module
+find_package(clio_cte_core REQUIRED)          # CTE Core Module
 
 # Find additional dependencies
 find_package(yaml-cpp REQUIRED)
@@ -122,8 +122,8 @@ add_executable(my_cte_app main.cpp)
 
 # Link with CTE Core - dependencies are automatically included
 target_link_libraries(my_cte_app
-  wrp_cte::core_client                       # CTE Core client (required)
-  # wrp_cte::core_runtime                    # Optional - if needed
+  clio_cte::core_client                       # CTE Core client (required)
+  # clio_cte::core_runtime                    # Optional - if needed
   # chimaera::admin_client                   # Optional - if needed
   ${CMAKE_THREAD_LIBS_INIT}                 # Threading support
 )
@@ -133,14 +133,14 @@ target_link_libraries(my_cte_app
 
 ### Core Client Class
 
-The main entry point for CTE Core functionality is the `wrp_cte::core::Client` class.
+The main entry point for CTE Core functionality is the `clio_cte::core::Client` class.
 
 #### Class Definition
 
 The CTE client provides an **async-only API**. All methods return `chi::Future<TaskType>` for asynchronous completion.
 
 ```cpp
-namespace wrp_cte::core {
+namespace clio_cte::core {
 
 class Client : public chi::ContainerClient {
 public:
@@ -233,17 +233,17 @@ public:
       const chi::PoolQuery &pool_query = chi::PoolQuery::Broadcast());
 };
 
-}  // namespace wrp_cte::core
+}  // namespace clio_cte::core
 ```
 
 ### Tag Wrapper Class
 
-The `wrp_cte::core::Tag` class provides a simplified, object-oriented interface for blob operations within a specific tag. This wrapper class eliminates the need to pass `TagId` parameters for each operation, making the API more convenient and less error-prone.
+The `clio_cte::core::Tag` class provides a simplified, object-oriented interface for blob operations within a specific tag. This wrapper class eliminates the need to pass `TagId` parameters for each operation, making the API more convenient and less error-prone.
 
 #### Class Definition
 
 ```cpp
-namespace wrp_cte::core {
+namespace clio_cte::core {
 
 class Tag {
 private:
@@ -280,7 +280,7 @@ public:
   const TagId& GetTagId() const { return tag_id_; }
 };
 
-}  // namespace wrp_cte::core
+}  // namespace clio_cte::core
 ```
 
 #### Key Features
@@ -435,7 +435,7 @@ auto *client = WRP_CTE_CLIENT;
 - `WRP_CTE_CLIENT_INIT` automatically calls `chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, true)` internally
 - You do NOT need to call `chi::CHIMAERA_INIT` separately when using CTE Core
 - Configuration is managed per-Runtime instance (no global ConfigManager singleton)
-- The config file path can also be specified via the `WRP_RUNTIME_CONF` environment variable
+- The config file path can also be specified via the `CLIO_SERVER_CONF` environment variable
 
 ## Usage Examples
 
@@ -443,14 +443,14 @@ auto *client = WRP_CTE_CLIENT;
 
 ```cpp
 #include <chimaera/chimaera.h>
-#include <wrp_cte/core/core_client.h>
-#include <wrp_cte/core/core_tasks.h>
+#include <clio_cte/core/core_client.h>
+#include <clio_cte/core/core_tasks.h>
 
 int main() {
   // Initialize CTE subsystem
   // NOTE: WRP_CTE_CLIENT_INIT automatically calls chi::CHIMAERA_INIT internally
   // You do NOT need to call chi::CHIMAERA_INIT separately
-  wrp_cte::core::WRP_CTE_CLIENT_INIT("/path/to/config.yaml");
+  clio_cte::core::WRP_CTE_CLIENT_INIT("/path/to/config.yaml");
 
   // Get global CTE client instance (created during initialization)
   auto *cte_client = WRP_CTE_CLIENT;
@@ -583,7 +583,7 @@ del_tag_task.Wait();
 
 ```cpp
 // Create tag wrapper - automatically creates or gets existing tag
-wrp_cte::core::Tag dataset_tag("dataset_v1");
+clio_cte::core::Tag dataset_tag("dataset_v1");
 
 // Prepare data for storage
 std::vector<char> data(1024 * 1024);  // 1MB of data
@@ -643,7 +643,7 @@ The Tag wrapper class provides a more convenient interface for blob operations w
 #### Basic Tag Wrapper Operations
 
 ```cpp
-#include <wrp_cte/core/core_client.h>
+#include <clio_cte/core/core_client.h>
 #include <iostream>
 #include <vector>
 
@@ -651,7 +651,7 @@ The Tag wrapper class provides a more convenient interface for blob operations w
 // ... initialization code ...
 
 // Create a tag wrapper - automatically creates or gets existing tag
-wrp_cte::core::Tag dataset_tag("dataset_v1");
+clio_cte::core::Tag dataset_tag("dataset_v1");
 
 // Store data using the simple raw data interface
 std::vector<char> data(1024 * 1024);  // 1MB of data
@@ -680,7 +680,7 @@ try {
 The Tag class provides two GetBlob variants to suit different memory management preferences:
 
 ```cpp
-wrp_cte::core::Tag data_tag("performance_data");
+clio_cte::core::Tag data_tag("performance_data");
 
 try {
     // Store some test data
@@ -718,7 +718,7 @@ try {
 
 ```cpp
 // Create tag wrapper for time-series data
-wrp_cte::core::Tag timeseries_tag("timeseries_2024");
+clio_cte::core::Tag timeseries_tag("timeseries_2024");
 
 // Store multiple data chunks with different scores (data temperatures)
 std::vector<std::vector<char>> chunks;
@@ -748,7 +748,7 @@ for (size_t i = 0; i < 4; ++i) {
 ```cpp
 // Create tag wrapper from existing TagId
 TagId existing_tag_id = /* ... get from somewhere ... */;
-wrp_cte::core::Tag existing_tag(existing_tag_id);
+clio_cte::core::Tag existing_tag(existing_tag_id);
 
 try {
     // First, check if blob exists and get its size
@@ -782,7 +782,7 @@ try {
 #### Asynchronous Operations with Tag Wrapper
 
 ```cpp
-wrp_cte::core::Tag async_tag("async_operations");
+clio_cte::core::Tag async_tag("async_operations");
 
 // Prepare data for async operations
 std::vector<std::vector<char>> async_data;
@@ -973,7 +973,7 @@ if (single_task->return_code_ == 0) {
 }
 
 // Using Tag wrapper (simpler API)
-wrp_cte::core::Tag my_tag("my_dataset");
+clio_cte::core::Tag my_tag("my_dataset");
 my_tag.ReorganizeBlob("hot_data", 0.95f);  // Move to hot tier
 my_tag.ReorganizeBlob("cold_archive", 0.2f);  // Move to cold tier
 ```
@@ -982,7 +982,7 @@ my_tag.ReorganizeBlob("cold_archive", 0.2f);  // Move to cold tier
 
 CTE Core uses YAML configuration files for runtime parameters. Configuration can be loaded from:
 1. A file path specified during initialization
-2. Environment variable `WRP_RUNTIME_CONF`
+2. Environment variable `CLIO_SERVER_CONF`
 3. Programmatically via the Config API
 
 ### Configuration File Format
@@ -1052,15 +1052,15 @@ dpe:
 Configuration in CTE Core is now managed per-Runtime instance, not through a global singleton. Configuration is loaded during initialization through the `WRP_CTE_CLIENT_INIT` function.
 
 ```cpp
-#include <wrp_cte/core/core_client.h>
+#include <clio_cte/core/core_client.h>
 
 // Initialize CTE with configuration file
 // Configuration is passed to the Runtime during creation
-bool success = wrp_cte::core::WRP_CTE_CLIENT_INIT("/path/to/config.yaml");
+bool success = clio_cte::core::WRP_CTE_CLIENT_INIT("/path/to/config.yaml");
 
-// Or use environment variable WRP_RUNTIME_CONF
-// export WRP_RUNTIME_CONF=/path/to/config.yaml
-success = wrp_cte::core::WRP_CTE_CLIENT_INIT();
+// Or use environment variable CLIO_SERVER_CONF
+// export CLIO_SERVER_CONF=/path/to/config.yaml
+success = clio_cte::core::WRP_CTE_CLIENT_INIT();
 
 // Configuration is now embedded in the Runtime instance
 // and cannot be modified after initialization
@@ -1070,7 +1070,7 @@ success = wrp_cte::core::WRP_CTE_CLIENT_INIT();
 - Loaded once during `WRP_CTE_CLIENT_INIT`
 - Embedded in the CTE Runtime instance via `CreateParams`
 - Immutable after initialization
-- Can be specified via file path parameter or `WRP_RUNTIME_CONF` environment variable
+- Can be specified via file path parameter or `CLIO_SERVER_CONF` environment variable
 
 ### Queue Priority Options
 
@@ -1152,7 +1152,7 @@ pip install ./wrapper/python
 ### Python API Usage
 
 ```python
-import wrp_cte_core_ext as cte
+import clio_cte_core_ext as cte
 
 # Initialize CTE
 # NOTE: This automatically calls chi::CHIMAERA_INIT() internally
@@ -1216,7 +1216,7 @@ print(cte.CteOp.kDelBlob)    # Delete blob operation
 The Python bindings support blob reorganization for dynamic data placement optimization using the async API:
 
 ```python
-import wrp_cte_core_ext as cte
+import clio_cte_core_ext as cte
 
 # Initialize CTE system (as shown in previous examples)
 cte.initialize_cte("/path/to/config.yaml")
@@ -1352,7 +1352,7 @@ Generally, the tag wrapper class is preferred over the direct API.
 **For Raw Data Operations:**
 ```cpp
 // Tag wrapper automatically manages shared memory for sync operations
-wrp_cte::core::Tag tag("my_data");
+clio_cte::core::Tag tag("my_data");
 std::vector<char> data = LoadData();
 tag.PutBlob("item", data.data(), data.size());  // Safe - automatic cleanup
 ```
@@ -1401,7 +1401,7 @@ for (auto& task : tasks) {
 **Batch Operations:**
 ```cpp
 // Efficient: Group related operations
-wrp_cte::core::Tag batch_tag("batch_job");
+clio_cte::core::Tag batch_tag("batch_job");
 for (const auto& item : batch_items) {
     batch_tag.PutBlob(item.name, item.data, item.size);
 }
@@ -1428,7 +1428,7 @@ if (blob_size > 0) {
 **Tag Wrapper (Exception-based):**
 ```cpp
 try {
-    wrp_cte::core::Tag tag("dataset");
+    clio_cte::core::Tag tag("dataset");
     tag.PutBlob("data", buffer, size);
     
     chi::u64 stored_size = tag.GetBlobSize("data");
@@ -1478,7 +1478,7 @@ if (size_task->size_ != size) {
 
 CTE Core supports distributed deployment across multiple nodes:
 
-1. Configure Chimaera for multi-node operation
+1. Configure CLIO Runtime for multi-node operation
 2. Use appropriate PoolQuery values:
    - `chi::PoolQuery::Local()` - Local node only
    - `chi::PoolQuery::Global()` - All nodes
@@ -1534,7 +1534,7 @@ if (task->return_code_ != 0) {
 ### Common Issues
 
 1. **Initialization Failures**
-   - Ensure Chimaera runtime is initialized first
+   - Ensure CLIO Runtime is initialized first
    - Check configuration file path and format
    - Verify storage paths have appropriate permissions
 

@@ -9,10 +9,10 @@ The Configuration Parsing API in Hermes Shared Memory (HSHM) provides powerful u
 ### Creating a Configuration Class
 
 ```cpp
-#include "hermes_shm/util/config_parse.h"
+#include "clio_ctp/util/config_parse.h"
 #include "yaml-cpp/yaml.h"
 
-class ApplicationConfig : public hshm::BaseConfig {
+class ApplicationConfig : public ctp::BaseConfig {
 public:
     // Configuration fields
     std::string server_address;
@@ -26,7 +26,7 @@ public:
     void LoadDefault() override {
         server_address = "localhost";
         port = 8080;
-        buffer_size = hshm::Unit<size_t>::Megabytes(1);
+        buffer_size = ctp::Unit<size_t>::Megabytes(1);
         timeout_seconds = 30.0;
         allowed_hosts.clear();
         features.clear();
@@ -47,7 +47,7 @@ private:
         
         if (yaml_conf["buffer_size"]) {
             std::string size_str = yaml_conf["buffer_size"].as<std::string>();
-            buffer_size = hshm::ConfigParse::ParseSize(size_str);
+            buffer_size = ctp::ConfigParse::ParseSize(size_str);
         }
         
         if (yaml_conf["timeout"]) {
@@ -71,7 +71,7 @@ private:
         for (auto host_node : hosts_node) {
             std::string host_pattern = host_node.as<std::string>();
             // Expand hostname patterns
-            hshm::ConfigParse::ParseHostNameString(host_pattern, allowed_hosts);
+            ctp::ConfigParse::ParseHostNameString(host_pattern, allowed_hosts);
         }
     }
 };
@@ -131,23 +131,23 @@ printf("Hosts: %zu allowed\n", config.allowed_hosts.size());
 std::vector<std::string> hosts;
 
 // Simple range expansion
-hshm::ConfigParse::ParseHostNameString("node[01-05]", hosts);
+ctp::ConfigParse::ParseHostNameString("node[01-05]", hosts);
 // Result: node01, node02, node03, node04, node05
 
 // Multiple ranges with prefix and suffix
 hosts.clear();
-hshm::ConfigParse::ParseHostNameString("compute[001-003,010-012]-40g", hosts);
+ctp::ConfigParse::ParseHostNameString("compute[001-003,010-012]-40g", hosts);
 // Result: compute001-40g, compute002-40g, compute003-40g,
 //         compute010-40g, compute011-40g, compute012-40g
 
 // Semicolon separation for different patterns
 hosts.clear();
-hshm::ConfigParse::ParseHostNameString("gpu[01-02]-ib;cpu[01-03]-eth", hosts);
+ctp::ConfigParse::ParseHostNameString("gpu[01-02]-ib;cpu[01-03]-eth", hosts);
 // Result: gpu01-ib, gpu02-ib, cpu01-eth, cpu02-eth, cpu03-eth
 
 // Single values in ranges
 hosts.clear();
-hshm::ConfigParse::ParseHostNameString("special[1,5,9,10]", hosts);
+ctp::ConfigParse::ParseHostNameString("special[1,5,9,10]", hosts);
 // Result: special1, special5, special9, special10
 ```
 
@@ -166,17 +166,17 @@ public:
         // Parse different node types with complex patterns
         if (topology["compute"]) {
             std::string pattern = topology["compute"].as<std::string>();
-            hshm::ConfigParse::ParseHostNameString(pattern, compute_nodes_);
+            ctp::ConfigParse::ParseHostNameString(pattern, compute_nodes_);
         }
         
         if (topology["storage"]) {
             std::string pattern = topology["storage"].as<std::string>();
-            hshm::ConfigParse::ParseHostNameString(pattern, storage_nodes_);
+            ctp::ConfigParse::ParseHostNameString(pattern, storage_nodes_);
         }
         
         if (topology["management"]) {
             std::string pattern = topology["management"].as<std::string>();
-            hshm::ConfigParse::ParseHostNameString(pattern, management_nodes_);
+            ctp::ConfigParse::ParseHostNameString(pattern, management_nodes_);
         }
         
         DisplayTopology();
@@ -217,7 +217,7 @@ management: "mgmt[1-2];login[1-2];scheduler"
 ```cpp
 // Parse a hostfile with multiple formats
 std::vector<std::string> ParseHostfile(const std::string& hostfile_path) {
-    std::vector<std::string> all_hosts = hshm::ConfigParse::ParseHostfile(hostfile_path);
+    std::vector<std::string> all_hosts = ctp::ConfigParse::ParseHostfile(hostfile_path);
     
     // Process and validate hosts
     std::vector<std::string> valid_hosts;
@@ -271,14 +271,14 @@ storage[01-04]
 
 ```cpp
 // Parse various memory size formats
-size_t size1 = hshm::ConfigParse::ParseSize("1024");        // 1024 bytes
-size_t size2 = hshm::ConfigParse::ParseSize("4K");          // 4 KB = 4096 bytes
-size_t size3 = hshm::ConfigParse::ParseSize("4KB");         // 4 KB = 4096 bytes
-size_t size4 = hshm::ConfigParse::ParseSize("2.5M");        // 2.5 MB
-size_t size5 = hshm::ConfigParse::ParseSize("1.5GB");       // 1.5 GB
-size_t size6 = hshm::ConfigParse::ParseSize("2T");          // 2 TB
-size_t size7 = hshm::ConfigParse::ParseSize("0.5PB");       // 0.5 PB
-size_t size_inf = hshm::ConfigParse::ParseSize("inf");      // Maximum size_t value
+size_t size1 = ctp::ConfigParse::ParseSize("1024");        // 1024 bytes
+size_t size2 = ctp::ConfigParse::ParseSize("4K");          // 4 KB = 4096 bytes
+size_t size3 = ctp::ConfigParse::ParseSize("4KB");         // 4 KB = 4096 bytes
+size_t size4 = ctp::ConfigParse::ParseSize("2.5M");        // 2.5 MB
+size_t size5 = ctp::ConfigParse::ParseSize("1.5GB");       // 1.5 GB
+size_t size6 = ctp::ConfigParse::ParseSize("2T");          // 2 TB
+size_t size7 = ctp::ConfigParse::ParseSize("0.5PB");       // 0.5 PB
+size_t size_inf = ctp::ConfigParse::ParseSize("inf");      // Maximum size_t value
 
 printf("Parsed sizes:\n");
 printf("  4K = %zu bytes\n", size2);
@@ -291,9 +291,9 @@ printf("  inf = %zu (max value)\n", size_inf);
 
 ```cpp
 // Parse bandwidth specifications (bytes per second)
-size_t bw1 = hshm::ConfigParse::ParseBandwidth("100MB");    // 100 MB/s
-size_t bw2 = hshm::ConfigParse::ParseBandwidth("10GB");     // 10 GB/s
-size_t bw3 = hshm::ConfigParse::ParseBandwidth("1.5TB");    // 1.5 TB/s
+size_t bw1 = ctp::ConfigParse::ParseBandwidth("100MB");    // 100 MB/s
+size_t bw2 = ctp::ConfigParse::ParseBandwidth("10GB");     // 10 GB/s
+size_t bw3 = ctp::ConfigParse::ParseBandwidth("1.5TB");    // 1.5 TB/s
 
 // Note: ParseBandwidth currently treats input as bytes/second
 // Additional parsing for "Gbps", "MB/s" etc. would need custom implementation
@@ -303,10 +303,10 @@ size_t bw3 = hshm::ConfigParse::ParseBandwidth("1.5TB");    // 1.5 TB/s
 
 ```cpp
 // Parse latency values (returns nanoseconds)
-size_t lat1 = hshm::ConfigParse::ParseLatency("100n");      // 100 nanoseconds
-size_t lat2 = hshm::ConfigParse::ParseLatency("50u");       // 50 microseconds
-size_t lat3 = hshm::ConfigParse::ParseLatency("10m");       // 10 milliseconds  
-size_t lat4 = hshm::ConfigParse::ParseLatency("1s");        // 1 second
+size_t lat1 = ctp::ConfigParse::ParseLatency("100n");      // 100 nanoseconds
+size_t lat2 = ctp::ConfigParse::ParseLatency("50u");       // 50 microseconds
+size_t lat3 = ctp::ConfigParse::ParseLatency("10m");       // 10 milliseconds  
+size_t lat4 = ctp::ConfigParse::ParseLatency("1s");        // 1 second
 
 printf("Latencies in nanoseconds:\n");
 printf("  100n = %zu ns\n", lat1);
@@ -319,20 +319,20 @@ printf("  1s = %zu ns (%.3f s)\n", lat4, lat4 / 1000000000.0);
 
 ```cpp
 // Parse numbers with generic types
-int int_val = hshm::ConfigParse::ParseNumber<int>("42");
-double double_val = hshm::ConfigParse::ParseNumber<double>("3.14159");
-float float_val = hshm::ConfigParse::ParseNumber<float>("2.718");
-long long_val = hshm::ConfigParse::ParseNumber<long>("1234567890");
+int int_val = ctp::ConfigParse::ParseNumber<int>("42");
+double double_val = ctp::ConfigParse::ParseNumber<double>("3.14159");
+float float_val = ctp::ConfigParse::ParseNumber<float>("2.718");
+long long_val = ctp::ConfigParse::ParseNumber<long>("1234567890");
 
 // Special infinity value
-double inf_double = hshm::ConfigParse::ParseNumber<double>("inf");
-int inf_int = hshm::ConfigParse::ParseNumber<int>("inf");  // Returns INT_MAX
+double inf_double = ctp::ConfigParse::ParseNumber<double>("inf");
+int inf_int = ctp::ConfigParse::ParseNumber<int>("inf");  // Returns INT_MAX
 
 // Extract suffixes from number strings
-std::string suffix1 = hshm::ConfigParse::ParseNumberSuffix("100MB");   // "MB"
-std::string suffix2 = hshm::ConfigParse::ParseNumberSuffix("3.14");    // ""
-std::string suffix3 = hshm::ConfigParse::ParseNumberSuffix("50ms");    // "ms"
-std::string suffix4 = hshm::ConfigParse::ParseNumberSuffix("1.5GHz");  // "GHz"
+std::string suffix1 = ctp::ConfigParse::ParseNumberSuffix("100MB");   // "MB"
+std::string suffix2 = ctp::ConfigParse::ParseNumberSuffix("3.14");    // ""
+std::string suffix3 = ctp::ConfigParse::ParseNumberSuffix("50ms");    // "ms"
+std::string suffix4 = ctp::ConfigParse::ParseNumberSuffix("1.5GHz");  // "GHz"
 ```
 
 ## Path Expansion
@@ -342,7 +342,7 @@ std::string suffix4 = hshm::ConfigParse::ParseNumberSuffix("1.5GHz");  // "GHz"
 ```cpp
 // Expand environment variables in paths
 std::string ExpandConfigPath(const std::string& template_path) {
-    return hshm::ConfigParse::ExpandPath(template_path);
+    return ctp::ConfigParse::ExpandPath(template_path);
 }
 
 // Examples
@@ -356,8 +356,8 @@ std::string complex = ExpandConfigPath(
 );
 
 // Set up environment and expand
-hshm::SystemInfo::Setenv("APP_ROOT", "/opt/myapp", 1);
-hshm::SystemInfo::Setenv("APP_VERSION", "2.1.0", 1);
+ctp::SystemInfo::Setenv("APP_ROOT", "/opt/myapp", 1);
+ctp::SystemInfo::Setenv("APP_VERSION", "2.1.0", 1);
 std::string app_config = ExpandConfigPath("${APP_ROOT}/config-${APP_VERSION}.yaml");
 ```
 
@@ -366,7 +366,7 @@ std::string app_config = ExpandConfigPath("${APP_ROOT}/config-${APP_VERSION}.yam
 ### Distributed System Configuration
 
 ```cpp
-class DistributedSystemConfig : public hshm::BaseConfig {
+class DistributedSystemConfig : public ctp::BaseConfig {
 public:
     // Cluster configuration
     struct ClusterConfig {
@@ -403,13 +403,13 @@ public:
         cluster.replication_factor = 3;
         
         // Storage defaults
-        storage.cache_size = hshm::Unit<size_t>::Gigabytes(1);
-        storage.block_size = hshm::Unit<size_t>::Megabytes(1);
+        storage.cache_size = ctp::Unit<size_t>::Gigabytes(1);
+        storage.block_size = ctp::Unit<size_t>::Megabytes(1);
         storage.data_directory = "/var/lib/myapp";
         storage.storage_nodes.clear();
         
         // Network defaults
-        network.bandwidth_limit = hshm::Unit<size_t>::Gigabytes(10);
+        network.bandwidth_limit = ctp::Unit<size_t>::Gigabytes(10);
         network.latency_ns = 1000000;  // 1ms
         network.port_range_start = 9000;
         network.port_range_end = 9100;
@@ -432,7 +432,7 @@ private:
             cluster.nodes.clear();
             for (auto n : node["nodes"]) {
                 std::string pattern = n.as<std::string>();
-                hshm::ConfigParse::ParseHostNameString(pattern, cluster.nodes);
+                ctp::ConfigParse::ParseHostNameString(pattern, cluster.nodes);
             }
         }
         
@@ -449,17 +449,17 @@ private:
         if (!node) return;
         
         if (node["cache_size"]) {
-            storage.cache_size = hshm::ConfigParse::ParseSize(
+            storage.cache_size = ctp::ConfigParse::ParseSize(
                 node["cache_size"].as<std::string>());
         }
         
         if (node["block_size"]) {
-            storage.block_size = hshm::ConfigParse::ParseSize(
+            storage.block_size = ctp::ConfigParse::ParseSize(
                 node["block_size"].as<std::string>());
         }
         
         if (node["data_directory"]) {
-            storage.data_directory = hshm::ConfigParse::ExpandPath(
+            storage.data_directory = ctp::ConfigParse::ExpandPath(
                 node["data_directory"].as<std::string>());
         }
         
@@ -467,7 +467,7 @@ private:
             storage.storage_nodes.clear();
             for (auto n : node["storage_nodes"]) {
                 std::string pattern = n.as<std::string>();
-                hshm::ConfigParse::ParseHostNameString(pattern, storage.storage_nodes);
+                ctp::ConfigParse::ParseHostNameString(pattern, storage.storage_nodes);
             }
         }
     }
@@ -476,12 +476,12 @@ private:
         if (!node) return;
         
         if (node["bandwidth_limit"]) {
-            network.bandwidth_limit = hshm::ConfigParse::ParseBandwidth(
+            network.bandwidth_limit = ctp::ConfigParse::ParseBandwidth(
                 node["bandwidth_limit"].as<std::string>());
         }
         
         if (node["latency"]) {
-            network.latency_ns = hshm::ConfigParse::ParseLatency(
+            network.latency_ns = ctp::ConfigParse::ParseLatency(
                 node["latency"].as<std::string>());
         }
         
@@ -504,7 +504,7 @@ private:
             std::string value = it->second.as<std::string>();
             
             // Expand environment variables in values
-            value = hshm::ConfigParse::ExpandPath(value);
+            value = ctp::ConfigParse::ExpandPath(value);
             advanced_options[key] = value;
         }
     }
@@ -584,7 +584,7 @@ advanced:
 
 ```cpp
 // Using BaseConfig's vector parsing helpers
-class VectorConfig : public hshm::BaseConfig {
+class VectorConfig : public ctp::BaseConfig {
 public:
     std::vector<int> integers;
     std::vector<double> doubles;
