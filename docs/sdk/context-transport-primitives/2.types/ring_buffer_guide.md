@@ -12,16 +12,29 @@ A lock-free circular queue for concurrent producer-consumer patterns. Configurab
 
 ## Configuration Flags
 
+The header defines `ctp::ipc::RingQueueFlag`. Combine these enumerators to
+configure a `ring_buffer`'s thread-safety model and full-buffer behavior:
+
 ```cpp
-namespace ctp::ipc {
-enum RingQueueFlag {
-  RING_BUFFER_SPSC_FLAGS       = 0x01,  // Single Producer Single Consumer
-  RING_BUFFER_MPSC_FLAGS       = 0x02,  // Multiple Producer Single Consumer
-  RING_BUFFER_WAIT_FOR_SPACE   = 0x04,  // Block until space available
-  RING_BUFFER_ERROR_ON_NO_SPACE = 0x08, // Return error if full
-  RING_BUFFER_DYNAMIC_SIZE     = 0x10,  // Resize when full
-  RING_BUFFER_FIXED_SIZE       = 0x20,  // Fixed-size buffer
-};
+#include <clio_ctp/data_structures/ipc/ring_buffer.h>
+
+void example() {
+  using namespace ctp::ipc;
+
+  uint32_t spsc     = RING_BUFFER_SPSC_FLAGS;        // Single producer, single consumer
+  uint32_t mpsc     = RING_BUFFER_MPSC_FLAGS;        // Multiple producers, single consumer
+  uint32_t wait     = RING_BUFFER_WAIT_FOR_SPACE;    // Block until space is available
+  uint32_t err      = RING_BUFFER_ERROR_ON_NO_SPACE; // Push() returns false if full
+  uint32_t dynamic  = RING_BUFFER_DYNAMIC_SIZE;      // Resize when full
+  uint32_t fixed    = RING_BUFFER_FIXED_SIZE;        // Fixed-size buffer
+  uint32_t lock_pop = RING_BUFFER_LOCK_POP;          // Serialize Pop() for MPMC use
+
+  // Flags are OR-ed together as the ring_buffer FLAGS template argument, e.g.
+  uint32_t spsc_fixed = RING_BUFFER_SPSC_FLAGS | RING_BUFFER_FIXED_SIZE |
+                        RING_BUFFER_ERROR_ON_NO_SPACE;
+
+  (void)spsc; (void)mpsc; (void)wait; (void)err;
+  (void)dynamic; (void)fixed; (void)lock_pop; (void)spsc_fixed;
 }
 ```
 
@@ -38,38 +51,59 @@ enum RingQueueFlag {
 
 ```cpp
 #include <clio_ctp/data_structures/ipc/ring_buffer.h>
+#include <clio_ctp/memory/backend/malloc_backend.h>
+#include <clio_ctp/memory/allocator/arena_allocator.h>
 
-// Create a fixed-size SPSC ring buffer with depth 1024
-ctp::ipc::spsc_ring_buffer<int> rb(alloc, 1024);
+void example() {
+  using namespace ctp::ipc;
 
-// Producer
-rb.Push(42);
-rb.Emplace(100);
+  // Set up a memory backend and allocator, exactly as the unit tests do.
+  MallocBackend backend;
+  backend.shm_init(MemoryBackendId(0, 0), 1024 * 1024);
+  auto *alloc = backend.MakeAlloc<ArenaAllocator<false>>();
 
-// Consumer
-int val;
-if (rb.Pop(val)) {
-  // Got value
+  // Create a fixed-size SPSC ring buffer with depth 1024
+  spsc_ring_buffer<int, ArenaAllocator<false>> rb(alloc, 1024);
+
+  // Producer
+  rb.Push(42);
+  rb.Emplace(100);
+
+  // Consumer
+  int val;
+  if (rb.Pop(val)) {
+    // Got value
+  }
+
+  // Query state
+  size_t count = rb.Size();
+  bool empty = rb.Empty();
+  bool full = rb.Full();
+  (void)count; (void)empty; (void)full;
 }
-
-// Query state
-size_t count = rb.Size();
-bool empty = rb.Empty();
-bool full = rb.Full();
 ```
 
 ## RingBufferEntry
 
 Each entry has an atomic ready flag for lock-free synchronization:
 
+The header provides `ctp::ipc::RingBufferEntry<T>`. Its public interface:
+
 ```cpp
-template<typename T>
-struct RingBufferEntry {
-  bool IsReady();     // Check if entry has data
-  void SetReady();    // Mark entry as containing data
-  void ClearReady();  // Mark entry as consumed
-  T& GetData();       // Access the entry data
-};
+#include <clio_ctp/data_structures/ipc/ring_buffer.h>
+
+void example() {
+  ctp::ipc::RingBufferEntry<int> entry;
+
+  entry.GetData() = 42;     // Access / modify the stored data (T& GetData())
+  entry.SetReady();         // Mark entry as containing data (release semantics)
+
+  if (entry.IsReady()) {    // Check if entry has data (acquire semantics)
+    int value = entry.GetData();
+    (void)value;
+    entry.ClearReady();     // Mark entry as consumed
+  }
+}
 ```
 
 ## Internal Design

@@ -8,91 +8,121 @@ sidebar_position: 4
 
 **Source:** `clio_ctp/data_structures/priv/unordered_map_ll.h`
 
-A hash map implementation using a vector of lists design that provides efficient concurrent access when combined with external locking. Each bucket contains a `std::list` of key-value pairs; the hash space is partitioned across a fixed number of buckets set at construction time.
+A chaining (linked-list) hash map. The hash space is partitioned across a
+bucket array; each bucket is a singly-linked chain of nodes. When locking is
+enabled (the default) every bucket owns its own `ctp::RwLock`, so single-key
+operations are self-synchronizing and the table can grow safely while other
+threads read and write it.
 
 **Key Characteristics:**
-- **Vector of Lists Design**: Uses a vector of buckets, each containing a list of key-value pairs
-- **External Locking Required**: No internal mutexes — users must provide synchronization
-- **Bucket Partitioning**: Hash space is partitioned across multiple buckets for better cache locality
-- **Standard API**: Compatible with `std::unordered_map` interface
-- **NOT Shared-Memory Compatible**: For runtime-only data structures, not task parameters
+- **Chaining Design**: A vector of buckets, each a singly-linked list of key/value nodes.
+- **Self-Locking (no external mutex needed)**: Single-key operations (`insert`, `insert_or_assign`, `operator[]`, `find`, `contains`, `count`, `erase`) are thread-safe via per-bucket `RwLock`s plus a map-wide growth lock. Pass `EnableLocking = false` as the last template argument for an unsynchronized single-threaded variant.
+- **Automatic Growth**: The table rehashes once `size` reaches `ext_percent * bucket_count`, multiplying the bucket count by `ext_mult`.
+- **Pointer-Based API**: Lookups return raw pointers (`nullptr` when absent), not iterators. There is no `.at()`.
+- **NOT Shared-Memory Compatible**: For runtime-only data structures, not task parameters.
 
 ## Basic Usage
 
 ```cpp
+#include <cstddef>
+#include <cstdint>
 #include <clio_ctp/data_structures/priv/unordered_map_ll.h>
 
-// Create map with 32 buckets
-ctp::priv::unordered_map_ll<int, std::string> map(32);
+void example() {
+  // Create a map with 32 buckets (host-side global allocator).
+  ctp::priv::unordered_map_ll<uint64_t, uint64_t> map(32);
 
-// Insert
-auto [inserted, ptr] = map.insert(1, "hello");
-map.insert_or_assign(2, "world");
-map[3] = "foo";
+  // Insert. insert()/insert_or_assign() return InsertResult{bool inserted; T* value;}
+  auto [inserted, value_ptr] = map.insert(1, 100);  // insert if absent
+  map.insert_or_assign(2, 200);                      // insert or overwrite
+  map[3] = 300;                                      // operator[] creates if missing
 
-// Lookup
-std::string* val = map.find(1);      // Returns nullptr if not found
-const std::string& ref = map.at(2);  // Throws if not found
-bool exists = map.contains(3);
+  // Lookup
+  uint64_t* val = map.find(1);   // returns nullptr if not found
+  bool exists = map.contains(3);
+  size_t n = map.count(2);       // 0 or 1
 
-// Remove
-map.erase(1);
-map.clear();
+  // Remove
+  map.erase(1);
+  map.clear();
 
-// Iterate
-map.for_each([](const int& key, std::string& value) {
-  // Process each element
-});
+  // Iterate
+  map.for_each([](const uint64_t& key, uint64_t& value) {
+    // Process each element
+  });
+}
 ```
 
 ## Constructor
 
 ```cpp
-ctp::priv::unordered_map_ll<Key, T> map(max_concurrency);
+#include <cstdint>
+#include <clio_ctp/data_structures/priv/unordered_map_ll.h>
+
+void example() {
+  // num_buckets, ext_percent (grow threshold), ext_mult (growth factor)
+  ctp::priv::unordered_map_ll<uint64_t, uint64_t> map(16, 0.6, 2);
+}
 ```
 
 **Parameters:**
-- `max_concurrency`: Number of buckets (default: 16). Higher values give better distribution at the cost of more memory. Typical values: 16-64.
+- `num_buckets`: Initial number of buckets (default: 16). The table grows automatically, so this is a performance hint — size it near the expected key count to avoid rehash churn.
+- `ext_percent`: Load factor that triggers growth (default: 0.6). The table rehashes once `size >= ext_percent * bucket_count`.
+- `ext_mult`: Bucket-count multiplier applied on each rehash (default: 2; clamped to a minimum of 2).
+
+The host-side constructor shown here uses the global `MallocAllocator`. An
+allocator-taking overload also exists:
+`unordered_map_ll<Key, T> map(alloc, num_buckets, ext_percent, ext_mult)`.
 
 ## API Reference
 
 ```cpp
-// Insertion operations
-auto [inserted, value_ptr] = map.insert(key, value);          // Insert if not exists
-auto [inserted, value_ptr] = map.insert_or_assign(key, value); // Insert or update
-T& ref = map[key];                                            // Insert default if missing
+#include <cstddef>
+#include <cstdint>
+#include <clio_ctp/data_structures/priv/unordered_map_ll.h>
 
-// Lookup operations
-T* ptr = map.find(key);                    // Returns nullptr if not found
-const T* ptr = map.find(key) const;        // Const version
-T& ref = map.at(key);                      // Throws if not found
-bool exists = map.contains(key);           // Check existence
-size_t count = map.count(key);             // Returns 0 or 1
+void example() {
+  ctp::priv::unordered_map_ll<uint64_t, uint64_t> map(16);
 
-// Removal operations
-size_t erased = map.erase(key);            // Returns number of elements erased
-map.clear();                               // Remove all elements
+  // Insertion -- returns InsertResult{bool inserted; uint64_t* value;}
+  auto r1 = map.insert(1, 100);            // insert if absent
+  auto r2 = map.insert_or_assign(1, 101);  // insert or overwrite
+  uint64_t& ref = map[2];                  // insert default if missing
 
-// Size operations
-size_t s = map.size();                     // Total element count
-bool e = map.empty();                      // Check if empty
-size_t b = map.bucket_count();             // Number of buckets
+  // Lookup
+  uint64_t* ptr = map.find(1);             // nullptr if not found
+  bool exists = map.contains(1);           // existence check
+  size_t cnt = map.count(1);               // 0 or 1
 
-// Iteration
-map.for_each([](const Key& key, T& value) { /* ... */ });
+  // Removal
+  size_t erased = map.erase(1);            // number erased (0 or 1)
+  map.clear();                             // remove all entries
+
+  // Size / capacity
+  size_t s = map.size();                   // element count
+  bool e = map.empty();                    // empty check
+  size_t b = map.bucket_count();           // current bucket count
+
+  // Iteration
+  map.for_each([](const uint64_t& key, uint64_t& value) { /* ... */ });
+}
 ```
 
-Insert operations return `std::pair<bool, T*>` where `first` is `true` if insertion occurred and `second` is a pointer to the value.
+`insert` and `insert_or_assign` return `ctp::priv::InsertResult<T>`, an
+aggregate `{ bool inserted; T* value; }`: `inserted` is `true` when a new entry
+was created, and `value` points to the stored value. A `const` map exposes a
+`const T* find(key) const` overload that returns a `const T*`.
 
 ## Key Differences from std::unordered_map
 
 | Feature | std::unordered_map | ctp::priv::unordered_map_ll |
 |---------|-------------------|----------------------|
-| Internal Structure | Implementation-defined | Vector of lists (explicit) |
-| Bucket Count | Dynamic rehashing | Fixed at construction |
-| Iterator Stability | Unstable across insertions | Stable (list-based) |
+| Internal Structure | Implementation-defined | Bucket array of singly-linked chains (explicit) |
+| Growth | Dynamic rehashing | Automatic rehash at `ext_percent * bucket_count` |
+| Lookup Result | Iterators | Raw pointers (`nullptr` when absent) |
+| Missing-Key Access | `.at()` throws | No `.at()`; use `find()` (nullptr) or `operator[]` (inserts default) |
+| Pointer Stability | Invalidated on rehash | Value pointers stay valid across rehash (nodes are re-threaded, not reallocated) |
 | Shared Memory | Not compatible | Not compatible |
-| Return Values | Iterators | Pointers to values |
 
 ## When to Use
 

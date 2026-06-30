@@ -9,30 +9,32 @@ The Atomic Types API in Hermes Shared Memory (HSHM) provides cross-platform atom
 ### Platform-Specific Atomic Types
 
 ```cpp
+#include <cstdio>
+
 #include "clio_ctp/types/atomic.h"
 
 void atomic_variants_example() {
     // Standard atomic (uses std::atomic on host, GPU atomics on device)
     ctp::ipc::atomic<int> standard_atomic(42);
-    
+
     // Non-atomic (for single-threaded or externally synchronized code)
     ctp::ipc::nonatomic<int> non_atomic_value(100);
-    
-    // Explicit GPU atomic (CUDA/ROCm specific)
-#if CTP_ENABLE_CUDA || CTP_ENABLE_ROCM
-    ctp::ipc::rocm_atomic<int> gpu_atomic(200);
-#endif
-    
-    // Explicit standard library atomic
+
+    // Explicit standard-library atomic (host-only wrapper around std::atomic)
     ctp::ipc::std_atomic<int> std_lib_atomic(300);
-    
-    // Conditional atomic - chooses atomic or non-atomic based on template parameter
+
+    // Conditional atomic - chooses atomic or non-atomic by template parameter.
+    // ctp::ipc::rocm_atomic<T> also exists, but only on GPU compiler passes
+    // (CTP_IS_GPU_COMPILER); it is not declared in a host build, so it is not
+    // shown here.
     ctp::ipc::opt_atomic<int, true>  conditional_atomic(400);     // Uses atomic
-    ctp::ipc::opt_atomic<int, false> conditional_nonatomic(500); // Uses nonatomic
-    
+    ctp::ipc::opt_atomic<int, false> conditional_nonatomic(500);  // Uses nonatomic
+
     printf("Standard atomic: %d\n", standard_atomic.load());
     printf("Non-atomic: %d\n", non_atomic_value.load());
+    printf("Std-lib atomic: %d\n", std_lib_atomic.load());
     printf("Conditional atomic: %d\n", conditional_atomic.load());
+    printf("Conditional non-atomic: %d\n", conditional_nonatomic.load());
 }
 ```
 
@@ -41,30 +43,35 @@ void atomic_variants_example() {
 ### Load, Store, and Exchange
 
 ```cpp
+#include <cstdio>
+
+#include "clio_ctp/types/atomic.h"
+
 void basic_atomic_operations() {
     ctp::ipc::atomic<int> counter(0);
-    
+
     // Load value
     int current = counter.load();
     printf("Current value: %d\n", current);
-    
+
     // Store new value
     counter.store(10);
     printf("After store(10): %d\n", counter.load());
-    
-    // Exchange (atomically set new value and return old)
-    int old_value = counter.exchange(20);
-    printf("Exchange returned: %d, new value: %d\n", old_value, counter.load());
-    
+
+    // Exchange (atomically sets a new value). Note: exchange() returns void
+    // for ctp::ipc::atomic, so capture the prior value with load() if needed.
+    counter.exchange(20);
+    printf("After exchange(20): %d\n", counter.load());
+
     // Compare and exchange (conditional atomic update)
     int expected = 20;
     bool success = counter.compare_exchange_weak(expected, 30);
     printf("CAS success: %s, value: %d\n", success ? "yes" : "no", counter.load());
-    
+
     // Try CAS with wrong expected value
     expected = 25;  // Wrong expected value
     success = counter.compare_exchange_strong(expected, 40);
-    printf("CAS with wrong expected: %s, value: %d, expected now: %d\n", 
+    printf("CAS with wrong expected: %s, value: %d, expected now: %d\n",
            success ? "yes" : "no", counter.load(), expected);
 }
 ```
@@ -72,10 +79,14 @@ void basic_atomic_operations() {
 ### Arithmetic Operations
 
 ```cpp
+#include <cstdio>
+
+#include "clio_ctp/types/atomic.h"
+
 void arithmetic_operations_example() {
     ctp::ipc::atomic<int> counter(10);
-    
-    // Fetch and add
+
+    // Fetch and add (returns the value prior to the addition)
     int old_val = counter.fetch_add(5);
     printf("fetch_add(5): old=%d, new=%d\n", old_val, counter.load());
     
@@ -83,20 +94,13 @@ void arithmetic_operations_example() {
     old_val = counter.fetch_sub(3);
     printf("fetch_sub(3): old=%d, new=%d\n", old_val, counter.load());
     
-    // Increment operators
-    ++counter;  // Pre-increment
+    // Increment / decrement (pre-form)
+    ++counter;
     printf("After pre-increment: %d\n", counter.load());
-    
-    counter++;  // Post-increment
-    printf("After post-increment: %d\n", counter.load());
-    
-    // Decrement operators
-    --counter;  // Pre-decrement
+
+    --counter;
     printf("After pre-decrement: %d\n", counter.load());
-    
-    counter--;  // Post-decrement
-    printf("After post-decrement: %d\n", counter.load());
-    
+
     // Assignment operators
     counter += 10;
     printf("After += 10: %d\n", counter.load());
@@ -109,6 +113,11 @@ void arithmetic_operations_example() {
 ### Bitwise Operations
 
 ```cpp
+#include <cstdint>
+#include <cstdio>
+
+#include "clio_ctp/types/atomic.h"
+
 void bitwise_operations_example() {
     ctp::ipc::atomic<uint32_t> flags(0xF0F0F0F0);
     
@@ -141,6 +150,12 @@ void bitwise_operations_example() {
 ## Conditional Atomic Types
 
 ```cpp
+#include <cstdio>
+#include <thread>
+#include <vector>
+
+#include "clio_ctp/types/atomic.h"
+
 template<bool THREAD_SAFE>
 class ConfigurableCounter {
     ctp::ipc::opt_atomic<int, THREAD_SAFE> count_;
@@ -202,10 +217,17 @@ void conditional_atomic_example() {
 ## Serialization Support
 
 ```cpp
+#include <cstdio>
 #include <sstream>
+
 #include <cereal/archives/binary.hpp>
 
+#include "clio_ctp/types/atomic.h"
+
 void atomic_serialization_example() {
+    // atomic<int> (std_atomic) serializes via split save()/load();
+    // nonatomic<double> serializes via serialize(). Cereal selects the
+    // right path automatically for each type.
     ctp::ipc::atomic<int> counter(12345);
     ctp::ipc::nonatomic<double> value(3.14159);
     
