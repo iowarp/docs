@@ -63,7 +63,9 @@ These classes can be used directly without the factory:
 ### ctp::Compressor (Base Interface)
 
 ```cpp
-namespace hshm {
+#include <cstddef>  // size_t
+
+namespace ctp {
 
 class Compressor {
  public:
@@ -92,23 +94,36 @@ class Compressor {
                             void* input, size_t input_size) = 0;
 };
 
-}  // namespace hshm
+}  // namespace ctp
 ```
 
 ### ctp::CompressionPreset
 
 ```cpp
+namespace ctp {
+
 enum class CompressionPreset {
     FAST,       // Fast compression, lower ratio
     BALANCED,   // Balanced speed and ratio (default)
     BEST,       // Best ratio, slower
-    DEFAULT     // Same as BALANCED
+    DEFAULT     // Default configuration (treated as BALANCED)
 };
+
+}  // namespace ctp
 ```
 
 ### ctp::CompressionFactory
 
 ```cpp
+#include <memory>
+#include <string>
+#include <utility>
+
+namespace ctp {
+
+class Compressor;  // declared in compress.h (see interface above)
+enum class CompressionPreset { FAST, BALANCED, BEST, DEFAULT };
+
 class CompressionFactory {
  public:
     /**
@@ -117,7 +132,8 @@ class CompressionFactory {
      *                      "lz4", "zlib", "lzma", "brotli", "snappy", "blosc2",
      *                      "zfp", "sz3", "fpzip"
      * @param preset        Compression preset (default: BALANCED)
-     * @return Unique pointer to compressor, or nullptr if library not found
+     * @return Unique pointer to compressor, or nullptr if the library is
+     *         unknown or its backend is disabled at build time
      */
     static std::unique_ptr<Compressor> GetPreset(
         const std::string& library_name,
@@ -130,7 +146,7 @@ class CompressionFactory {
      * ID format: base_id * 10 + preset_id
      *   Lossless base IDs: bzip2=1, zstd=2, lz4=3, zlib=4, lzma=5, brotli=6, snappy=7, blosc2=8
      *   Lossy base IDs: zfp=10, sz3=11, fpzip=12
-     *   Preset IDs: FAST=1, BALANCED=2, BEST=3
+     *   Preset IDs: FAST=1, BALANCED=2, BEST=3 (single-mode codecs always use 2)
      *
      * @return Integer ID, or 0 if unknown library
      */
@@ -148,6 +164,8 @@ class CompressionFactory {
      */
     static std::string GetPresetName(CompressionPreset preset);
 };
+
+}  // namespace ctp
 ```
 
 ## Examples
@@ -156,21 +174,27 @@ class CompressionFactory {
 
 ```cpp
 #include <clio_ctp/compress/zstd.h>
+#include <cassert>
+#include <string>
+#include <vector>
 
-void direct_compress_example() {
+// The concrete codecs are only defined when the build enables compression
+// (CTP_ENABLE_COMPRESS); guard usage so it compiles in both configurations.
+#if CTP_ENABLE_COMPRESS
+void example() {
     ctp::Zstd zstd;
 
     std::string raw = "Hello, World!";
     std::vector<char> compressed(1024);
     std::vector<char> decompressed(1024);
 
-    // Compress
+    // Compress: compressed_size is capacity on input, byte count on output.
     size_t compressed_size = compressed.size();
     bool ok = zstd.Compress(compressed.data(), compressed_size,
                             raw.data(), raw.size());
     assert(ok);
 
-    // Decompress
+    // Decompress: decompressed_size is capacity on input, byte count on output.
     size_t decompressed_size = decompressed.size();
     ok = zstd.Decompress(decompressed.data(), decompressed_size,
                          compressed.data(), compressed_size);
@@ -179,15 +203,20 @@ void direct_compress_example() {
     std::string result(decompressed.data(), decompressed_size);
     assert(result == raw);
 }
+#endif  // CTP_ENABLE_COMPRESS
 ```
 
 ### Factory with Presets
 
 ```cpp
 #include <clio_ctp/compress/compress_factory.h>
+#include <cassert>
+#include <string>
+#include <vector>
 
-void factory_compress_example() {
-    // Create a fast zstd compressor
+#if CTP_ENABLE_COMPRESS
+void example() {
+    // Create a fast zstd compressor.
     auto compressor = ctp::CompressionFactory::GetPreset(
         "zstd", ctp::CompressionPreset::FAST);
     assert(compressor != nullptr);
@@ -206,34 +235,46 @@ void factory_compress_example() {
 
     assert(std::string(decompressed.data(), decompressed_size) == raw);
 }
+#endif  // CTP_ENABLE_COMPRESS
 ```
 
 ### Library ID Encoding
 
 ```cpp
 #include <clio_ctp/compress/compress_factory.h>
+#include <cassert>
+#include <string>
+#include <utility>
 
-void library_id_example() {
-    // Encode: zstd + FAST -> integer ID
-    int id = ctp::CompressionFactory::GetLibraryId("zstd",
-                 ctp::CompressionPreset::FAST);
-    // id == 21 (base_id=2 * 10 + preset=1)
+#if CTP_ENABLE_COMPRESS
+void example() {
+    // Encode: zstd + FAST -> integer ID.
+    int id = ctp::CompressionFactory::GetLibraryId(
+        "zstd", ctp::CompressionPreset::FAST);
+    assert(id == 21);  // base_id 2 * 10 + preset 1
 
-    // Decode: integer ID -> (name, preset)
+    // Decode: integer ID -> (name, preset).
     auto [name, preset] = ctp::CompressionFactory::GetLibraryInfo(id);
     assert(name == "zstd");
     assert(preset == ctp::CompressionPreset::FAST);
 
-    // Get preset name
+    // Get preset name.
     std::string preset_name = ctp::CompressionFactory::GetPresetName(preset);
     assert(preset_name == "fast");
 }
+#endif  // CTP_ENABLE_COMPRESS
 ```
 
 ### Iterating All Libraries
 
 ```cpp
-void try_all_compressors() {
+#include <clio_ctp/compress/compress_factory.h>
+#include <cassert>
+#include <string>
+#include <vector>
+
+#if CTP_ENABLE_COMPRESS
+void example() {
     std::vector<std::string> libraries = {
         "bzip2", "zstd", "lz4", "zlib", "lzma", "brotli", "snappy", "blosc2"
     };
@@ -245,7 +286,7 @@ void try_all_compressors() {
     for (const auto& lib : libraries) {
         auto compressor = ctp::CompressionFactory::GetPreset(
             lib, ctp::CompressionPreset::BALANCED);
-        if (!compressor) continue;
+        if (!compressor) continue;  // skipped if the backend is disabled
 
         size_t csz = compressed.size();
         size_t dsz = decompressed.size();
@@ -261,6 +302,7 @@ void try_all_compressors() {
         assert(std::string(decompressed.data(), dsz) == raw);
     }
 }
+#endif  // CTP_ENABLE_COMPRESS
 ```
 
 ## Buffer Sizing

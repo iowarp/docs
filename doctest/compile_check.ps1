@@ -31,6 +31,7 @@ $def = @(
   'CTP_DEFAULT_ALLOC_T=ctp::ipc::ThreadLocalAllocator',
   'CTP_ENABLE_DLL_EXPORT=1', 'CTP_LOG_LEVEL=1',
   'CTP_ENABLE_OPENMP=0', 'CTP_ENABLE_PTHREADS=0', 'CTP_ENABLE_WINDOWS_THREADS=1',
+  'CTP_ENABLE_ZMQ=1',
   'CTP_DEFAULT_THREAD_MODEL=ctp::thread::StdThread',
   'CTP_DEFAULT_THREAD_MODEL_GPU=ctp::thread::StdThread'
 ) | ForEach-Object { '/D' + $_ }

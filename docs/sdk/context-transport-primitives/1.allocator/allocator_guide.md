@@ -20,10 +20,23 @@ HSHM uses offset-based pointers for process-independent shared memory addressing
 | `FullPtr<T>` | Combines a raw pointer (`ptr_`) with a `ShmPtr` (`shm_`). Fast local access with cross-process capability. |
 
 ```cpp
-// FullPtr usage
-hipc::FullPtr<char> ptr(alloc, size);
-char* raw = ptr.ptr_;           // Direct access (fast)
-hipc::ShmPtr<> shm = ptr.shm_; // Shared memory handle (cross-process)
+#include "clio_ctp/memory/allocator/buddy_allocator.h"
+#include "clio_ctp/memory/backend/malloc_backend.h"
+
+void example() {
+  ctp::ipc::MallocBackend backend;
+  backend.shm_init(ctp::ipc::MemoryBackendId(0, 0),
+                   sizeof(ctp::ipc::BuddyAllocator) + 16 * 1024 * 1024);
+  auto *alloc = backend.MakeAlloc<ctp::ipc::BuddyAllocator>();
+
+  // FullPtr combines a raw pointer with a shared-memory handle
+  ctp::ipc::FullPtr<char> ptr = alloc->Allocate<char>(1024);
+  char *raw = ptr.ptr_;                   // Direct access (fast)
+  ctp::ipc::ShmPtr<char> shm = ptr.shm_;  // Shared memory handle (cross-process)
+  (void)raw;
+  (void)shm;
+  alloc->Free(ptr);
+}
 ```
 
 ## Common Allocator API
@@ -31,22 +44,35 @@ hipc::ShmPtr<> shm = ptr.shm_; // Shared memory handle (cross-process)
 All allocators expose these methods through `BaseAllocator`:
 
 ```cpp
-// Raw offset allocation
-OffsetPtr AllocateOffset(size_t size);
-void FreeOffsetNoNullCheck(OffsetPtr ptr);
+#include "clio_ctp/memory/allocator/buddy_allocator.h"
+#include "clio_ctp/memory/backend/malloc_backend.h"
 
-// Type-safe allocation
-FullPtr<T> Allocate<T>(size_t size);
-void Free<T>(FullPtr<T> ptr);
+void example() {
+  ctp::ipc::MallocBackend backend;
+  backend.shm_init(ctp::ipc::MemoryBackendId(0, 0),
+                   sizeof(ctp::ipc::BuddyAllocator) + 16 * 1024 * 1024);
+  auto *alloc = backend.MakeAlloc<ctp::ipc::BuddyAllocator>();
 
-// Object allocation with construction
-FullPtr<T> NewObj<T>(Args&&... args);
-void DelObj<T>(FullPtr<T> ptr);
+  // Raw offset allocation
+  ctp::ipc::OffsetPtr<> off = alloc->AllocateOffset(128);
+  alloc->FreeOffsetNoNullCheck(off);
 
-// Array allocation
-FullPtr<T> AllocateObjs<T>(size_t count);
-FullPtr<T> NewObjs<T>(size_t count, Args&&... args);
-void DelObjs<T>(FullPtr<T> ptr, size_t count);
+  // Type-safe allocation
+  ctp::ipc::FullPtr<int> buf = alloc->Allocate<int>(64 * sizeof(int));
+  alloc->Free(buf);
+
+  // Array allocation (no construction)
+  ctp::ipc::FullPtr<int> arr = alloc->AllocateObjs<int>(100);
+  alloc->Free(arr);
+
+  // Object allocation with construction
+  ctp::ipc::FullPtr<int> obj = alloc->NewObj<int>(42);
+  alloc->DelObj(obj);
+
+  // Array allocation with construction
+  ctp::ipc::FullPtr<int> objs = alloc->NewObjs<int>(100, 7);
+  alloc->DelObjs(objs, 100);
+}
 ```
 
 ## Allocator Types
@@ -56,12 +82,16 @@ void DelObjs<T>(FullPtr<T> ptr, size_t count);
 Wraps standard `malloc`/`free`. Used for private (non-shared) memory when no shared memory backend is needed.
 
 ```cpp
-// Access the global singleton
-auto* alloc = CTP_MALLOC;
+#include "clio_ctp/memory/allocator/malloc_allocator.h"
 
-// Allocate and free
-auto ptr = alloc->AllocateObjs<int>(100);
-alloc->DelObjs<int>(ptr, 100);
+void example() {
+  // Access the global singleton
+  auto *alloc = CTP_MALLOC;
+
+  // Allocate and free
+  ctp::ipc::FullPtr<int> ptr = alloc->AllocateObjs<int>(100);
+  alloc->Free(ptr);
+}
 ```
 
 **Characteristics:**
@@ -75,24 +105,27 @@ alloc->DelObjs<int>(ptr, 100);
 Bump-pointer allocator. Allocations advance a pointer through a contiguous region. Individual frees are not supported — the entire arena is freed at once via `Reset()`.
 
 ```cpp
-#include "clio_ctp/memory/backend/malloc_backend.h"
 #include "clio_ctp/memory/allocator/arena_allocator.h"
+#include "clio_ctp/memory/backend/malloc_backend.h"
 
-// Create backend and allocator
-hipc::MallocBackend backend;
-backend.shm_init(hipc::MemoryBackendId(0, 0),
-                 sizeof(hipc::ArenaAllocator<false>) + 128 * 1024 * 1024);
-auto *alloc = backend.MakeAlloc<hipc::ArenaAllocator<false>>();
+void example() {
+  // Create backend and allocator
+  ctp::ipc::MallocBackend backend;
+  backend.shm_init(ctp::ipc::MemoryBackendId(0, 0),
+                   sizeof(ctp::ipc::ArenaAllocator<false>) + 128 * 1024 * 1024);
+  auto *alloc = backend.MakeAlloc<ctp::ipc::ArenaAllocator<false>>();
 
-// Allocate (fast bump-pointer)
-auto ptr = alloc->Allocate<char>(1024);
+  // Allocate (fast bump-pointer)
+  ctp::ipc::FullPtr<char> ptr = alloc->Allocate<char>(1024);
+  (void)ptr;
 
-// Cannot free individual allocations — Free() is a no-op
-// Reset the entire arena to reclaim all memory
-alloc->Reset();
+  // Individual frees are not supported — Reset reclaims the entire arena
+  alloc->Reset();
 
-// Query state
-size_t remaining = alloc->GetRemainingSize();
+  // Query state
+  size_t remaining = alloc->GetRemainingSize();
+  (void)remaining;
+}
 ```
 
 **Characteristics:**
@@ -109,20 +142,23 @@ size_t remaining = alloc->GetRemainingSize();
 Power-of-two free list allocator. Maintains separate free lists for different size classes, providing efficient allocation with bounded fragmentation.
 
 ```cpp
-#include "clio_ctp/memory/backend/malloc_backend.h"
+#include <cstring>
 #include "clio_ctp/memory/allocator/buddy_allocator.h"
+#include "clio_ctp/memory/backend/malloc_backend.h"
 
-// Create backend and allocator
-hipc::MallocBackend backend;
-size_t heap_size = 128 * 1024 * 1024;  // 128 MB
-backend.shm_init(hipc::MemoryBackendId(0, 0),
-                 sizeof(hipc::BuddyAllocator) + heap_size);
-auto *alloc = backend.MakeAlloc<hipc::BuddyAllocator>();
+void example() {
+  // Create backend and allocator
+  ctp::ipc::MallocBackend backend;
+  size_t heap_size = 128 * 1024 * 1024;  // 128 MB
+  backend.shm_init(ctp::ipc::MemoryBackendId(0, 0),
+                   sizeof(ctp::ipc::BuddyAllocator) + heap_size);
+  auto *alloc = backend.MakeAlloc<ctp::ipc::BuddyAllocator>();
 
-// Allocate and free
-auto ptr = alloc->Allocate<char>(4096);
-std::memset(ptr.ptr_, 0xAB, 4096);  // Write to allocated memory
-alloc->Free(ptr);
+  // Allocate and free
+  ctp::ipc::FullPtr<char> ptr = alloc->Allocate<char>(4096);
+  std::memset(ptr.ptr_, 0xAB, 4096);  // Write to allocated memory
+  alloc->Free(ptr);
+}
 ```
 
 **Size Classes:**
@@ -193,6 +229,8 @@ The allocator system is designed for multiple processes to share the same memory
 ### Example: Multi-Process BuddyAllocator
 
 ```cpp
+#include <cstdlib>
+#include <string>
 #include "clio_ctp/memory/allocator/buddy_allocator.h"
 #include "clio_ctp/memory/backend/posix_shm_mmap.h"
 
@@ -239,6 +277,13 @@ int main(int argc, char **argv) {
 ### Example: Multi-Process MultiProcessAllocator
 
 ```cpp
+#include <cstdlib>
+#include <cstring>
+#include <chrono>
+#include <random>
+#include <string>
+#include <thread>
+#include <vector>
 #include "clio_ctp/memory/allocator/mp_allocator.h"
 #include "clio_ctp/memory/backend/posix_shm_mmap.h"
 
