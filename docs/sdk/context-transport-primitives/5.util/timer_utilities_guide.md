@@ -11,6 +11,10 @@ The Timer Utilities API in Hermes Shared Memory (HSHM) provides high-resolution 
 ```cpp
 #include "clio_ctp/util/timer.h"
 
+#include <chrono>
+#include <cstdio>
+#include <thread>
+
 void basic_timing_example() {
     // Create a high-resolution timer
     ctp::Timer timer;
@@ -44,9 +48,13 @@ void basic_timing_example() {
 ### Timer Types Available
 
 ```cpp
+#include "clio_ctp/util/timer.h"
+
+#include <cstdio>
+
 // Different timer implementations
-ctp::HighResCpuTimer cpu_timer;           // std::chrono::high_resolution_clock
-ctp::HighResMonotonicTimer mono_timer;    // std::chrono::steady_clock (recommended)
+ctp::HighResCpuTimer cpu_timer;           // TimerBase<std::chrono::high_resolution_clock>
+ctp::HighResMonotonicTimer mono_timer;    // TimerBase<std::chrono::steady_clock> (recommended)
 ctp::Timer default_timer;                 // Alias for HighResMonotonicTimer
 
 // Timepoint classes for manual timing
@@ -54,16 +62,26 @@ ctp::HighResCpuTimepoint cpu_timepoint;
 ctp::HighResMonotonicTimepoint mono_timepoint;
 ctp::Timepoint default_timepoint;         // Alias for HighResMonotonicTimepoint
 
+double expensive_computation() {
+    double sum = 0;
+    for (int i = 0; i < 1000; ++i) {
+        sum += i * 0.5;
+    }
+    return sum;
+}
+
 void timepoint_example() {
     ctp::Timepoint start, end;
-    
-    start.Now();  // Capture current time
-    
+
+    start.Now();  // Capture the start time
+
     // Do work
-    expensive_computation();
-    
-    end.Now();
-    double elapsed_ms = end.GetMsecFromStart(start);
+    volatile double result = expensive_computation();
+    (void)result;
+
+    end.Now();  // Capture the end time
+    // Elapsed time is computed by diffing two timepoints
+    double elapsed_ms = start.GetMsecFromStart(end);
     printf("Computation took %.2f milliseconds\n", elapsed_ms);
 }
 ```
@@ -72,6 +90,10 @@ void timepoint_example() {
 
 ```cpp
 #include "clio_ctp/util/timer_mpi.h"
+
+#include <chrono>
+#include <cstdio>
+#include <thread>
 
 #if CTP_ENABLE_MPI
 void mpi_timing_example(MPI_Comm comm) {
@@ -121,11 +143,17 @@ void mpi_timing_example(MPI_Comm comm) {
 ```cpp
 #include "clio_ctp/util/timer_thread.h"
 
+#include <cmath>
+#include <cstdio>
+#include <thread>
+#include <vector>
+
 class WorkerPool {
     std::vector<std::thread> workers_;
     ctp::ThreadTimer thread_timer_;
-    
+
 public:
+    // ThreadTimer holds one ctp::Timer per thread in its public timers_ vector.
     explicit WorkerPool(int num_threads) : thread_timer_(num_threads) {
         for (int i = 0; i < num_threads; ++i) {
             workers_.emplace_back([this, i]() {
@@ -133,43 +161,42 @@ public:
             });
         }
     }
-    
+
     void Join() {
         for (auto& worker : workers_) {
             worker.join();
         }
-        
-        // Collect timing from all threads
+
+        // Collect() reduces the per-thread timers into the max time (ns),
+        // readable via GetMsec()/GetSec().
         thread_timer_.Collect();
         printf("Max thread time: %.2f ms\n", thread_timer_.GetMsec());
     }
-    
+
 private:
     void WorkerThread(int thread_id) {
-        // Set thread rank for timing
-        thread_timer_.SetRank(thread_id);
-        
-        // Perform timed work
-        thread_timer_.Reset();
-        
+        // Each thread times into its own slot (timers_[thread_id]) so the
+        // per-thread Timer objects never alias across threads.
+        ctp::Timer& timer = thread_timer_.timers_[thread_id];
+        timer.Reset();  // Start timing from zero
+
         // Simulate different amounts of work per thread
         for (int i = 0; i < 1000 * (thread_id + 1); ++i) {
-            // Some computation
-            volatile double x = sin(i * 0.001);
+            volatile double x = std::sin(i * 0.001);
             (void)x;  // Prevent optimization
         }
-        
-        thread_timer_.Pause();
-        
-        printf("Thread %d completed in %.2f ms\n", 
-               thread_id, thread_timer_.timers_[thread_id].GetMsec());
+
+        timer.Pause();  // Accumulate elapsed time
+
+        printf("Thread %d completed in %.2f ms\n",
+               thread_id, timer.GetMsec());
     }
 };
 
 void thread_timing_example() {
     const int num_threads = 4;
     WorkerPool pool(num_threads);
-    
+
     pool.Join();
 }
 ```
