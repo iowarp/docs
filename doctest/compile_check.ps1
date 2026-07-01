@@ -7,6 +7,7 @@
 #   powershell -File docs/doctest/compile_check.ps1 -OutDir <dir of .cc>
 param(
   [Parameter(Mandatory = $true)][string]$OutDir,
+  [switch]$Runtime,  # add context-runtime (clio_run) include dirs + defines
   [string]$Repo = "C:\Users\llogan\Documents\Projects\core",
   [string]$Build = "build-stackless",
   [string]$Vcvars = "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat"
@@ -14,13 +15,22 @@ param(
 $ErrorActionPreference = 'Stop'
 
 # Include dirs (real source + build-generated config + vcpkg deps).
-$inc = @(
+$incDirs = @(
   "context-transport-primitives\include",
   "context-runtime\test",
   "$Build\context-transport-primitives\include",
   "$Build\context-transport-primitives\src\include",
   "$Build\vcpkg_installed\x64-windows\include"
-) | ForEach-Object { '/I"' + (Join-Path $Repo $_) + '"' }
+)
+if ($Runtime) {
+  $incDirs += @(
+    "context-runtime\include",
+    "context-runtime\modules\admin\include",
+    "context-runtime\modules\bdev\include",
+    "context-runtime\modules\MOD_NAME\include"
+  )
+}
+$inc = $incDirs | ForEach-Object { '/I"' + (Join-Path $Repo $_) + '"' }
 
 # Compile defines mirroring the clio_ctp_host build (consumer side: no *_EXPORTS).
 $def = @(
@@ -34,7 +44,12 @@ $def = @(
   'CTP_ENABLE_ZMQ=1',
   'CTP_DEFAULT_THREAD_MODEL=ctp::thread::StdThread',
   'CTP_DEFAULT_THREAD_MODEL_GPU=ctp::thread::StdThread'
-) | ForEach-Object { '/D' + $_ }
+)
+if ($Runtime) {
+  # Match the clio_run_cxx build (consumer side: no *_EXPORTS / BUILDING_DLL).
+  $def += @('CTP_ENABLE_CEREAL=1', 'CTP_ENABLE_LIGHTBEAM=1')
+}
+$def = $def | ForEach-Object { '/D' + $_ }
 
 $common = @('/nologo', '/c', '/std:c++20', '/EHsc', '/Zc:__cplusplus',
             '/permissive-', '/wd4244', '/wd4267') + $inc + $def
