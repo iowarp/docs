@@ -8,6 +8,8 @@
 param(
   [Parameter(Mandatory = $true)][string]$OutDir,
   [switch]$Runtime,  # add context-runtime (clio_run) include dirs + defines
+  [switch]$Cte,      # add context-transfer-engine include dirs (implies -Runtime)
+  [switch]$Cae,      # add context-assimilation-engine include dirs (implies -Cte)
   [string]$Repo = "C:\Users\llogan\Documents\Projects\core",
   [string]$Build = "build-stackless",
   [string]$Vcvars = "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat"
@@ -22,6 +24,8 @@ $incDirs = @(
   "$Build\context-transport-primitives\src\include",
   "$Build\vcpkg_installed\x64-windows\include"
 )
+if ($Cae) { $Cte = $true }
+if ($Cte) { $Runtime = $true }
 if ($Runtime) {
   $incDirs += @(
     "context-runtime\include",
@@ -29,6 +33,17 @@ if ($Runtime) {
     "context-runtime\modules\bdev\include",
     "context-runtime\modules\MOD_NAME\include"
   )
+}
+if ($Cte) {
+  $incDirs += @(
+    "context-transfer-engine\core\include",
+    "context-transfer-engine\compressor\include",
+    "context-transfer-engine\filesystem\include",
+    "context-transfer-engine\uvm\include"
+  )
+}
+if ($Cae) {
+  $incDirs += @("context-assimilation-engine\core\include")
 }
 $inc = $incDirs | ForEach-Object { '/I"' + (Join-Path $Repo $_) + '"' }
 
