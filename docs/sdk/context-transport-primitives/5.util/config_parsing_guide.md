@@ -11,6 +11,9 @@ The Configuration Parsing API in Hermes Shared Memory (HSHM) provides powerful u
 ```cpp
 #include "clio_ctp/util/config_parse.h"
 #include "yaml-cpp/yaml.h"
+#include <map>
+#include <string>
+#include <vector>
 
 class ApplicationConfig : public ctp::BaseConfig {
 public:
@@ -80,47 +83,68 @@ private:
 ### Loading Configuration
 
 ```cpp
-// Example YAML configuration file: config.yaml
-/*
-server:
-  address: "0.0.0.0"
-  port: 9090
+#include "clio_ctp/util/config_parse.h"
+#include "yaml-cpp/yaml.h"
+#include <cstdio>
+#include <string>
+#include <vector>
 
-buffer_size: "2GB"
-timeout: 60.0
+// A small concrete BaseConfig used to demonstrate loading.
+class ApplicationConfig : public ctp::BaseConfig {
+public:
+    std::string server_address;
+    int port = 0;
+    size_t buffer_size = 0;
+    std::vector<std::string> allowed_hosts;
 
-allowed_hosts:
-  - "compute[01-10]-ib"
-  - "storage[001-003]"
-  - "login1;login2"
+    void LoadDefault() override {
+        server_address = "localhost";
+        port = 8080;
+        buffer_size = ctp::Unit<size_t>::Megabytes(1);
+        allowed_hosts.clear();
+    }
 
-features:
-  compression: "enabled"
-  encryption: "aes256"
-  cache_size: "512MB"
-*/
+private:
+    void ParseYAML(YAML::Node &yaml_conf) override {
+        if (yaml_conf["server"]) {
+            auto server = yaml_conf["server"];
+            if (server["address"]) {
+                server_address = server["address"].as<std::string>();
+            }
+            if (server["port"]) {
+                port = server["port"].as<int>();
+            }
+        }
+        if (yaml_conf["buffer_size"]) {
+            buffer_size = ctp::ConfigParse::ParseSize(
+                yaml_conf["buffer_size"].as<std::string>());
+        }
+    }
+};
 
-ApplicationConfig config;
+void example() {
+    ApplicationConfig config;
 
-// Load from file with defaults
-config.LoadFromFile("/path/to/config.yaml");
+    // Load from file with defaults
+    config.LoadFromFile("/path/to/config.yaml");
 
-// Load from file without defaults
-config.LoadFromFile("/path/to/config.yaml", false);
+    // Load from file without resetting to defaults first
+    config.LoadFromFile("/path/to/config.yaml", false);
 
-// Load from string
-std::string yaml_content = R"(
+    // Load from an inline YAML string (as the unit tests do)
+    std::string yaml_content = R"(
 server:
   address: "192.168.1.100"
   port: 8888
 buffer_size: "512MB"
 )";
-config.LoadText(yaml_content);
+    config.LoadText(yaml_content);
 
-// Access configuration values
-printf("Server: %s:%d\n", config.server_address.c_str(), config.port);
-printf("Buffer Size: %zu bytes\n", config.buffer_size);
-printf("Hosts: %zu allowed\n", config.allowed_hosts.size());
+    // Access configuration values
+    printf("Server: %s:%d\n", config.server_address.c_str(), config.port);
+    printf("Buffer Size: %zu bytes\n", config.buffer_size);
+    printf("Hosts: %zu allowed\n", config.allowed_hosts.size());
+}
 ```
 
 ## Hostname Parsing
@@ -128,32 +152,45 @@ printf("Hosts: %zu allowed\n", config.allowed_hosts.size());
 ### Basic Hostname Expansion
 
 ```cpp
-std::vector<std::string> hosts;
+#include "clio_ctp/util/config_parse.h"
+#include <string>
+#include <vector>
 
-// Simple range expansion
-ctp::ConfigParse::ParseHostNameString("node[01-05]", hosts);
-// Result: node01, node02, node03, node04, node05
+void example() {
+    std::vector<std::string> hosts;
 
-// Multiple ranges with prefix and suffix
-hosts.clear();
-ctp::ConfigParse::ParseHostNameString("compute[001-003,010-012]-40g", hosts);
-// Result: compute001-40g, compute002-40g, compute003-40g,
-//         compute010-40g, compute011-40g, compute012-40g
+    // Simple range expansion
+    ctp::ConfigParse::ParseHostNameString("node[01-05]", hosts);
+    // Result: node01, node02, node03, node04, node05
 
-// Semicolon separation for different patterns
-hosts.clear();
-ctp::ConfigParse::ParseHostNameString("gpu[01-02]-ib;cpu[01-03]-eth", hosts);
-// Result: gpu01-ib, gpu02-ib, cpu01-eth, cpu02-eth, cpu03-eth
+    // Multiple ranges with prefix and suffix
+    hosts.clear();
+    ctp::ConfigParse::ParseHostNameString("compute[001-003,010-012]-40g", hosts);
+    // Result: compute001-40g, compute002-40g, compute003-40g,
+    //         compute010-40g, compute011-40g, compute012-40g
 
-// Single values in ranges
-hosts.clear();
-ctp::ConfigParse::ParseHostNameString("special[1,5,9,10]", hosts);
-// Result: special1, special5, special9, special10
+    // Semicolon separation for different patterns
+    hosts.clear();
+    ctp::ConfigParse::ParseHostNameString("gpu[01-02]-ib;cpu[01-03]-eth", hosts);
+    // Result: gpu01-ib, gpu02-ib, cpu01-eth, cpu02-eth, cpu03-eth
+
+    // Single values in ranges
+    hosts.clear();
+    ctp::ConfigParse::ParseHostNameString("special[1,5,9,10]", hosts);
+    // Result: special1, special5, special9, special10
+}
 ```
 
 ### Advanced Hostname Patterns
 
 ```cpp
+#include "clio_ctp/util/config_parse.h"
+#include "yaml-cpp/yaml.h"
+#include <algorithm>
+#include <cstdio>
+#include <string>
+#include <vector>
+
 class ClusterConfig {
     std::vector<std::string> compute_nodes_;
     std::vector<std::string> storage_nodes_;
@@ -215,10 +252,32 @@ management: "mgmt[1-2];login[1-2];scheduler"
 ### Hostfile Processing
 
 ```cpp
+#include "clio_ctp/util/config_parse.h"
+#include <cctype>
+#include <cstdio>
+#include <string>
+#include <vector>
+
+bool IsValidHostname(const std::string& hostname) {
+    // Basic validation
+    if (hostname.empty() || hostname.length() > 255) {
+        return false;
+    }
+
+    // Check for valid characters
+    for (char c : hostname) {
+        if (!std::isalnum(static_cast<unsigned char>(c)) && c != '-' && c != '.') {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 // Parse a hostfile with multiple formats
 std::vector<std::string> ParseHostfile(const std::string& hostfile_path) {
     std::vector<std::string> all_hosts = ctp::ConfigParse::ParseHostfile(hostfile_path);
-    
+
     // Process and validate hosts
     std::vector<std::string> valid_hosts;
     for (const auto& host : all_hosts) {
@@ -228,24 +287,8 @@ std::vector<std::string> ParseHostfile(const std::string& hostfile_path) {
             fprintf(stderr, "Warning: Invalid hostname '%s' skipped\n", host.c_str());
         }
     }
-    
-    return valid_hosts;
-}
 
-bool IsValidHostname(const std::string& hostname) {
-    // Basic validation
-    if (hostname.empty() || hostname.length() > 255) {
-        return false;
-    }
-    
-    // Check for valid characters
-    for (char c : hostname) {
-        if (!std::isalnum(c) && c != '-' && c != '.') {
-            return false;
-        }
-    }
-    
-    return true;
+    return valid_hosts;
 }
 
 // Example hostfile content:
@@ -270,69 +313,97 @@ storage[01-04]
 ### Memory Size Parsing
 
 ```cpp
-// Parse various memory size formats
-size_t size1 = ctp::ConfigParse::ParseSize("1024");        // 1024 bytes
-size_t size2 = ctp::ConfigParse::ParseSize("4K");          // 4 KB = 4096 bytes
-size_t size3 = ctp::ConfigParse::ParseSize("4KB");         // 4 KB = 4096 bytes
-size_t size4 = ctp::ConfigParse::ParseSize("2.5M");        // 2.5 MB
-size_t size5 = ctp::ConfigParse::ParseSize("1.5GB");       // 1.5 GB
-size_t size6 = ctp::ConfigParse::ParseSize("2T");          // 2 TB
-size_t size7 = ctp::ConfigParse::ParseSize("0.5PB");       // 0.5 PB
-size_t size_inf = ctp::ConfigParse::ParseSize("inf");      // Maximum size_t value
+#include "clio_ctp/util/config_parse.h"
+#include <cstddef>
+#include <cstdio>
 
-printf("Parsed sizes:\n");
-printf("  4K = %zu bytes\n", size2);
-printf("  2.5M = %zu bytes (%.2f MB)\n", size4, size4 / (1024.0 * 1024.0));
-printf("  1.5GB = %zu bytes\n", size5);
-printf("  inf = %zu (max value)\n", size_inf);
+void example() {
+    // Parse various memory size formats (ParseSize returns ctp::u64)
+    size_t size1 = ctp::ConfigParse::ParseSize("1024");        // 1024 bytes
+    size_t size2 = ctp::ConfigParse::ParseSize("4K");          // 4 KB = 4096 bytes
+    size_t size3 = ctp::ConfigParse::ParseSize("4KB");         // 4 KB = 4096 bytes
+    size_t size4 = ctp::ConfigParse::ParseSize("2.5M");        // 2.5 MB
+    size_t size5 = ctp::ConfigParse::ParseSize("1.5GB");       // 1.5 GB
+    size_t size6 = ctp::ConfigParse::ParseSize("2T");          // 2 TB
+    size_t size7 = ctp::ConfigParse::ParseSize("0.5PB");       // 0.5 PB
+    size_t size_inf = ctp::ConfigParse::ParseSize("inf");      // Maximum value
+
+    printf("Parsed sizes:\n");
+    printf("  4K = %zu bytes\n", size2);
+    printf("  2.5M = %zu bytes (%.2f MB)\n", size4, size4 / (1024.0 * 1024.0));
+    printf("  1.5GB = %zu bytes\n", size5);
+    printf("  inf = %zu (max value)\n", size_inf);
+    (void)size1; (void)size3; (void)size6; (void)size7;
+}
 ```
 
 ### Bandwidth Parsing
 
 ```cpp
-// Parse bandwidth specifications (bytes per second)
-size_t bw1 = ctp::ConfigParse::ParseBandwidth("100MB");    // 100 MB/s
-size_t bw2 = ctp::ConfigParse::ParseBandwidth("10GB");     // 10 GB/s
-size_t bw3 = ctp::ConfigParse::ParseBandwidth("1.5TB");    // 1.5 TB/s
+#include "clio_ctp/util/config_parse.h"
+#include <cstddef>
 
-// Note: ParseBandwidth currently treats input as bytes/second
-// Additional parsing for "Gbps", "MB/s" etc. would need custom implementation
+void example() {
+    // Parse bandwidth specifications (bytes per second).
+    // ParseBandwidth delegates to ParseSize.
+    size_t bw1 = ctp::ConfigParse::ParseBandwidth("100MB");    // 100 MB/s
+    size_t bw2 = ctp::ConfigParse::ParseBandwidth("10GB");     // 10 GB/s
+    size_t bw3 = ctp::ConfigParse::ParseBandwidth("1.5TB");    // 1.5 TB/s
+
+    // Note: ParseBandwidth currently treats input as bytes/second
+    // Additional parsing for "Gbps", "MB/s" etc. would need custom implementation
+    (void)bw1; (void)bw2; (void)bw3;
+}
 ```
 
 ### Latency Parsing
 
 ```cpp
-// Parse latency values (returns nanoseconds)
-size_t lat1 = ctp::ConfigParse::ParseLatency("100n");      // 100 nanoseconds
-size_t lat2 = ctp::ConfigParse::ParseLatency("50u");       // 50 microseconds
-size_t lat3 = ctp::ConfigParse::ParseLatency("10m");       // 10 milliseconds  
-size_t lat4 = ctp::ConfigParse::ParseLatency("1s");        // 1 second
+#include "clio_ctp/util/config_parse.h"
+#include <cstddef>
+#include <cstdio>
 
-printf("Latencies in nanoseconds:\n");
-printf("  100n = %zu ns\n", lat1);
-printf("  50u = %zu ns (%.3f μs)\n", lat2, lat2 / 1000.0);
-printf("  10m = %zu ns (%.3f ms)\n", lat3, lat3 / 1000000.0);
-printf("  1s = %zu ns (%.3f s)\n", lat4, lat4 / 1000000000.0);
+void example() {
+    // Parse latency values (returns nanoseconds)
+    size_t lat1 = ctp::ConfigParse::ParseLatency("100n");      // 100 nanoseconds
+    size_t lat2 = ctp::ConfigParse::ParseLatency("50u");       // 50 microseconds
+    size_t lat3 = ctp::ConfigParse::ParseLatency("10m");       // 10 milliseconds
+    size_t lat4 = ctp::ConfigParse::ParseLatency("1s");        // 1 second
+
+    printf("Latencies in nanoseconds:\n");
+    printf("  100n = %zu ns\n", lat1);
+    printf("  50u = %zu ns (%.3f us)\n", lat2, lat2 / 1000.0);
+    printf("  10m = %zu ns (%.3f ms)\n", lat3, lat3 / 1000000.0);
+    printf("  1s = %zu ns (%.3f s)\n", lat4, lat4 / 1000000000.0);
+}
 ```
 
 ### Custom Number Parsing
 
 ```cpp
-// Parse numbers with generic types
-int int_val = ctp::ConfigParse::ParseNumber<int>("42");
-double double_val = ctp::ConfigParse::ParseNumber<double>("3.14159");
-float float_val = ctp::ConfigParse::ParseNumber<float>("2.718");
-long long_val = ctp::ConfigParse::ParseNumber<long>("1234567890");
+#include "clio_ctp/util/config_parse.h"
+#include <string>
 
-// Special infinity value
-double inf_double = ctp::ConfigParse::ParseNumber<double>("inf");
-int inf_int = ctp::ConfigParse::ParseNumber<int>("inf");  // Returns INT_MAX
+void example() {
+    // Parse numbers with generic types
+    int int_val = ctp::ConfigParse::ParseNumber<int>("42");
+    double double_val = ctp::ConfigParse::ParseNumber<double>("3.14159");
+    float float_val = ctp::ConfigParse::ParseNumber<float>("2.718");
+    long long_val = ctp::ConfigParse::ParseNumber<long>("1234567890");
 
-// Extract suffixes from number strings
-std::string suffix1 = ctp::ConfigParse::ParseNumberSuffix("100MB");   // "MB"
-std::string suffix2 = ctp::ConfigParse::ParseNumberSuffix("3.14");    // ""
-std::string suffix3 = ctp::ConfigParse::ParseNumberSuffix("50ms");    // "ms"
-std::string suffix4 = ctp::ConfigParse::ParseNumberSuffix("1.5GHz");  // "GHz"
+    // Special infinity value
+    double inf_double = ctp::ConfigParse::ParseNumber<double>("inf");
+    int inf_int = ctp::ConfigParse::ParseNumber<int>("inf");  // Returns INT_MAX
+
+    // Extract suffixes from number strings
+    std::string suffix1 = ctp::ConfigParse::ParseNumberSuffix("100MB");   // "MB"
+    std::string suffix2 = ctp::ConfigParse::ParseNumberSuffix("3.14");    // ""
+    std::string suffix3 = ctp::ConfigParse::ParseNumberSuffix("50ms");    // "ms"
+    std::string suffix4 = ctp::ConfigParse::ParseNumberSuffix("1.5GHz");  // "GHz"
+    (void)int_val; (void)double_val; (void)float_val; (void)long_val;
+    (void)inf_double; (void)inf_int;
+    (void)suffix1; (void)suffix2; (void)suffix3; (void)suffix4;
+}
 ```
 
 ## Path Expansion
@@ -340,25 +411,33 @@ std::string suffix4 = ctp::ConfigParse::ParseNumberSuffix("1.5GHz");  // "GHz"
 ### Environment Variable Expansion
 
 ```cpp
+#include "clio_ctp/util/config_parse.h"
+#include <string>
+
 // Expand environment variables in paths
 std::string ExpandConfigPath(const std::string& template_path) {
     return ctp::ConfigParse::ExpandPath(template_path);
 }
 
-// Examples
-std::string home_config = ExpandConfigPath("${HOME}/.config/myapp");
-std::string data_path = ExpandConfigPath("${XDG_DATA_HOME}/myapp/data");
-std::string temp_file = ExpandConfigPath("${TMPDIR}/myapp_${USER}.tmp");
+void example() {
+    // Examples
+    std::string home_config = ExpandConfigPath("${HOME}/.config/myapp");
+    std::string data_path = ExpandConfigPath("${XDG_DATA_HOME}/myapp/data");
+    std::string temp_file = ExpandConfigPath("${TMPDIR}/myapp_${USER}.tmp");
 
-// Complex expansion with multiple variables
-std::string complex = ExpandConfigPath(
-    "${HOME}/.cache/${APPLICATION_NAME}-${VERSION}/data"
-);
+    // Complex expansion with multiple variables
+    std::string complex = ExpandConfigPath(
+        "${HOME}/.cache/${APPLICATION_NAME}-${VERSION}/data"
+    );
 
-// Set up environment and expand
-ctp::SystemInfo::Setenv("APP_ROOT", "/opt/myapp", 1);
-ctp::SystemInfo::Setenv("APP_VERSION", "2.1.0", 1);
-std::string app_config = ExpandConfigPath("${APP_ROOT}/config-${APP_VERSION}.yaml");
+    // Set up environment and expand
+    ctp::SystemInfo::Setenv("APP_ROOT", "/opt/myapp", 1);
+    ctp::SystemInfo::Setenv("APP_VERSION", "2.1.0", 1);
+    std::string app_config =
+        ExpandConfigPath("${APP_ROOT}/config-${APP_VERSION}.yaml");
+    (void)home_config; (void)data_path; (void)temp_file;
+    (void)complex; (void)app_config;
+}
 ```
 
 ## Complex Configuration Example
@@ -366,6 +445,14 @@ std::string app_config = ExpandConfigPath("${APP_ROOT}/config-${APP_VERSION}.yam
 ### Distributed System Configuration
 
 ```cpp
+#include "clio_ctp/util/config_parse.h"
+#include "yaml-cpp/yaml.h"
+#include <algorithm>
+#include <cstdio>
+#include <map>
+#include <string>
+#include <vector>
+
 class DistributedSystemConfig : public ctp::BaseConfig {
 public:
     // Cluster configuration
@@ -583,6 +670,12 @@ advanced:
 ## Vector Parsing Utilities
 
 ```cpp
+#include "clio_ctp/util/config_parse.h"
+#include "yaml-cpp/yaml.h"
+#include <list>
+#include <string>
+#include <vector>
+
 // Using BaseConfig's vector parsing helpers
 class VectorConfig : public ctp::BaseConfig {
 public:

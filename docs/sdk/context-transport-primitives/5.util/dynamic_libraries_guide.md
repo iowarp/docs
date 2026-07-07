@@ -10,113 +10,112 @@ The Dynamic Libraries API in Hermes Shared Memory (HSHM) provides cross-platform
 
 ```cpp
 #include "clio_ctp/introspect/system_info.h"
+#include <cstdio>
+#include <string>
 
-// Load a shared library
-ctp::SharedLibrary math_lib("./libmymath.so");      // Linux
-// ctp::SharedLibrary math_lib("libmymath.dylib");   // macOS
-// ctp::SharedLibrary math_lib("mymath.dll");        // Windows
+void example() {
+  // Construct + Load in one step. SharedLibrary selects dlopen() on POSIX or
+  // LoadLibraryA() on Windows, so pass a platform-appropriate library name.
+  // GetMathLibraryName() returns one that always exists on this OS
+  // (libm.so.6 on Linux, ucrtbase.dll on Windows).
+  ctp::SharedLibrary math_lib(ctp::SystemInfo::GetMathLibraryName());
 
-// Check if loading succeeded
-if (!math_lib.IsNull()) {
+  // Check whether the handle was opened.
+  if (!math_lib.IsNull()) {
     printf("Library loaded successfully\n");
-} else {
+  } else {
     printf("Failed to load library: %s\n", math_lib.GetError().c_str());
+  }
+
+  // Deferred loading: default-construct now, Load() later. SharedLibrary is
+  // move-only and closes its handle (dlclose/FreeLibrary) in the destructor.
+  ctp::SharedLibrary delayed_lib;
+  delayed_lib.Load(ctp::SystemInfo::GetMathLibraryName());
 }
-
-// Load library with full path
-ctp::SharedLibrary lib("/usr/local/lib/libcustom.so");
-
-// Delayed loading
-ctp::SharedLibrary delayed_lib;
-// ... some time later ...
-delayed_lib.Load("./plugins/myplugin.so");
 ```
 
 ### Getting Symbols
 
 ```cpp
-// Get function pointer
-typedef double (*calculate_fn)(double, double);
-calculate_fn calculate = (calculate_fn)math_lib.GetSymbol("calculate");
+#include "clio_ctp/introspect/system_info.h"
+#include <cstdio>
 
-if (calculate != nullptr) {
-    double result = calculate(10.0, 20.0);
-    printf("Calculation result: %f\n", result);
-} else {
-    printf("Function 'calculate' not found: %s\n", math_lib.GetError().c_str());
-}
+void example() {
+  ctp::SharedLibrary math_lib(ctp::SystemInfo::GetMathLibraryName());
 
-// Get global variable
-int* library_version = (int*)math_lib.GetSymbol("library_version");
-if (library_version != nullptr) {
-    printf("Library version: %d\n", *library_version);
-    *library_version = 42;  // Modify shared library global
-}
+  // GetSymbol() returns a raw void* (dlsym/GetProcAddress). Cast it to the
+  // real signature before calling. The C math library exports "sin".
+  typedef double (*sin_fn)(double);
+  sin_fn sine = reinterpret_cast<sin_fn>(math_lib.GetSymbol("sin"));
 
-// Get struct or class
-struct LibraryInfo {
-    char name[64];
-    int major_version;
-    int minor_version;
-};
+  if (sine != nullptr) {
+    printf("sin(0.0) = %f\n", sine(0.0));
+  } else {
+    printf("Symbol 'sin' not found: %s\n", math_lib.GetError().c_str());
+  }
 
-LibraryInfo* info = (LibraryInfo*)math_lib.GetSymbol("library_info");
-if (info != nullptr) {
-    printf("Library: %s v%d.%d\n", info->name, 
-           info->major_version, info->minor_version);
+  // A symbol that does not exist resolves to nullptr -- always check.
+  void *missing = math_lib.GetSymbol("definitely_not_a_symbol");
+  if (missing == nullptr) {
+    printf("symbol not present in library\n");
+  }
 }
 ```
 
 ### Error Handling
 
 ```cpp
+#include "clio_ctp/introspect/system_info.h"
+#include <cstdio>
+#include <iostream>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+// Helper that tries a list of candidate paths and throws on a missing symbol.
 class SafeLibraryLoader {
-public:
-    static bool LoadLibraryWithFallback(
-        ctp::SharedLibrary& lib,
-        const std::vector<std::string>& paths) {
-        
-        for (const auto& path : paths) {
-            lib.Load(path);
-            if (!lib.IsNull()) {
-                printf("Loaded library from: %s\n", path.c_str());
-                return true;
-            }
-            printf("Failed to load %s: %s\n", path.c_str(), lib.GetError().c_str());
-        }
-        
-        return false;
+ public:
+  static bool LoadLibraryWithFallback(ctp::SharedLibrary &lib,
+                                      const std::vector<std::string> &paths) {
+    for (const auto &path : paths) {
+      lib.Load(path);
+      if (!lib.IsNull()) {
+        printf("Loaded library from: %s\n", path.c_str());
+        return true;
+      }
+      printf("Failed to load %s: %s\n", path.c_str(), lib.GetError().c_str());
     }
-    
-    static void* GetRequiredSymbol(
-        ctp::SharedLibrary& lib,
-        const std::string& symbol_name) {
-        
-        void* symbol = lib.GetSymbol(symbol_name);
-        if (symbol == nullptr) {
-            throw std::runtime_error(
-                "Required symbol '" + symbol_name + "' not found: " + lib.GetError()
-            );
-        }
-        return symbol;
+    return false;
+  }
+
+  static void *GetRequiredSymbol(ctp::SharedLibrary &lib,
+                                 const std::string &symbol_name) {
+    void *symbol = lib.GetSymbol(symbol_name);
+    if (symbol == nullptr) {
+      throw std::runtime_error("Required symbol '" + symbol_name +
+                               "' not found: " + lib.GetError());
     }
+    return symbol;
+  }
 };
 
-// Usage
-ctp::SharedLibrary my_lib;
-std::vector<std::string> search_paths = {
-    "./libmylib.so",
-    "/usr/local/lib/libmylib.so",
-    "/usr/lib/libmylib.so"
-};
+void example() {
+  ctp::SharedLibrary my_lib;
+  std::vector<std::string> search_paths = {
+      "./" + ctp::SystemInfo::GetMathLibraryName(),
+      ctp::SystemInfo::GetMathLibraryName(),
+  };
 
-if (SafeLibraryLoader::LoadLibraryWithFallback(my_lib, search_paths)) {
+  if (SafeLibraryLoader::LoadLibraryWithFallback(my_lib, search_paths)) {
     try {
-        auto init_fn = (void(*)())SafeLibraryLoader::GetRequiredSymbol(my_lib, "initialize");
-        init_fn();
-    } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
+      typedef double (*sin_fn)(double);
+      auto sine = reinterpret_cast<sin_fn>(
+          SafeLibraryLoader::GetRequiredSymbol(my_lib, "sin"));
+      printf("sin(0.0) = %f\n", sine(0.0));
+    } catch (const std::exception &e) {
+      std::cerr << "Error: " << e.what() << std::endl;
     }
+  }
 }
 ```
 
@@ -125,396 +124,237 @@ if (SafeLibraryLoader::LoadLibraryWithFallback(my_lib, search_paths)) {
 ### Plugin Interface Definition
 
 ```cpp
-// plugin_interface.h - Shared between application and plugins
-#pragma once
-
+// A plugin ABI you define yourself and share between the host application and
+// each plugin. ctp::SharedLibrary only opens libraries and resolves symbols;
+// the interface and the factory entry points below are your own contract.
 class IPlugin {
-public:
-    virtual ~IPlugin() = default;
-    
-    // Plugin identification
-    virtual const char* GetName() const = 0;
-    virtual const char* GetVersion() const = 0;
-    virtual const char* GetDescription() const = 0;
-    
-    // Lifecycle
-    virtual bool Initialize(void* context) = 0;
-    virtual void Execute() = 0;
-    virtual void Shutdown() = 0;
-    
-    // Optional capabilities
-    virtual bool SupportsFeature(const char* feature) const { return false; }
-    virtual void* GetInterface(const char* interface_name) { return nullptr; }
+ public:
+  virtual ~IPlugin() = default;
+
+  // Identification.
+  virtual const char *GetName() const = 0;
+  virtual const char *GetVersion() const = 0;
+  virtual const char *GetDescription() const = 0;
+
+  // Lifecycle.
+  virtual bool Initialize(void *context) = 0;
+  virtual void Execute() = 0;
+  virtual void Shutdown() = 0;
 };
 
-// Plugin factory function types
-typedef IPlugin* (*CreatePluginFunc)();
-typedef void (*DestroyPluginFunc)(IPlugin*);
-typedef const char* (*GetPluginAPIVersionFunc)();
+// Factory entry-point signatures the host resolves with GetSymbol().
+typedef IPlugin *(*CreatePluginFunc)();
+typedef void (*DestroyPluginFunc)(IPlugin *);
+typedef const char *(*GetPluginAPIVersionFunc)();
 
-// Current plugin API version
-#define PLUGIN_API_VERSION "1.0.0"
+// Current plugin ABI version.
+inline constexpr const char *kPluginApiVersion = "1.0.0";
 ```
 
 ### Plugin Manager Implementation
 
 ```cpp
+#include "clio_ctp/introspect/system_info.h"
+#include <cstdio>
+#include <map>
+#include <memory>
+#include <string>
+#include <vector>
+
+// Minimal plugin ABI (normally in a shared header).
+class IPlugin {
+ public:
+  virtual ~IPlugin() = default;
+  virtual const char *GetName() const = 0;
+  virtual const char *GetVersion() const = 0;
+  virtual const char *GetDescription() const = 0;
+  virtual bool Initialize(void *context) = 0;
+  virtual void Execute() = 0;
+  virtual void Shutdown() = 0;
+};
+typedef IPlugin *(*CreatePluginFunc)();
+typedef void (*DestroyPluginFunc)(IPlugin *);
+
+// Loads plugin shared libraries and owns their lifetime. Each plugin's
+// SharedLibrary stays open as long as its instance is alive; the SharedLibrary
+// destructor unloads it (dlclose/FreeLibrary).
 class PluginManager {
-public:
-    struct PluginInfo {
-        std::string path;
-        std::string name;
-        std::string version;
-        std::string description;
-        bool enabled;
-    };
-    
-private:
-    struct LoadedPlugin {
-        ctp::SharedLibrary library;
-        IPlugin* instance;
-        DestroyPluginFunc destroy_func;
-        PluginInfo info;
-        
-        LoadedPlugin(ctp::SharedLibrary&& lib, IPlugin* inst, 
-                    DestroyPluginFunc destroy, const PluginInfo& info)
-            : library(std::move(lib)), instance(inst), 
-              destroy_func(destroy), info(info) {}
-    };
-    
-    std::vector<std::unique_ptr<LoadedPlugin>> plugins_;
-    std::map<std::string, size_t> plugin_index_;  // name -> index mapping
-    void* app_context_;
-    
-public:
-    explicit PluginManager(void* context = nullptr) : app_context_(context) {}
-    
-    bool LoadPlugin(const std::string& plugin_path) {
-        printf("Loading plugin: %s\n", plugin_path.c_str());
-        
-        // Check if already loaded
-        if (IsPluginLoaded(plugin_path)) {
-            printf("Plugin already loaded: %s\n", plugin_path.c_str());
-            return true;
-        }
-        
-        // Load the library
-        ctp::SharedLibrary lib(plugin_path);
-        if (lib.IsNull()) {
-            fprintf(stderr, "Failed to load plugin library: %s\n", 
-                    lib.GetError().c_str());
-            return false;
-        }
-        
-        // Check API version
-        if (!CheckAPIVersion(lib)) {
-            fprintf(stderr, "Plugin API version mismatch\n");
-            return false;
-        }
-        
-        // Get factory functions
-        CreatePluginFunc create = (CreatePluginFunc)lib.GetSymbol("CreatePlugin");
-        DestroyPluginFunc destroy = (DestroyPluginFunc)lib.GetSymbol("DestroyPlugin");
-        
-        if (!create || !destroy) {
-            fprintf(stderr, "Plugin missing required factory functions\n");
-            return false;
-        }
-        
-        // Create plugin instance
-        IPlugin* plugin = create();
-        if (!plugin) {
-            fprintf(stderr, "Failed to create plugin instance\n");
-            return false;
-        }
-        
-        // Get plugin information
-        PluginInfo info;
-        info.path = plugin_path;
-        info.name = plugin->GetName();
-        info.version = plugin->GetVersion();
-        info.description = plugin->GetDescription();
-        info.enabled = false;
-        
-        // Initialize plugin
-        if (!plugin->Initialize(app_context_)) {
-            fprintf(stderr, "Plugin initialization failed: %s\n", info.name.c_str());
-            destroy(plugin);
-            return false;
-        }
-        
-        info.enabled = true;
-        printf("Plugin loaded successfully: %s v%s\n", 
-               info.name.c_str(), info.version.c_str());
-        printf("  Description: %s\n", info.description.c_str());
-        
-        // Store plugin
-        size_t index = plugins_.size();
-        plugin_index_[info.name] = index;
-        plugins_.emplace_back(std::make_unique<LoadedPlugin>(
-            std::move(lib), plugin, destroy, info));
-        
+ public:
+  struct PluginInfo {
+    std::string path;
+    std::string name;
+    std::string version;
+    std::string description;
+    bool enabled = false;
+  };
+
+ private:
+  struct LoadedPlugin {
+    ctp::SharedLibrary library;
+    IPlugin *instance;
+    DestroyPluginFunc destroy_func;
+    PluginInfo info;
+
+    LoadedPlugin(ctp::SharedLibrary &&lib, IPlugin *inst,
+                 DestroyPluginFunc destroy, const PluginInfo &i)
+        : library(std::move(lib)),
+          instance(inst),
+          destroy_func(destroy),
+          info(i) {}
+  };
+
+  std::vector<std::unique_ptr<LoadedPlugin>> plugins_;
+  std::map<std::string, size_t> plugin_index_;
+  void *app_context_;
+
+ public:
+  explicit PluginManager(void *context = nullptr) : app_context_(context) {}
+
+  ~PluginManager() {
+    for (auto &loaded : plugins_) {
+      loaded->instance->Shutdown();
+      loaded->destroy_func(loaded->instance);
+    }
+  }
+
+  bool LoadPlugin(const std::string &plugin_path) {
+    if (IsPluginLoaded(plugin_path)) {
+      return true;
+    }
+
+    ctp::SharedLibrary lib(plugin_path);
+    if (lib.IsNull()) {
+      fprintf(stderr, "Failed to load plugin: %s\n", lib.GetError().c_str());
+      return false;
+    }
+
+    // Resolve the C factory entry points exported by the plugin.
+    auto create =
+        reinterpret_cast<CreatePluginFunc>(lib.GetSymbol("CreatePlugin"));
+    auto destroy =
+        reinterpret_cast<DestroyPluginFunc>(lib.GetSymbol("DestroyPlugin"));
+    if (create == nullptr || destroy == nullptr) {
+      fprintf(stderr, "Plugin missing CreatePlugin/DestroyPlugin\n");
+      return false;
+    }
+
+    IPlugin *plugin = create();
+    if (plugin == nullptr) {
+      return false;
+    }
+
+    PluginInfo info;
+    info.path = plugin_path;
+    info.name = plugin->GetName();
+    info.version = plugin->GetVersion();
+    info.description = plugin->GetDescription();
+
+    if (!plugin->Initialize(app_context_)) {
+      destroy(plugin);
+      return false;
+    }
+    info.enabled = true;
+
+    size_t index = plugins_.size();
+    plugin_index_[info.name] = index;
+    plugins_.push_back(std::make_unique<LoadedPlugin>(std::move(lib), plugin,
+                                                      destroy, info));
+    return true;
+  }
+
+  // Scan a directory for shared libraries and load each one. Uses the real
+  // cross-platform directory + extension helpers from ctp::SystemInfo.
+  void LoadAllPlugins(const std::string &plugin_dir) {
+    const std::string ext = ctp::SystemInfo::GetSharedLibExtension();
+    for (const std::string &name :
+         ctp::SystemInfo::ListDirectory(plugin_dir)) {
+      if (name.size() >= ext.size() &&
+          name.compare(name.size() - ext.size(), ext.size(), ext) == 0) {
+        LoadPlugin(plugin_dir + "/" + name);
+      }
+    }
+  }
+
+  void ExecuteAllPlugins() {
+    for (auto &loaded : plugins_) {
+      if (loaded->info.enabled) {
+        loaded->instance->Execute();
+      }
+    }
+  }
+
+  IPlugin *GetPlugin(const std::string &plugin_name) {
+    auto it = plugin_index_.find(plugin_name);
+    return it != plugin_index_.end() ? plugins_[it->second]->instance : nullptr;
+  }
+
+  std::vector<PluginInfo> GetPluginList() const {
+    std::vector<PluginInfo> list;
+    for (const auto &loaded : plugins_) {
+      list.push_back(loaded->info);
+    }
+    return list;
+  }
+
+ private:
+  bool IsPluginLoaded(const std::string &path) const {
+    for (const auto &loaded : plugins_) {
+      if (loaded->info.path == path) {
         return true;
+      }
     }
-    
-    void LoadAllPlugins(const std::string& plugin_dir) {
-        printf("Scanning for plugins in: %s\n", plugin_dir.c_str());
-        
-        std::vector<std::string> plugin_files = ScanPluginDirectory(plugin_dir);
-        
-        for (const auto& file : plugin_files) {
-            LoadPlugin(file);
-        }
-        
-        printf("Loaded %zu plugins\n", plugins_.size());
-    }
-    
-    void ExecutePlugin(const std::string& plugin_name) {
-        auto it = plugin_index_.find(plugin_name);
-        if (it != plugin_index_.end()) {
-            auto& plugin = plugins_[it->second];
-            if (plugin->info.enabled) {
-                printf("Executing plugin: %s\n", plugin_name.c_str());
-                plugin->instance->Execute();
-            } else {
-                printf("Plugin %s is disabled\n", plugin_name.c_str());
-            }
-        } else {
-            printf("Plugin not found: %s\n", plugin_name.c_str());
-        }
-    }
-    
-    void ExecuteAllPlugins() {
-        for (auto& loaded : plugins_) {
-            if (loaded->info.enabled) {
-                printf("Executing plugin: %s\n", loaded->info.name.c_str());
-                loaded->instance->Execute();
-            }
-        }
-    }
-    
-    void DisablePlugin(const std::string& plugin_name) {
-        auto it = plugin_index_.find(plugin_name);
-        if (it != plugin_index_.end()) {
-            plugins_[it->second]->info.enabled = false;
-            printf("Plugin disabled: %s\n", plugin_name.c_str());
-        }
-    }
-    
-    void EnablePlugin(const std::string& plugin_name) {
-        auto it = plugin_index_.find(plugin_name);
-        if (it != plugin_index_.end()) {
-            plugins_[it->second]->info.enabled = true;
-            printf("Plugin enabled: %s\n", plugin_name.c_str());
-        }
-    }
-    
-    std::vector<PluginInfo> GetPluginList() const {
-        std::vector<PluginInfo> list;
-        for (const auto& loaded : plugins_) {
-            list.push_back(loaded->info);
-        }
-        return list;
-    }
-    
-    IPlugin* GetPlugin(const std::string& plugin_name) {
-        auto it = plugin_index_.find(plugin_name);
-        if (it != plugin_index_.end()) {
-            return plugins_[it->second]->instance;
-        }
-        return nullptr;
-    }
-    
-    ~PluginManager() {
-        // Clean shutdown of all plugins
-        for (auto& loaded : plugins_) {
-            printf("Shutting down plugin: %s\n", loaded->info.name.c_str());
-            loaded->instance->Shutdown();
-            loaded->destroy_func(loaded->instance);
-        }
-    }
-    
-private:
-    bool CheckAPIVersion(ctp::SharedLibrary& lib) {
-        GetPluginAPIVersionFunc get_version = 
-            (GetPluginAPIVersionFunc)lib.GetSymbol("GetPluginAPIVersion");
-        
-        if (get_version) {
-            const char* version = get_version();
-            if (strcmp(version, PLUGIN_API_VERSION) != 0) {
-                fprintf(stderr, "API version mismatch: expected %s, got %s\n",
-                        PLUGIN_API_VERSION, version);
-                return false;
-            }
-        }
-        return true;
-    }
-    
-    bool IsPluginLoaded(const std::string& path) {
-        for (const auto& loaded : plugins_) {
-            if (loaded->info.path == path) {
-                return true;
-            }
-        }
-        return false;
-    }
-    
-    std::vector<std::string> ScanPluginDirectory(const std::string& dir) {
-        std::vector<std::string> plugin_files;
-        
-#ifdef __linux__
-        DIR* d = opendir(dir.c_str());
-        if (d) {
-            struct dirent* entry;
-            while ((entry = readdir(d)) != nullptr) {
-                std::string filename = entry->d_name;
-                if (filename.find(".so") != std::string::npos) {
-                    plugin_files.push_back(dir + "/" + filename);
-                }
-            }
-            closedir(d);
-        }
-#elif __APPLE__
-        // Scan for .dylib files on macOS
-        DIR* d = opendir(dir.c_str());
-        if (d) {
-            struct dirent* entry;
-            while ((entry = readdir(d)) != nullptr) {
-                std::string filename = entry->d_name;
-                if (filename.find(".dylib") != std::string::npos) {
-                    plugin_files.push_back(dir + "/" + filename);
-                }
-            }
-            closedir(d);
-        }
-#elif _WIN32
-        // Scan for .dll files on Windows
-        std::string pattern = dir + "\\*.dll";
-        WIN32_FIND_DATA fd;
-        HANDLE hFind = FindFirstFile(pattern.c_str(), &fd);
-        if (hFind != INVALID_HANDLE_VALUE) {
-            do {
-                plugin_files.push_back(dir + "\\" + fd.cFileName);
-            } while (FindNextFile(hFind, &fd));
-            FindClose(hFind);
-        }
-#endif
-        
-        return plugin_files;
-    }
+    return false;
+  }
 };
 ```
 
 ### Example Plugin Implementation
 
 ```cpp
-// myplugin.cpp - Compile as shared library
-#include "plugin_interface.h"
+#include <cstdio>
 #include <cstring>
+#include <string>
 
-class MyPlugin : public IPlugin {
-    std::string name_ = "MyPlugin";
-    std::string version_ = "1.0.0";
-    std::string description_ = "Example plugin implementation";
-    void* app_context_;
-    
-public:
-    const char* GetName() const override { 
-        return name_.c_str(); 
-    }
-    
-    const char* GetVersion() const override { 
-        return version_.c_str(); 
-    }
-    
-    const char* GetDescription() const override { 
-        return description_.c_str(); 
-    }
-    
-    bool Initialize(void* context) override {
-        printf("MyPlugin: Initializing...\n");
-        app_context_ = context;
-        
-        // Perform initialization
-        if (!LoadConfiguration()) {
-            return false;
-        }
-        
-        if (!AllocateResources()) {
-            return false;
-        }
-        
-        printf("MyPlugin: Initialization complete\n");
-        return true;
-    }
-    
-    void Execute() override {
-        printf("MyPlugin: Executing main functionality\n");
-        
-        // Perform plugin work
-        ProcessData();
-        GenerateOutput();
-    }
-    
-    void Shutdown() override {
-        printf("MyPlugin: Cleaning up resources\n");
-        
-        // Clean up resources
-        FreeResources();
-    }
-    
-    bool SupportsFeature(const char* feature) const override {
-        // Check for specific features
-        if (strcmp(feature, "data_processing") == 0) return true;
-        if (strcmp(feature, "report_generation") == 0) return true;
-        return false;
-    }
-    
-    void* GetInterface(const char* interface_name) override {
-        // Return specialized interfaces
-        if (strcmp(interface_name, "IDataProcessor") == 0) {
-            return static_cast<IDataProcessor*>(this);
-        }
-        return nullptr;
-    }
-    
-private:
-    bool LoadConfiguration() {
-        // Load plugin-specific configuration
-        return true;
-    }
-    
-    bool AllocateResources() {
-        // Allocate necessary resources
-        return true;
-    }
-    
-    void FreeResources() {
-        // Free allocated resources
-    }
-    
-    void ProcessData() {
-        // Main processing logic
-    }
-    
-    void GenerateOutput() {
-        // Generate output/reports
-    }
+// Minimal plugin ABI (shared header in a real project).
+class IPlugin {
+ public:
+  virtual ~IPlugin() = default;
+  virtual const char *GetName() const = 0;
+  virtual const char *GetVersion() const = 0;
+  virtual const char *GetDescription() const = 0;
+  virtual bool Initialize(void *context) = 0;
+  virtual void Execute() = 0;
+  virtual void Shutdown() = 0;
 };
 
-// Factory functions (must be extern "C" to prevent name mangling)
+// A concrete plugin, compiled into its own shared library.
+class MyPlugin : public IPlugin {
+  std::string name_ = "MyPlugin";
+  std::string version_ = "1.0.0";
+  std::string description_ = "Example plugin implementation";
+  void *app_context_ = nullptr;
+
+ public:
+  const char *GetName() const override { return name_.c_str(); }
+  const char *GetVersion() const override { return version_.c_str(); }
+  const char *GetDescription() const override { return description_.c_str(); }
+
+  bool Initialize(void *context) override {
+    app_context_ = context;
+    return true;
+  }
+
+  void Execute() override { printf("MyPlugin: executing\n"); }
+
+  void Shutdown() override { printf("MyPlugin: shutting down\n"); }
+};
+
+// Factory entry points. extern "C" prevents C++ name mangling so the host can
+// resolve them by plain name with SharedLibrary::GetSymbol().
 extern "C" {
-    IPlugin* CreatePlugin() {
-        return new MyPlugin();
-    }
-    
-    void DestroyPlugin(IPlugin* plugin) {
-        delete plugin;
-    }
-    
-    const char* GetPluginAPIVersion() {
-        return PLUGIN_API_VERSION;
-    }
+IPlugin *CreatePlugin() { return new MyPlugin(); }
+void DestroyPlugin(IPlugin *plugin) { delete plugin; }
+const char *GetPluginAPIVersion() { return "1.0.0"; }
 }
 ```
 
@@ -523,207 +363,116 @@ extern "C" {
 ### Platform-Agnostic Loader
 
 ```cpp
+#include "clio_ctp/introspect/system_info.h"
+#include <cstdio>
+#include <sstream>
+#include <string>
+#include <vector>
+
+// Builds candidate paths for a base library name using the real
+// cross-platform helpers (extension, search-path env var, list separator)
+// instead of hand-rolled #ifdefs.
 class CrossPlatformLoader {
-public:
-    static std::string GetLibraryExtension() {
-#ifdef _WIN32
-        return ".dll";
-#elif __APPLE__
-        return ".dylib";
-#else
-        return ".so";
-#endif
+ public:
+  static std::string MakeLibraryName(const std::string &base_name) {
+    // POSIX convention adds a "lib" prefix; Windows does not.
+    const std::string ext = ctp::SystemInfo::GetSharedLibExtension();
+    const std::string prefix = (ext == ".dll") ? "" : "lib";
+    return prefix + base_name + ext;
+  }
+
+  static bool LoadLibrary(const std::string &base_name,
+                          ctp::SharedLibrary &lib) {
+    for (const std::string &path : BuildSearchPaths(base_name)) {
+      lib.Load(path);
+      if (!lib.IsNull()) {
+        printf("Loaded library from: %s\n", path.c_str());
+        return true;
+      }
     }
-    
-    static std::string GetLibraryPrefix() {
-#ifdef _WIN32
-        return "";  // No prefix on Windows
-#else
-        return "lib";  // Unix convention
-#endif
+    fprintf(stderr, "Failed to find library: %s\n", base_name.c_str());
+    return false;
+  }
+
+ private:
+  static std::vector<std::string> BuildSearchPaths(
+      const std::string &base_name) {
+    std::vector<std::string> paths;
+    const std::string lib_name = MakeLibraryName(base_name);
+
+    // Current directory first.
+    paths.push_back("./" + lib_name);
+
+    // Bare name -- let the OS loader resolve it.
+    paths.push_back(lib_name);
+
+    // Every directory on the platform's library search path
+    // (LD_LIBRARY_PATH on Linux, PATH on Windows).
+    const std::string var = ctp::SystemInfo::GetLibrarySearchPathVar();
+    const char sep = ctp::SystemInfo::GetPathListSeparator();
+    std::stringstream ss(ctp::SystemInfo::Getenv(var));
+    std::string dir;
+    while (std::getline(ss, dir, sep)) {
+      if (!dir.empty()) {
+        paths.push_back(dir + "/" + lib_name);
+      }
     }
-    
-    static std::string MakeLibraryName(const std::string& base_name) {
-        return GetLibraryPrefix() + base_name + GetLibraryExtension();
-    }
-    
-    static std::string GetSystemLibraryPath() {
-#ifdef _WIN32
-        return "C:\\Windows\\System32";
-#elif __APPLE__
-        return "/usr/lib:/usr/local/lib";
-#else
-        return "/usr/lib:/usr/local/lib:/lib";
-#endif
-    }
-    
-    static bool LoadLibrary(const std::string& base_name, 
-                          ctp::SharedLibrary& lib) {
-        // Build search paths
-        std::vector<std::string> search_paths = BuildSearchPaths(base_name);
-        
-        // Try to load from each path
-        for (const auto& path : search_paths) {
-            lib.Load(path);
-            
-            if (!lib.IsNull()) {
-                printf("Loaded library from: %s\n", path.c_str());
-                return true;
-            }
-        }
-        
-        fprintf(stderr, "Failed to find library: %s\n", base_name.c_str());
-        return false;
-    }
-    
-private:
-    static std::vector<std::string> BuildSearchPaths(const std::string& base_name) {
-        std::vector<std::string> paths;
-        std::string lib_name = MakeLibraryName(base_name);
-        
-        // Current directory
-        paths.push_back("./" + lib_name);
-        
-        // Application library directory
-        std::string app_lib = ctp::SystemInfo::Getenv("APP_LIB_DIR");
-        if (!app_lib.empty()) {
-            paths.push_back(app_lib + "/" + lib_name);
-        }
-        
-        // LD_LIBRARY_PATH / DYLD_LIBRARY_PATH / PATH
-#ifdef _WIN32
-        std::string env_path = ctp::SystemInfo::Getenv("PATH");
-#elif __APPLE__
-        std::string env_path = ctp::SystemInfo::Getenv("DYLD_LIBRARY_PATH");
-#else
-        std::string env_path = ctp::SystemInfo::Getenv("LD_LIBRARY_PATH");
-#endif
-        
-        if (!env_path.empty()) {
-            AddPathsFromEnvironment(env_path, lib_name, paths);
-        }
-        
-        // System paths
-        AddSystemPaths(lib_name, paths);
-        
-        return paths;
-    }
-    
-    static void AddPathsFromEnvironment(const std::string& env_path,
-                                       const std::string& lib_name,
-                                       std::vector<std::string>& paths) {
-        std::stringstream ss(env_path);
-        std::string path;
-        
-#ifdef _WIN32
-        const char delimiter = ';';
-#else
-        const char delimiter = ':';
-#endif
-        
-        while (std::getline(ss, path, delimiter)) {
-            if (!path.empty()) {
-                paths.push_back(path + "/" + lib_name);
-            }
-        }
-    }
-    
-    static void AddSystemPaths(const std::string& lib_name,
-                              std::vector<std::string>& paths) {
-#ifdef _WIN32
-        paths.push_back("C:\\Windows\\System32\\" + lib_name);
-        paths.push_back("C:\\Windows\\SysWOW64\\" + lib_name);
-#elif __APPLE__
-        paths.push_back("/usr/local/lib/" + lib_name);
-        paths.push_back("/usr/lib/" + lib_name);
-        paths.push_back("/opt/homebrew/lib/" + lib_name);  // Apple Silicon
-#else
-        paths.push_back("/usr/local/lib/" + lib_name);
-        paths.push_back("/usr/lib/" + lib_name);
-        paths.push_back("/lib/" + lib_name);
-        paths.push_back("/usr/lib/x86_64-linux-gnu/" + lib_name);  // Debian/Ubuntu
-#endif
-    }
+    return paths;
+  }
 };
 ```
 
 ### Version-Aware Loading
 
 ```cpp
+#include "clio_ctp/introspect/system_info.h"
+#include <string>
+
+// Loads a library whose ABI version is queried through an exported
+// "GetLibraryVersion(int*, int*, int*)" entry point.
 class VersionedLibraryLoader {
-public:
-    struct Version {
-        int major;
-        int minor;
-        int patch;
-        
-        std::string ToString() const {
-            return std::to_string(major) + "." + 
-                   std::to_string(minor) + "." + 
-                   std::to_string(patch);
-        }
-    };
-    
-    static bool LoadVersionedLibrary(const std::string& base_name,
-                                    const Version& min_version,
-                                    ctp::SharedLibrary& lib) {
-        // Try exact version first
-        std::string versioned_name = base_name + "-" + min_version.ToString();
-        if (CrossPlatformLoader::LoadLibrary(versioned_name, lib)) {
-            if (CheckVersion(lib, min_version)) {
-                return true;
-            }
-        }
-        
-        // Try major.minor version
-        versioned_name = base_name + "-" + 
-                        std::to_string(min_version.major) + "." + 
-                        std::to_string(min_version.minor);
-        if (CrossPlatformLoader::LoadLibrary(versioned_name, lib)) {
-            if (CheckVersion(lib, min_version)) {
-                return true;
-            }
-        }
-        
-        // Try major version only
-        versioned_name = base_name + "-" + std::to_string(min_version.major);
-        if (CrossPlatformLoader::LoadLibrary(versioned_name, lib)) {
-            if (CheckVersion(lib, min_version)) {
-                return true;
-            }
-        }
-        
-        // Try unversioned
-        if (CrossPlatformLoader::LoadLibrary(base_name, lib)) {
-            if (CheckVersion(lib, min_version)) {
-                return true;
-            }
-        }
-        
-        return false;
+ public:
+  struct Version {
+    int major = 0;
+    int minor = 0;
+    int patch = 0;
+    std::string ToString() const {
+      return std::to_string(major) + "." + std::to_string(minor) + "." +
+             std::to_string(patch);
     }
-    
-private:
-    static bool CheckVersion(ctp::SharedLibrary& lib, const Version& min_version) {
-        typedef void (*GetVersionFunc)(int*, int*, int*);
-        GetVersionFunc get_version = (GetVersionFunc)lib.GetSymbol("GetLibraryVersion");
-        
-        if (get_version) {
-            Version lib_version;
-            get_version(&lib_version.major, &lib_version.minor, &lib_version.patch);
-            
-            if (lib_version.major > min_version.major) return true;
-            if (lib_version.major < min_version.major) return false;
-            
-            if (lib_version.minor > min_version.minor) return true;
-            if (lib_version.minor < min_version.minor) return false;
-            
-            return lib_version.patch >= min_version.patch;
-        }
-        
-        // No version function, assume compatible
-        return true;
+  };
+
+  static bool LoadVersionedLibrary(const std::string &base_name,
+                                   const Version &min_version,
+                                   ctp::SharedLibrary &lib) {
+    const std::string ext = ctp::SystemInfo::GetSharedLibExtension();
+
+    // Try a version-suffixed name first, then the bare name.
+    lib.Load(base_name + "-" + min_version.ToString() + ext);
+    if (lib.IsNull()) {
+      lib.Load(base_name + ext);
     }
+    if (lib.IsNull()) {
+      return false;
+    }
+    return CheckVersion(lib, min_version);
+  }
+
+ private:
+  static bool CheckVersion(ctp::SharedLibrary &lib,
+                           const Version &min_version) {
+    typedef void (*GetVersionFunc)(int *, int *, int *);
+    auto get_version =
+        reinterpret_cast<GetVersionFunc>(lib.GetSymbol("GetLibraryVersion"));
+    if (get_version == nullptr) {
+      return true;  // No version export: assume compatible.
+    }
+    Version v;
+    get_version(&v.major, &v.minor, &v.patch);
+    if (v.major != min_version.major) return v.major > min_version.major;
+    if (v.minor != min_version.minor) return v.minor > min_version.minor;
+    return v.patch >= min_version.patch;
+  }
 };
 ```
 
@@ -732,246 +481,124 @@ private:
 ### Hot-Reloading Plugins
 
 ```cpp
-class HotReloadablePluginManager : public PluginManager {
-    std::map<std::string, std::time_t> plugin_timestamps_;
-    std::thread monitor_thread_;
-    std::atomic<bool> monitoring_;
-    
-public:
-    void StartHotReload(int check_interval_seconds = 5) {
-        monitoring_ = true;
-        monitor_thread_ = std::thread([this, check_interval_seconds]() {
-            MonitorPlugins(check_interval_seconds);
-        });
+#include "clio_ctp/introspect/system_info.h"
+#include <chrono>
+#include <cstdio>
+#include <filesystem>
+#include <string>
+#include <thread>
+
+// Watches a shared-library file and reloads it when its modification time
+// changes. std::filesystem::last_write_time is portable (C++17/20), so no
+// platform-specific stat() is needed.
+class HotReloadableLibrary {
+  std::string path_;
+  ctp::SharedLibrary lib_;
+  std::filesystem::file_time_type stamp_{};
+
+ public:
+  explicit HotReloadableLibrary(const std::string &path) : path_(path) {
+    Reload();
+  }
+
+  // Returns true if the file changed and was reloaded.
+  bool CheckForUpdate() {
+    std::error_code ec;
+    auto mtime = std::filesystem::last_write_time(path_, ec);
+    if (ec) {
+      return false;
     }
-    
-    void StopHotReload() {
-        monitoring_ = false;
-        if (monitor_thread_.joinable()) {
-            monitor_thread_.join();
-        }
+    if (mtime != stamp_) {
+      Reload();
+      return true;
     }
-    
-private:
-    void MonitorPlugins(int interval) {
-        while (monitoring_) {
-            CheckForUpdates();
-            std::this_thread::sleep_for(std::chrono::seconds(interval));
-        }
+    return false;
+  }
+
+  ctp::SharedLibrary &library() { return lib_; }
+
+ private:
+  void Reload() {
+    std::error_code ec;
+    stamp_ = std::filesystem::last_write_time(path_, ec);
+    lib_.Load(path_);
+    if (lib_.IsNull()) {
+      fprintf(stderr, "Reload failed: %s\n", lib_.GetError().c_str());
     }
-    
-    void CheckForUpdates() {
-        auto plugin_list = GetPluginList();
-        
-        for (const auto& info : plugin_list) {
-            struct stat st;
-            if (stat(info.path.c_str(), &st) == 0) {
-                auto it = plugin_timestamps_.find(info.path);
-                if (it != plugin_timestamps_.end()) {
-                    if (st.st_mtime > it->second) {
-                        printf("Plugin %s has been updated, reloading...\n", 
-                               info.name.c_str());
-                        ReloadPlugin(info.name);
-                        plugin_timestamps_[info.path] = st.st_mtime;
-                    }
-                } else {
-                    plugin_timestamps_[info.path] = st.st_mtime;
-                }
-            }
-        }
-    }
-    
-    void ReloadPlugin(const std::string& plugin_name) {
-        // Find and unload the plugin
-        auto it = plugin_index_.find(plugin_name);
-        if (it != plugin_index_.end()) {
-            auto& plugin = plugins_[it->second];
-            std::string path = plugin->info.path;
-            
-            // Shutdown and destroy
-            plugin->instance->Shutdown();
-            plugin->destroy_func(plugin->instance);
-            
-            // Remove from list
-            plugins_.erase(plugins_.begin() + it->second);
-            plugin_index_.erase(it);
-            
-            // Reload
-            LoadPlugin(path);
-        }
-    }
+  }
 };
+
+void example() {
+  HotReloadableLibrary watcher(ctp::SystemInfo::GetMathLibraryName());
+  for (int i = 0; i < 3; ++i) {
+    if (watcher.CheckForUpdate()) {
+      printf("library reloaded\n");
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+}
 ```
 
 ## Complete Example: Extensible Application
 
 ```cpp
 #include "clio_ctp/introspect/system_info.h"
-#include <iostream>
-#include <memory>
+#include <cstdio>
+#include <string>
+#include <vector>
 
+// A minimal extensible host: it discovers shared libraries in a directory and
+// keeps the ones that export a required set of entry points. This mirrors how
+// clio's ModuleManager validates a ChiMod's symbols before using it.
 class ExtensibleApplication {
-    std::unique_ptr<PluginManager> plugin_manager_;
-    std::string plugin_directory_;
-    
-public:
-    ExtensibleApplication() {
-        plugin_manager_ = std::make_unique<PluginManager>(this);
-        plugin_directory_ = GetPluginDirectory();
+  std::string plugin_dir_;
+  std::vector<ctp::SharedLibrary> loaded_;
+
+ public:
+  ExtensibleApplication() {
+    // Prefer an explicit env override, else the directory of this module.
+    plugin_dir_ = ctp::SystemInfo::Getenv("APP_PLUGIN_DIR");
+    if (plugin_dir_.empty()) {
+      plugin_dir_ = ctp::SystemInfo::GetModuleDirectory();
     }
-    
-    int Run(int argc, char* argv[]) {
-        try {
-            // Initialize application
-            if (!Initialize()) {
-                return 1;
-            }
-            
-            // Load plugins
-            LoadPlugins();
-            
-            // Display loaded plugins
-            DisplayPlugins();
-            
-            // Execute plugins
-            ExecutePlugins();
-            
-            // Run main application loop
-            return MainLoop();
-            
-        } catch (const std::exception& e) {
-            std::cerr << "Application error: " << e.what() << std::endl;
-            return 1;
-        }
+  }
+
+  int Run() {
+    const std::string ext = ctp::SystemInfo::GetSharedLibExtension();
+    for (const std::string &name :
+         ctp::SystemInfo::ListDirectory(plugin_dir_)) {
+      if (name.size() < ext.size() ||
+          name.compare(name.size() - ext.size(), ext.size(), ext) != 0) {
+        continue;  // Not a shared library.
+      }
+      const std::string path = plugin_dir_ + "/" + name;
+      ctp::SharedLibrary lib(path);
+      if (lib.IsNull()) {
+        fprintf(stderr, "skip %s: %s\n", path.c_str(), lib.GetError().c_str());
+        continue;
+      }
+      if (!HasRequiredSymbols(lib)) {
+        fprintf(stderr, "skip %s: missing required symbols\n", path.c_str());
+        continue;
+      }
+      printf("loaded plugin: %s\n", name.c_str());
+      loaded_.push_back(std::move(lib));
     }
-    
-private:
-    bool Initialize() {
-        printf("Initializing extensible application...\n");
-        
-        // Set up plugin environment
-        SetupPluginEnvironment();
-        
-        return true;
-    }
-    
-    void SetupPluginEnvironment() {
-        // Add plugin directory to library path
-        std::string ld_path = ctp::SystemInfo::Getenv("LD_LIBRARY_PATH");
-        if (!ld_path.empty()) {
-            ld_path = plugin_directory_ + ":" + ld_path;
-        } else {
-            ld_path = plugin_directory_;
-        }
-        ctp::SystemInfo::Setenv("LD_LIBRARY_PATH", ld_path, 1);
-        
-        // Set plugin-specific environment
-        ctp::SystemInfo::Setenv("PLUGIN_API_VERSION", PLUGIN_API_VERSION, 1);
-        ctp::SystemInfo::Setenv("APP_PLUGIN_DIR", plugin_directory_, 1);
-    }
-    
-    std::string GetPluginDirectory() {
-        // Check environment variable
-        std::string dir = ctp::SystemInfo::Getenv("APP_PLUGIN_DIR");
-        if (!dir.empty()) {
-            return dir;
-        }
-        
-        // Check relative to executable
-        std::string exe_dir = GetExecutableDirectory();
-        if (!exe_dir.empty()) {
-            return exe_dir + "/plugins";
-        }
-        
-        // Default
-        return "./plugins";
-    }
-    
-    std::string GetExecutableDirectory() {
-#ifdef __linux__
-        char path[PATH_MAX];
-        ssize_t len = readlink("/proc/self/exe", path, sizeof(path)-1);
-        if (len != -1) {
-            path[len] = '\0';
-            std::string exe_path(path);
-            return exe_path.substr(0, exe_path.find_last_of('/'));
-        }
-#endif
-        return "";
-    }
-    
-    void LoadPlugins() {
-        printf("Loading plugins from: %s\n", plugin_directory_.c_str());
-        
-        // Load all plugins from directory
-        plugin_manager_->LoadAllPlugins(plugin_directory_);
-        
-        // Load specific required plugins
-        LoadRequiredPlugin("core_plugin");
-        LoadRequiredPlugin("ui_plugin");
-    }
-    
-    void LoadRequiredPlugin(const std::string& plugin_name) {
-        if (!plugin_manager_->GetPlugin(plugin_name)) {
-            std::string plugin_file = plugin_directory_ + "/" + 
-                CrossPlatformLoader::MakeLibraryName(plugin_name);
-            
-            if (!plugin_manager_->LoadPlugin(plugin_file)) {
-                fprintf(stderr, "Required plugin %s not found\n", plugin_name.c_str());
-            }
-        }
-    }
-    
-    void DisplayPlugins() {
-        auto plugins = plugin_manager_->GetPluginList();
-        
-        printf("\nLoaded Plugins (%zu):\n", plugins.size());
-        printf("%-20s %-10s %-10s %s\n", "Name", "Version", "Status", "Description");
-        printf("%-20s %-10s %-10s %s\n", "----", "-------", "------", "-----------");
-        
-        for (const auto& info : plugins) {
-            printf("%-20s %-10s %-10s %s\n",
-                   info.name.c_str(),
-                   info.version.c_str(),
-                   info.enabled ? "Enabled" : "Disabled",
-                   info.description.c_str());
-        }
-        printf("\n");
-    }
-    
-    void ExecutePlugins() {
-        printf("Executing all enabled plugins...\n");
-        plugin_manager_->ExecuteAllPlugins();
-    }
-    
-    int MainLoop() {
-        printf("Application running. Press 'q' to quit.\n");
-        
-        char command;
-        while (std::cin >> command) {
-            if (command == 'q') {
-                break;
-            } else if (command == 'r') {
-                // Reload plugins
-                LoadPlugins();
-                DisplayPlugins();
-            } else if (command == 'e') {
-                // Execute plugins
-                ExecutePlugins();
-            } else if (command == 'l') {
-                // List plugins
-                DisplayPlugins();
-            }
-        }
-        
-        printf("Application shutting down...\n");
-        return 0;
-    }
+    printf("loaded %zu plugins\n", loaded_.size());
+    return 0;
+  }
+
+ private:
+  // Keep only libraries that export the host's required entry points.
+  static bool HasRequiredSymbols(ctp::SharedLibrary &lib) {
+    return lib.GetSymbol("CreatePlugin") != nullptr &&
+           lib.GetSymbol("DestroyPlugin") != nullptr;
+  }
 };
 
-int main(int argc, char* argv[]) {
-    ExtensibleApplication app;
-    return app.Run(argc, argv);
+void example() {
+  ExtensibleApplication app;
+  app.Run();
 }
 ```
 
@@ -983,7 +610,7 @@ int main(int argc, char* argv[]) {
 4. **RAII Pattern**: Use move semantics and automatic cleanup via destructors
 5. **Version Checking**: Implement API version checking for plugin compatibility
 6. **Search Paths**: Implement flexible library search paths for deployment flexibility
-7. **Platform Abstraction**: Use wrapper functions to handle platform differences
+7. **Platform Abstraction**: Use the `ctp::SystemInfo` helpers (`GetSharedLibExtension`, `GetLibrarySearchPathVar`, `GetPathListSeparator`) to handle platform differences
 8. **Resource Management**: Ensure plugins properly clean up resources in shutdown
 9. **Thread Safety**: Consider thread safety when loading/unloading plugins
 10. **Documentation**: Document plugin interfaces thoroughly for third-party developers

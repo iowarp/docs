@@ -1,7 +1,7 @@
 ---
 sidebar_position: 1
 title: Installation
-description: Install CLIO Core via pip (portable) or build from source via Conda, Docker, or Spack.
+description: Install CLIO Core via pip or Conda prebuilt packages, Docker, or build from source via Spack.
 ---
 
 # Installation
@@ -71,35 +71,43 @@ need:
 </TabItem>
 <TabItem value="conda" label="Conda">
 
-The Conda installer builds CLIO Core from source with all optional
-components enabled. It is the fastest path to a full-featured build
-that includes GPU, MPI, HDF5, and adapter support.
+Prebuilt `iowarp-core` packages are published to the
+[`iowarp` channel on Anaconda.org](https://anaconda.org/iowarp/iowarp-core).
+Install Miniconda (if you don't already have conda), then install the package:
+
+```bash
+# Install Miniconda — Linux x86_64 shown; for other platforms use the matching
+# installer from https://www.anaconda.com/download/success
+curl -fsSL https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -o miniconda.sh
+bash miniconda.sh -b -p "$HOME/miniconda3"
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+
+# Install iowarp-core (conda-forge supplies its dependencies)
+conda create -n iowarp -c iowarp -c conda-forge iowarp-core
+conda activate iowarp
+```
+
+Activate the environment in every new terminal with `conda activate iowarp`.
+
+#### Build from source (optional)
+
+To enable additional features (CUDA/ROCm/MPI) or build local changes, build the
+conda recipe yourself. `IOWARP_PRESET` selects a
+[CMake preset](https://github.com/iowarp/clio-core/blob/main/CMakePresets.json):
 
 ```bash
 git clone --recurse-submodules https://github.com/iowarp/clio-core.git
 cd clio-core
-./install.sh
+
+# conda-build is a base-env plugin — install it there
+conda install -n base -y conda-build -c conda-forge
+
+# Common presets: release, debug, cuda-release, rocm-release
+IOWARP_PRESET=release conda build installers/conda/ \
+    -c conda-forge --output-folder build/conda-output
+
+conda install -c conda-forge build/conda-output/*/iowarp-core-*.conda
 ```
-
-Activate the environment in every new terminal:
-
-```bash
-conda activate iowarp
-```
-
-#### Build Variants
-
-Pass a variant name to enable additional features:
-
-| Variant | Command | What it enables |
-|---------|---------|-----------------|
-| Release (default) | `./install.sh` | CPU-only, all engines |
-| Debug | `./install.sh debug` | Debug symbols, sanitizers |
-| CUDA | `./install.sh cuda` | NVIDIA GPU acceleration |
-| ROCm | `./install.sh rocm` | AMD GPU acceleration |
-| MPI | `./install.sh mpi` | Distributed multi-node |
-| Full | `./install.sh full` | CUDA + MPI + everything |
-| FUSE | `./install.sh release-fuse` | FUSE adapter for POSIX |
 
 ### Verify the installation
 

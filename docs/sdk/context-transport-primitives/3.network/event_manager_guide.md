@@ -15,10 +15,10 @@ Identifies the source of an event:
 ```cpp
 namespace ctp::lbm {
 struct EventTrigger {
-  int fd;          // File descriptor that triggered the event
-  int event_id;    // Unique event identifier
+  int fd_;        // File descriptor / socket that triggered the event
+  int event_id_;  // Unique id returned by AddEvent / AddSignalEvent
 };
-}
+}  // namespace ctp::lbm
 ```
 
 ### EventAction
@@ -27,10 +27,14 @@ Abstract base class for event handlers. Subclass this to define custom behavior 
 
 ```cpp
 namespace ctp::lbm {
-struct EventAction {
-  virtual void Run(const EventInfo &info) = 0;
+struct EventInfo;  // defined below
+
+class EventAction {
+ public:
+  virtual ~EventAction() = default;
+  virtual void Run(const EventInfo &event) = 0;
 };
-}
+}  // namespace ctp::lbm
 ```
 
 ### EventInfo
@@ -38,13 +42,21 @@ struct EventAction {
 Contains full context for a triggered event:
 
 ```cpp
+#include <cstdint>
+
 namespace ctp::lbm {
-struct EventInfo {
-  EventTrigger trigger;      // Which fd/event fired
-  uint32_t epoll_events;     // epoll event flags (EPOLLIN, EPOLLOUT, etc.)
-  EventAction *action;       // Handler to invoke
+struct EventTrigger {
+  int fd_;
+  int event_id_;
 };
-}
+class EventAction;  // handler base class, defined elsewhere
+
+struct EventInfo {
+  EventTrigger trigger_;  // Which fd/event fired
+  uint32_t events_;       // Readiness mask (POLLRDNORM on Windows, EPOLLIN on Linux)
+  EventAction *action_;   // Handler to invoke
+};
+}  // namespace ctp::lbm
 ```
 
 ## EventManager API
@@ -52,7 +64,14 @@ struct EventInfo {
 ### Construction
 
 ```cpp
-EventManager();
+namespace ctp::lbm {
+class EventManager {
+ public:
+  // Creates the wait primitive: an epoll instance on Linux, a
+  // WSAEvent-based demultiplexer on Windows.
+  EventManager();
+};
+}  // namespace ctp::lbm
 ```
 
 Creates an epoll instance internally. The epoll file descriptor is available via `GetEpollFd()`.
@@ -60,7 +79,18 @@ Creates an epoll instance internally. The epoll file descriptor is available via
 ### AddEvent
 
 ```cpp
-void AddEvent(int fd, uint32_t events, EventAction* action);
+#include <cstdint>
+
+namespace ctp::lbm {
+class EventAction;
+
+class EventManager {
+ public:
+  // Register a socket/fd for readiness events. Returns the event id (>= 0).
+  int AddEvent(int fd, uint32_t events = 0x0100 /*POLLRDNORM*/,
+               EventAction *action = nullptr);
+};
+}  // namespace ctp::lbm
 ```
 
 Register a file descriptor for monitoring.
@@ -72,24 +102,37 @@ Register a file descriptor for monitoring.
 
 **Example:**
 ```cpp
+#include <clio_ctp/lightbeam/event_manager.h>
+
 class MyHandler : public ctp::lbm::EventAction {
  public:
   void Run(const ctp::lbm::EventInfo &info) override {
-    // Handle readable data on info.trigger.fd
-    char buf[1024];
-    read(info.trigger.fd, buf, sizeof(buf));
+    // Socket info.trigger_.fd_ is ready; info.events_ holds the mask.
+    int ready_fd = info.trigger_.fd_;
+    (void)ready_fd;
   }
 };
 
-ctp::lbm::EventManager em;
-MyHandler handler;
-em.AddEvent(socket_fd, EPOLLIN, &handler);
+void example(int socket_fd) {
+  ctp::lbm::EventManager em;
+  MyHandler handler;
+  // kDefaultReadEvent is the platform-neutral "data available" mask.
+  em.AddEvent(socket_fd, ctp::lbm::kDefaultReadEvent, &handler);
+}
 ```
 
 ### AddSignalEvent
 
 ```cpp
-void AddSignalEvent(EventAction* action);
+namespace ctp::lbm {
+class EventAction;
+
+class EventManager {
+ public:
+  // Create this thread's named wakeup event. Returns the event id (>= 0).
+  int AddSignalEvent(EventAction *action = nullptr);
+};
+}  // namespace ctp::lbm
 ```
 
 Register a handler for `SIGUSR1` signals. Uses `signalfd` internally to convert the signal into a file descriptor event that integrates with the epoll loop.
@@ -99,21 +142,34 @@ Register a handler for `SIGUSR1` signals. Uses `signalfd` internally to convert 
 
 **Example:**
 ```cpp
+#include <clio_ctp/lightbeam/event_manager.h>
+
 class WakeupHandler : public ctp::lbm::EventAction {
  public:
-  void Run(const ctp::lbm::EventInfo &info) override {
-    // Worker was signaled to wake up
+  void Run(const ctp::lbm::EventInfo &event) override {
+    // This thread was woken by EventManager::Signal(pid, tid).
+    (void)event;
   }
 };
 
-WakeupHandler wakeup;
-em.AddSignalEvent(&wakeup);
+void example() {
+  ctp::lbm::EventManager em;
+  WakeupHandler wakeup;
+  em.AddSignalEvent(&wakeup);
+}
 ```
 
 ### Signal
 
 ```cpp
-static void Signal(pid_t runtime_pid, pid_t tid);
+namespace ctp::lbm {
+class EventManager {
+ public:
+  // Wake the thread (runtime_pid, tid) that called AddSignalEvent().
+  // Returns 0 on success, -1 if the target has not registered yet.
+  static int Signal(int runtime_pid, int tid);
+};
+}  // namespace ctp::lbm
 ```
 
 Send a `SIGUSR1` signal to a specific thread. Uses `tgkill` to target the exact thread.
@@ -124,14 +180,26 @@ Send a `SIGUSR1` signal to a specific thread. Uses `tgkill` to target the exact 
 
 **Example:**
 ```cpp
-// Wake up a sleeping worker thread
-ctp::lbm::EventManager::Signal(getpid(), worker_tid);
+#include <clio_ctp/introspect/system_info.h>
+#include <clio_ctp/lightbeam/event_manager.h>
+
+void example(int worker_tid) {
+  // Wake a worker thread (worker_tid) in this process.
+  ctp::lbm::EventManager::Signal(ctp::SystemInfo::GetPid(), worker_tid);
+}
 ```
 
 ### Wait
 
 ```cpp
-void Wait(int timeout_us);
+namespace ctp::lbm {
+class EventManager {
+ public:
+  // Block until an event fires or timeout_us elapses (< 0 = wait forever).
+  // Returns the number of events dispatched (0 on timeout).
+  int Wait(int timeout_us = -1);
+};
+}  // namespace ctp::lbm
 ```
 
 Block until one or more registered events fire, then dispatch their handlers.
@@ -143,17 +211,28 @@ Internally calls `epoll_wait` with up to `kMaxEvents` (256) events per call. For
 
 **Example:**
 ```cpp
-// Event loop
-while (running) {
-  em.Wait(1000);  // Wait up to 1ms
+#include <clio_ctp/lightbeam/event_manager.h>
+
+void example() {
+  ctp::lbm::EventManager em;
+  bool running = true;
+  while (running) {
+    int nfds = em.Wait(1000);  // wait up to 1 ms (microseconds)
+    (void)nfds;
+  }
 }
 ```
 
 ### Accessors
 
 ```cpp
-int GetEpollFd();    // Returns the epoll file descriptor
-int GetSignalFd();   // Returns the signalfd (after AddSignalEvent)
+namespace ctp::lbm {
+class EventManager {
+ public:
+  int GetEpollFd() const;   // Underlying epoll/wait handle (-1 if N/A)
+  int GetSignalFd() const;  // Signal handle, valid after AddSignalEvent()
+};
+}  // namespace ctp::lbm
 ```
 
 ## Constants
@@ -172,36 +251,36 @@ A typical event loop combines file descriptor events with signal-based wakeups:
 class ReadHandler : public ctp::lbm::EventAction {
  public:
   void Run(const ctp::lbm::EventInfo &info) override {
-    char buf[4096];
-    ssize_t n = read(info.trigger.fd, buf, sizeof(buf));
-    if (n > 0) {
-      // Process data
-    }
+    // Socket info.trigger_.fd_ is readable -- drain it here.
+    int ready_fd = info.trigger_.fd_;
+    (void)ready_fd;
   }
 };
 
 class SignalHandler : public ctp::lbm::EventAction {
  public:
   void Run(const ctp::lbm::EventInfo &info) override {
-    // Woken up by Signal() call - check for new work
+    // Woken up by an EventManager::Signal() call -- check for new work.
+    (void)info;
   }
 };
 
-void event_loop() {
+void event_loop(int socket_fd) {
   ctp::lbm::EventManager em;
 
   ReadHandler read_handler;
   SignalHandler signal_handler;
 
-  // Monitor a socket for incoming data
-  em.AddEvent(socket_fd, EPOLLIN, &read_handler);
+  // Monitor a socket for incoming data.
+  em.AddEvent(socket_fd, ctp::lbm::kDefaultReadEvent, &read_handler);
 
-  // Allow other threads to wake us via Signal()
+  // Allow other threads/processes to wake us via Signal().
   em.AddSignalEvent(&signal_handler);
 
-  // Run event loop
+  // Run the event loop.
+  bool running = true;
   while (running) {
-    em.Wait(10000);  // 10ms timeout
+    em.Wait(10000);  // 10 ms timeout (microseconds)
   }
 }
 ```

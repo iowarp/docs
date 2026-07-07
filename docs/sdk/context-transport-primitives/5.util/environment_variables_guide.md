@@ -10,60 +10,76 @@ The Environment Variables API in Hermes Shared Memory (HSHM) provides cross-plat
 
 ```cpp
 #include "clio_ctp/introspect/system_info.h"
+#include <cstdio>
+#include <string>
 
-// Get environment variables with optional size limits
-std::string home_dir = ctp::SystemInfo::Getenv("HOME");
-std::string path = ctp::SystemInfo::Getenv("PATH", ctp::Unit<size_t>::Kilobytes(64));
-std::string user = ctp::SystemInfo::Getenv("USER");
+void example() {
+    // Get environment variables with optional size limits
+    std::string home_dir = ctp::SystemInfo::Getenv("HOME");
+    std::string path =
+        ctp::SystemInfo::Getenv("PATH", ctp::Unit<size_t>::Kilobytes(64));
+    std::string user = ctp::SystemInfo::Getenv("USER");
 
-// Check if variable exists
-std::string config_path = ctp::SystemInfo::Getenv("MY_APP_CONFIG");
-if (config_path.empty()) {
-    printf("MY_APP_CONFIG not set, using default\n");
-    config_path = "/etc/myapp/default.conf";
+    // Getenv returns an empty string when the variable is not set
+    std::string config_path = ctp::SystemInfo::Getenv("MY_APP_CONFIG");
+    if (config_path.empty()) {
+        printf("MY_APP_CONFIG not set, using default\n");
+        config_path = "/etc/myapp/default.conf";
+    }
+
+    // Get with size limit (important for potentially large variables)
+    size_t max_size = ctp::Unit<size_t>::Megabytes(1);
+    std::string large_var = ctp::SystemInfo::Getenv("LARGE_DATA", max_size);
 }
-
-// Get with size limit (important for potentially large variables)
-size_t max_size = ctp::Unit<size_t>::Megabytes(1);
-std::string large_var = ctp::SystemInfo::Getenv("LARGE_DATA", max_size);
 ```
 
 ### Setting Environment Variables
 
 ```cpp
-// Set environment variables with overwrite flag
-ctp::SystemInfo::Setenv("MY_APP_VERSION", "2.1.0", 1);        // overwrite=1 (always set)
-ctp::SystemInfo::Setenv("MY_APP_DEBUG", "true", 0);           // overwrite=0 (don't overwrite if exists)
-ctp::SystemInfo::Setenv("MY_APP_LOG_LEVEL", "INFO", 1);
+#include "clio_ctp/introspect/system_info.h"
+#include <string>
 
-// Setting paths
-std::string app_home = "/opt/myapp";
-ctp::SystemInfo::Setenv("MY_APP_HOME", app_home, 1);
-ctp::SystemInfo::Setenv("MY_APP_CONFIG", app_home + "/config", 1);
-ctp::SystemInfo::Setenv("MY_APP_DATA", app_home + "/data", 1);
+void example() {
+    // Set environment variables with overwrite flag
+    ctp::SystemInfo::Setenv("MY_APP_VERSION", "2.1.0", 1);   // overwrite=1 (always set)
+    ctp::SystemInfo::Setenv("MY_APP_DEBUG", "true", 0);      // overwrite=0 (keep existing)
+    ctp::SystemInfo::Setenv("MY_APP_LOG_LEVEL", "INFO", 1);
 
-// Setting numeric values
-ctp::SystemInfo::Setenv("MAX_THREADS", std::to_string(8), 1);
-ctp::SystemInfo::Setenv("BUFFER_SIZE", std::to_string(1024*1024), 1);
+    // Setting paths
+    std::string app_home = "/opt/myapp";
+    ctp::SystemInfo::Setenv("MY_APP_HOME", app_home, 1);
+    ctp::SystemInfo::Setenv("MY_APP_CONFIG", app_home + "/config", 1);
+    ctp::SystemInfo::Setenv("MY_APP_DATA", app_home + "/data", 1);
+
+    // Setting numeric values
+    ctp::SystemInfo::Setenv("MAX_THREADS", std::to_string(8), 1);
+    ctp::SystemInfo::Setenv("BUFFER_SIZE", std::to_string(1024 * 1024), 1);
+}
 ```
 
 ### Unsetting Environment Variables
 
 ```cpp
-// Remove environment variables
-ctp::SystemInfo::Unsetenv("TEMP_VAR");
-ctp::SystemInfo::Unsetenv("OLD_CONFIG");
-ctp::SystemInfo::Unsetenv("DEPRECATED_OPTION");
+#include "clio_ctp/introspect/system_info.h"
+#include <string>
+#include <vector>
 
-// Clean up temporary variables
-std::vector<std::string> temp_vars = {
-    "TMP_BUILD_DIR",
-    "TMP_CACHE",
-    "TMP_SESSION_ID"
-};
+void example() {
+    // Remove environment variables
+    ctp::SystemInfo::Unsetenv("TEMP_VAR");
+    ctp::SystemInfo::Unsetenv("OLD_CONFIG");
+    ctp::SystemInfo::Unsetenv("DEPRECATED_OPTION");
 
-for (const auto& var : temp_vars) {
-    ctp::SystemInfo::Unsetenv(var.c_str());
+    // Clean up temporary variables
+    std::vector<std::string> temp_vars = {
+        "TMP_BUILD_DIR",
+        "TMP_CACHE",
+        "TMP_SESSION_ID"
+    };
+
+    for (const auto& var : temp_vars) {
+        ctp::SystemInfo::Unsetenv(var.c_str());
+    }
 }
 ```
 
@@ -72,6 +88,11 @@ for (const auto& var : temp_vars) {
 ### Application Configuration Class
 
 ```cpp
+#include "clio_ctp/introspect/system_info.h"
+#include <cstdio>
+#include <string>
+#include <thread>
+
 class AppConfiguration {
 private:
     std::string config_dir_;
@@ -219,6 +240,10 @@ public:
 ### Basic Variable Expansion
 
 ```cpp
+#include "clio_ctp/introspect/system_info.h"
+#include <cctype>
+#include <string>
+
 class EnvironmentExpander {
 public:
     // Expand ${VAR} patterns in strings
@@ -272,13 +297,20 @@ public:
 };
 
 // Usage examples
-std::string path1 = EnvironmentExpander::ExpandVariables("${HOME}/data/${USER}/files");
-std::string path2 = EnvironmentExpander::ExpandSimpleVariables("$HOME/data/$USER/files");
+void example() {
+    std::string path1 =
+        EnvironmentExpander::ExpandVariables("${HOME}/data/${USER}/files");
+    std::string path2 =
+        EnvironmentExpander::ExpandSimpleVariables("$HOME/data/$USER/files");
+}
 ```
 
 ### Advanced Expansion with Defaults
 
 ```cpp
+#include "clio_ctp/introspect/system_info.h"
+#include <string>
+
 class AdvancedEnvironmentExpander {
 public:
     // Expand with default values: ${VAR:-default}
@@ -347,12 +379,14 @@ public:
 };
 
 // Usage examples
-std::string config = AdvancedEnvironmentExpander::ExpandWithDefaults(
-    "${CONFIG_DIR:-/etc/myapp}/config.yaml"
-);
-std::string message = AdvancedEnvironmentExpander::ExpandWithAlternative(
-    "${DEBUG:+Debug mode is enabled}"
-);
+void example() {
+    std::string config = AdvancedEnvironmentExpander::ExpandWithDefaults(
+        "${CONFIG_DIR:-/etc/myapp}/config.yaml"
+    );
+    std::string message = AdvancedEnvironmentExpander::ExpandWithAlternative(
+        "${DEBUG:+Debug mode is enabled}"
+    );
+}
 ```
 
 ## Environment Setup Patterns
@@ -360,13 +394,19 @@ std::string message = AdvancedEnvironmentExpander::ExpandWithAlternative(
 ### Application Environment Initialization
 
 ```cpp
+#include "clio_ctp/introspect/system_info.h"
+#include <chrono>
+#include <cstdio>
+#include <string>
+
 class EnvironmentSetup {
 public:
     static void InitializeApplicationEnvironment(const std::string& app_name) {
         // Set application identification
         ctp::SystemInfo::Setenv("APP_NAME", app_name, 1);
         ctp::SystemInfo::Setenv("APP_VERSION", GetVersion(), 1);
-        ctp::SystemInfo::Setenv("APP_PID", std::to_string(getpid()), 1);
+        ctp::SystemInfo::Setenv("APP_PID",
+                                std::to_string(ctp::SystemInfo::GetPid()), 1);
         
         // Set up directory structure
         SetupDirectories(app_name);
@@ -431,15 +471,11 @@ private:
             now.time_since_epoch()).count();
         ctp::SystemInfo::Setenv("APP_START_TIME", std::to_string(timestamp), 1);
         
-        // Set hostname
-        char hostname[256];
-        if (gethostname(hostname, sizeof(hostname)) == 0) {
+        // Set hostname (cross-platform via SystemInfo)
+        std::string hostname = ctp::SystemInfo::GetHostname();
+        if (!hostname.empty()) {
             ctp::SystemInfo::Setenv("APP_HOSTNAME", hostname, 1);
         }
-        
-        // Set user info
-        ctp::SystemInfo::Setenv("APP_UID", std::to_string(getuid()), 1);
-        ctp::SystemInfo::Setenv("APP_GID", std::to_string(getgid()), 1);
     }
     
     static std::string GetExecutablePath() {
@@ -492,6 +528,12 @@ private:
 ## Environment Variable Security
 
 ```cpp
+#include "clio_ctp/introspect/system_info.h"
+#include <map>
+#include <set>
+#include <string>
+#include <vector>
+
 class SecureEnvironment {
 public:
     // Remove sensitive variables
@@ -580,8 +622,26 @@ private:
 
 ```cpp
 #include "clio_ctp/introspect/system_info.h"
+#include <cstdio>
+#include <exception>
+#include <filesystem>
 #include <iostream>
 #include <map>
+#include <string>
+#include <vector>
+
+// Minimal configuration loaded directly from environment variables.
+struct AppConfiguration {
+    std::string config_dir;
+    std::string data_dir;
+    bool debug_mode = false;
+
+    void LoadFromEnvironment() {
+        config_dir = ctp::SystemInfo::Getenv("APP_CONFIG_DIR");
+        data_dir = ctp::SystemInfo::Getenv("APP_DATA_DIR");
+        debug_mode = (ctp::SystemInfo::Getenv("APP_DEBUG") == "1");
+    }
+};
 
 class EnvironmentDrivenApp {
     AppConfiguration config_;
@@ -630,8 +690,16 @@ private:
     }
     
     void InitializeEnvironment() {
-        // Set application-specific environment
-        EnvironmentSetup::InitializeApplicationEnvironment("myapp");
+        // Set application-specific environment (inlined for a self-contained
+        // example; see the "Environment Setup Patterns" section above).
+        std::string home = ctp::SystemInfo::Getenv("HOME");
+        if (home.empty()) home = "/tmp";
+        std::string app_home = home + "/.myapp";
+        ctp::SystemInfo::Setenv("APP_HOME", app_home, 1);
+        ctp::SystemInfo::Setenv("APP_CONFIG_DIR", app_home + "/config", 0);
+        ctp::SystemInfo::Setenv("APP_DATA_DIR", app_home + "/data", 0);
+        ctp::SystemInfo::Setenv("APP_PID",
+                                std::to_string(ctp::SystemInfo::GetPid()), 1);
         
         // Set feature flags from command line or config
         SetFeatureFlags();
@@ -655,7 +723,7 @@ private:
     }
     
     void ConfigureDebugging() {
-        if (config_.IsDebugMode()) {
+        if (config_.debug_mode) {
             ctp::SystemInfo::Setenv("MALLOC_CHECK_", "3", 1);  // glibc malloc debugging
             ctp::SystemInfo::Setenv("G_DEBUG", "fatal-warnings", 1);  // GLib debugging
         }
@@ -676,7 +744,7 @@ private:
         
         // Validate paths exist
         std::string config_dir = ctp::SystemInfo::Getenv("APP_CONFIG_DIR");
-        if (!DirectoryExists(config_dir)) {
+        if (!config_dir.empty() && !DirectoryExists(config_dir)) {
             std::cerr << "Config directory does not exist: " << config_dir << "\n";
             return false;
         }
@@ -686,11 +754,9 @@ private:
     
     int RunApplication() {
         printf("Application running with configuration:\n");
-        printf("  Config Dir: %s\n", config_.GetConfigDir().c_str());
-        printf("  Data Dir: %s\n", config_.GetDataDir().c_str());
-        printf("  Debug Mode: %s\n", config_.IsDebugMode() ? "ON" : "OFF");
-        printf("  Max Memory: %zu MB\n", config_.GetMaxMemory() / (1024*1024));
-        printf("  Threads: %d\n", config_.GetThreadCount());
+        printf("  Config Dir: %s\n", config_.config_dir.c_str());
+        printf("  Data Dir: %s\n", config_.data_dir.c_str());
+        printf("  Debug Mode: %s\n", config_.debug_mode ? "ON" : "OFF");
         
         // Main application logic here...
         
@@ -698,8 +764,9 @@ private:
     }
     
     bool DirectoryExists(const std::string& path) {
-        struct stat st;
-        return stat(path.c_str(), &st) == 0 && S_ISDIR(st.st_mode);
+        // std::filesystem is portable across MSVC/Linux/macOS.
+        std::error_code ec;
+        return std::filesystem::is_directory(path, ec);
     }
     
 public:

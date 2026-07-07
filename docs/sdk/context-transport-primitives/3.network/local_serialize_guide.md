@@ -16,6 +16,9 @@
 Serializes objects into a contiguous memory buffer:
 
 ```cpp
+#include <cstddef>
+#include <vector>
+
 template <typename DataT = std::vector<char>>
 class LocalSerialize {
  public:
@@ -47,6 +50,9 @@ class LocalSerialize {
 Deserializes objects from a contiguous memory buffer:
 
 ```cpp
+#include <cstddef>
+#include <vector>
+
 template <typename DataT = std::vector<char>>
 class LocalDeserialize {
  public:
@@ -96,68 +102,138 @@ There are four ways to make a custom type serializable. LocalSerialize checks th
 ### 1. Free `serialize()` function
 
 ```cpp
+#include <clio_ctp/data_structures/serialization/local_serialize.h>
+#include <string>
+#include <vector>
+
 struct MyStruct {
-    int x;
-    std::string name;
+  int x;
+  std::string name;
 };
 
+// Free serialize() found via argument-dependent lookup.
 template <typename Ar>
 void serialize(Ar& ar, MyStruct& obj) {
-    ar & obj.x;
-    ar & obj.name;
+  ar & obj.x;
+  ar & obj.name;
+}
+
+void example() {
+  MyStruct obj{42, "hello"};
+
+  std::vector<char> buffer;
+  ctp::ipc::LocalSerialize<> serializer(buffer);
+  serializer << obj;
+
+  MyStruct restored;
+  ctp::ipc::LocalDeserialize<> deserializer(buffer);
+  deserializer >> restored;
 }
 ```
 
 ### 2. Free `save()`/`load()` functions
 
 ```cpp
+#include <clio_ctp/data_structures/serialization/local_serialize.h>
+#include <string>
+#include <vector>
+
 struct MyStruct {
-    int x;
-    std::string name;
+  int x;
+  std::string name;
 };
 
+// Free save()/load() pair found via argument-dependent lookup.
 template <typename Ar>
 void save(Ar& ar, const MyStruct& obj) {
-    ar << obj.x << obj.name;
+  ar << obj.x << obj.name;
 }
 
 template <typename Ar>
 void load(Ar& ar, MyStruct& obj) {
-    ar >> obj.x >> obj.name;
+  ar >> obj.x >> obj.name;
+}
+
+void example() {
+  MyStruct obj{42, "hello"};
+
+  std::vector<char> buffer;
+  ctp::ipc::LocalSerialize<> serializer(buffer);
+  serializer << obj;
+
+  MyStruct restored;
+  ctp::ipc::LocalDeserialize<> deserializer(buffer);
+  deserializer >> restored;
 }
 ```
 
 ### 3. Member `serialize()` method
 
 ```cpp
-struct MyStruct {
-    int x;
-    std::string name;
+#include <clio_ctp/data_structures/serialization/local_serialize.h>
+#include <string>
+#include <vector>
 
-    template <typename Ar>
-    void serialize(Ar& ar) {
-        ar(x, name);
-    }
+struct MyStruct {
+  int x;
+  std::string name;
+
+  template <typename Ar>
+  void serialize(Ar& ar) {
+    ar(x, name);
+  }
 };
+
+void example() {
+  MyStruct obj;
+  obj.x = 42;
+  obj.name = "hello";
+
+  std::vector<char> buffer;
+  ctp::ipc::LocalSerialize<> serializer(buffer);
+  serializer << obj;
+
+  MyStruct restored;
+  ctp::ipc::LocalDeserialize<> deserializer(buffer);
+  deserializer >> restored;
+}
 ```
 
 ### 4. Member `save()`/`load()` methods
 
 ```cpp
+#include <clio_ctp/data_structures/serialization/local_serialize.h>
+#include <string>
+#include <vector>
+
 struct MyStruct {
-    int x;
-    std::string name;
+  int x;
+  std::string name;
 
-    template <typename Ar>
-    void save(Ar& ar) const {
-        ar << x << name;
-    }
+  template <typename Ar>
+  void save(Ar& ar) const {
+    ar << x << name;
+  }
 
-    template <typename Ar>
-    void load(Ar& ar) {
-        ar >> x >> name;
-    }
+  template <typename Ar>
+  void load(Ar& ar) {
+    ar >> x >> name;
+  }
 };
+
+void example() {
+  MyStruct obj;
+  obj.x = 42;
+  obj.name = "hello";
+
+  std::vector<char> buffer;
+  ctp::ipc::LocalSerialize<> serializer(buffer);
+  serializer << obj;
+
+  MyStruct restored;
+  ctp::ipc::LocalDeserialize<> deserializer(buffer);
+  deserializer >> restored;
+}
 ```
 
 ## Type Traits
@@ -165,15 +241,28 @@ struct MyStruct {
 You can detect at compile time whether a type is serializable:
 
 ```cpp
-// True if T can be serialized by archive type Ar
-ctp::ipc::is_serializeable_v<Ar, T>
+#include <clio_ctp/data_structures/serialization/local_serialize.h>
+
+void example() {
+  // True if T can be serialized by archive type Ar
+  static_assert(
+      ctp::ipc::is_serializeable_v<ctp::ipc::LocalSerialize<>, int>);
+}
 ```
 
 The `is_loading` and `is_saving` type traits distinguish serialization direction:
 
 ```cpp
-// LocalSerialize:  is_saving = true,  is_loading = false
-// LocalDeserialize: is_saving = false, is_loading = true
+#include <clio_ctp/data_structures/serialization/local_serialize.h>
+
+void example() {
+  // LocalSerialize:  is_saving = true,  is_loading = false
+  static_assert(ctp::ipc::LocalSerialize<>::is_saving::value);
+  static_assert(!ctp::ipc::LocalSerialize<>::is_loading::value);
+  // LocalDeserialize: is_saving = false, is_loading = true
+  static_assert(ctp::ipc::LocalDeserialize<>::is_loading::value);
+  static_assert(!ctp::ipc::LocalDeserialize<>::is_saving::value);
+}
 ```
 
 ## Examples
@@ -182,100 +271,126 @@ The `is_loading` and `is_saving` type traits distinguish serialization direction
 
 ```cpp
 #include <clio_ctp/data_structures/serialization/local_serialize.h>
+#include <vector>
+#include <cassert>
 
-int original = 42;
+void example() {
+  int original = 42;
 
-// Serialize
-std::vector<char> buffer;
-ctp::ipc::LocalSerialize<> serializer(buffer);
-serializer << original;
+  // Serialize
+  std::vector<char> buffer;
+  ctp::ipc::LocalSerialize<> serializer(buffer);
+  serializer << original;
 
-// Deserialize
-int restored = 0;
-ctp::ipc::LocalDeserialize<> deserializer(buffer);
-deserializer >> restored;
+  // Deserialize
+  int restored = 0;
+  ctp::ipc::LocalDeserialize<> deserializer(buffer);
+  deserializer >> restored;
 
-assert(restored == 42);
+  assert(restored == 42);
+}
 ```
 
 ### Multiple Values
 
 ```cpp
-int val1 = 10;
-double val2 = 3.14;
-std::string val3 = "hello";
+#include <clio_ctp/data_structures/serialization/local_serialize.h>
+#include <string>
+#include <vector>
+#include <cassert>
 
-// Serialize using operator()
-std::vector<char> buffer;
-ctp::ipc::LocalSerialize<> serializer(buffer);
-serializer(val1, val2, val3);
+void example() {
+  int val1 = 10;
+  double val2 = 3.14;
+  std::string val3 = "hello";
 
-// Deserialize using operator()
-int r1; double r2; std::string r3;
-ctp::ipc::LocalDeserialize<> deserializer(buffer);
-deserializer(r1, r2, r3);
+  // Serialize using operator()
+  std::vector<char> buffer;
+  ctp::ipc::LocalSerialize<> serializer(buffer);
+  serializer(val1, val2, val3);
 
-assert(r1 == 10);
-assert(r2 == 3.14);
-assert(r3 == "hello");
+  // Deserialize using operator()
+  int r1; double r2; std::string r3;
+  ctp::ipc::LocalDeserialize<> deserializer(buffer);
+  deserializer(r1, r2, r3);
+
+  assert(r1 == 10);
+  assert(r2 == 3.14);
+  assert(r3 == "hello");
+}
 ```
 
 ### Containers
 
 ```cpp
-std::vector<int> vec = {1, 2, 3, 4, 5};
-std::unordered_map<std::string, std::string> map = {
-    {"key1", "value1"}, {"key2", "value2"}
-};
+#include <clio_ctp/data_structures/serialization/local_serialize.h>
+#include <string>
+#include <vector>
+#include <unordered_map>
+#include <cassert>
 
-// Serialize
-std::vector<char> buffer;
-ctp::ipc::LocalSerialize<> serializer(buffer);
-serializer << vec << map;
+void example() {
+  std::vector<int> vec = {1, 2, 3, 4, 5};
+  std::unordered_map<std::string, std::string> map = {
+      {"key1", "value1"}, {"key2", "value2"}
+  };
 
-// Deserialize
-std::vector<int> rvec;
-std::unordered_map<std::string, std::string> rmap;
-ctp::ipc::LocalDeserialize<> deserializer(buffer);
-deserializer >> rvec >> rmap;
+  // Serialize
+  std::vector<char> buffer;
+  ctp::ipc::LocalSerialize<> serializer(buffer);
+  serializer << vec << map;
 
-assert(rvec.size() == 5);
-assert(rmap["key1"] == "value1");
+  // Deserialize
+  std::vector<int> rvec;
+  std::unordered_map<std::string, std::string> rmap;
+  ctp::ipc::LocalDeserialize<> deserializer(buffer);
+  deserializer >> rvec >> rmap;
+
+  assert(rvec.size() == 5);
+  assert(rmap["key1"] == "value1");
+}
 ```
 
 ### Custom Struct
 
 ```cpp
+#include <clio_ctp/data_structures/serialization/local_serialize.h>
+#include <string>
+#include <vector>
+#include <cassert>
+
 class RequestMeta {
  public:
-    int request_id;
-    std::string operation;
-    std::vector<int> data_sizes;
+  int request_id;
+  std::string operation;
+  std::vector<int> data_sizes;
 
-    template <typename Ar>
-    void serialize(Ar& ar) {
-        ar(request_id, operation, data_sizes);
-    }
+  template <typename Ar>
+  void serialize(Ar& ar) {
+    ar(request_id, operation, data_sizes);
+  }
 };
 
-RequestMeta original;
-original.request_id = 42;
-original.operation = "write";
-original.data_sizes = {1024, 2048, 4096};
+void example() {
+  RequestMeta original;
+  original.request_id = 42;
+  original.operation = "write";
+  original.data_sizes = {1024, 2048, 4096};
 
-// Serialize
-std::vector<char> buffer;
-ctp::ipc::LocalSerialize<> serializer(buffer);
-serializer << original;
+  // Serialize
+  std::vector<char> buffer;
+  ctp::ipc::LocalSerialize<> serializer(buffer);
+  serializer << original;
 
-// Deserialize
-RequestMeta restored;
-ctp::ipc::LocalDeserialize<> deserializer(buffer);
-deserializer >> restored;
+  // Deserialize
+  RequestMeta restored;
+  ctp::ipc::LocalDeserialize<> deserializer(buffer);
+  deserializer >> restored;
 
-assert(restored.request_id == 42);
-assert(restored.operation == "write");
-assert(restored.data_sizes.size() == 3);
+  assert(restored.request_id == 42);
+  assert(restored.operation == "write");
+  assert(restored.data_sizes.size() == 3);
+}
 ```
 
 ## Cereal Compatibility

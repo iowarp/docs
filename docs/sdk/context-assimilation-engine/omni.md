@@ -279,19 +279,32 @@ ParseOmni completed successfully!
 For programmatic access, use the `LoadOmni` function to parse an OMNI file:
 
 ```cpp
+#include <clio_cae/core/core_client.h>
+#include <clio_cae/core/constants.h>
 #include <clio_cae/core/factory/assimilation_ctx.h>
-#include <yaml-cpp/yaml.h>
+#include <string>
 #include <vector>
+#include <iostream>
 
-std::vector<clio_cae::core::AssimilationCtx> LoadOmni(const std::string& omni_path);
+using namespace clio::cae::core;
 
-// Usage
-try {
-  auto contexts = LoadOmni("/path/to/config.yaml");
-  // Pass to ParseOmni
-  cae_client.ParseOmni(contexts, num_tasks_scheduled);
-} catch (const std::exception& e) {
-  std::cerr << "Failed to load OMNI: " << e.what() << std::endl;
+// LoadOmni parses an OMNI YAML file into a vector of AssimilationCtx. The
+// clio_cae utility provides an implementation; it is declared here to show
+// how the parsed contexts feed into the CAE client.
+std::vector<AssimilationCtx> LoadOmni(const std::string& omni_path);
+
+void example() {
+  Client cae_client(kCaePoolId);
+  try {
+    std::vector<AssimilationCtx> contexts = LoadOmni("/path/to/config.yaml");
+    // Schedule the transfers described by the OMNI file.
+    auto task = cae_client.AsyncParseOmni(contexts);
+    task.Wait();
+    clio::run::u32 num_tasks_scheduled = task->num_tasks_scheduled_;
+    std::cout << "Scheduled " << num_tasks_scheduled << " task(s)" << std::endl;
+  } catch (const std::exception& e) {
+    std::cerr << "Failed to load OMNI: " << e.what() << std::endl;
+  }
 }
 ```
 

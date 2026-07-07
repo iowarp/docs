@@ -19,7 +19,10 @@ HSHM provides an AES-256-CBC encryption implementation built on top of OpenSSL's
 ### ctp::AES
 
 ```cpp
-namespace hshm {
+#include <cstddef>
+#include <string>
+
+namespace ctp {
 
 class AES {
  public:
@@ -30,21 +33,21 @@ class AES {
     /**
      * Generate a random initialization vector (IV).
      * AES-256-CBC uses a 128-bit (16-byte) IV.
+     * The salt is stored and later consumed by GenerateKey().
      * @param salt  Optional salt string for key derivation
      */
     void CreateInitialVector(const std::string& salt = "");
 
     /**
      * Derive a 256-bit encryption key from a password.
-     * Uses EVP_BytesToKey with SHA-256 digest.
-     * Must be called after CreateInitialVector().
+     * Uses EVP_BytesToKey with the SHA-256 digest and the stored salt_.
      * @param password  Password string to derive key from
      */
     void GenerateKey(const std::string& password);
 
     /**
      * Encrypt input buffer using AES-256-CBC.
-     * @param output      Pre-allocated output buffer (must be at least input_size + AES block size)
+     * @param output      Pre-allocated output buffer (at least input_size + AES block size)
      * @param output_size [out] Actual number of encrypted bytes written
      * @param input       Plaintext input data
      * @param input_size  Size of input data in bytes
@@ -55,7 +58,7 @@ class AES {
 
     /**
      * Decrypt input buffer using AES-256-CBC.
-     * @param output      Pre-allocated output buffer (must be at least input_size bytes)
+     * @param output      Pre-allocated output buffer (at least input_size bytes)
      * @param output_size [out] Actual number of decrypted bytes written
      * @param input       Ciphertext input data
      * @param input_size  Size of encrypted data in bytes
@@ -65,7 +68,7 @@ class AES {
                  char* input, size_t input_size);
 };
 
-}  // namespace hshm
+}  // namespace ctp
 ```
 
 ## Algorithm Details
@@ -94,55 +97,69 @@ Both the sender and receiver must use the same key and IV. The key and IV are st
 ### Basic Encrypt/Decrypt
 
 ```cpp
-#include <clio_ctp/encrypt/encrypt.h>
+#include <clio_ctp/encrypt/encrypt.h>  // brings in ctp::AES when CTP_ENABLE_ENCRYPT
+
+#include <cassert>
+#include <cstddef>
+#include <string>
+#include <vector>
 
 void encrypt_example() {
+#if CTP_ENABLE_ENCRYPT
     ctp::AES crypto;
 
-    // 1. Setup: derive key and create IV
+    // 1. Setup: derive key from a password, then create a random IV.
     crypto.GenerateKey("my_secret_password");
     crypto.CreateInitialVector();
 
-    // 2. Prepare buffers
+    // 2. Prepare buffers.
     std::string plaintext = "Sensitive data to encrypt";
     size_t input_size = plaintext.size();
 
-    // Output buffer must be larger than input (padding adds up to 1 block)
+    // Output buffer must be larger than input (padding adds up to one block).
     std::vector<char> encrypted(input_size + 256);
     std::vector<char> decrypted(input_size + 256);
 
-    // 3. Encrypt
+    // 3. Encrypt.
     size_t encrypted_size = encrypted.size();
     bool ok = crypto.Encrypt(encrypted.data(), encrypted_size,
                              plaintext.data(), input_size);
     assert(ok);
 
-    // 4. Decrypt
+    // 4. Decrypt.
     size_t decrypted_size = decrypted.size();
     ok = crypto.Decrypt(decrypted.data(), decrypted_size,
                         encrypted.data(), encrypted_size);
     assert(ok);
 
-    // 5. Verify
+    // 5. Verify.
     std::string result(decrypted.data(), decrypted_size);
     assert(result == plaintext);
+#endif  // CTP_ENABLE_ENCRYPT
 }
 ```
 
 ### Large Buffer Encryption
 
 ```cpp
+#include <clio_ctp/encrypt/encrypt.h>
+
+#include <cassert>
+#include <cstddef>
+#include <vector>
+
 void large_buffer_example() {
+#if CTP_ENABLE_ENCRYPT
     ctp::AES crypto;
     crypto.GenerateKey("passwd");
     crypto.CreateInitialVector();
 
-    // Create 8 KB of data
+    // Create 8 KB of data.
     size_t data_size = 8192;
     std::vector<char> data(data_size, 0);
     // ... fill data ...
 
-    // Allocate output with padding room (AES block size = 16 bytes)
+    // Allocate output with padding room (AES block size = 16 bytes).
     std::vector<char> encrypted(data_size + 256);
     std::vector<char> decrypted(data_size + 256);
 
@@ -154,6 +171,7 @@ void large_buffer_example() {
 
     decrypted.resize(dec_size);
     assert(data == decrypted);
+#endif  // CTP_ENABLE_ENCRYPT
 }
 ```
 
@@ -162,26 +180,46 @@ void large_buffer_example() {
 For network communication, the key and IV must be shared between sender and receiver:
 
 ```cpp
-// Sender
-ctp::AES sender_crypto;
-sender_crypto.GenerateKey("shared_password");
-sender_crypto.CreateInitialVector();
+#include <clio_ctp/encrypt/encrypt.h>
 
-// Encrypt data...
-size_t enc_size = ...;
-sender_crypto.Encrypt(output, enc_size, input, input_size);
+#include <cassert>
+#include <cstddef>
+#include <string>
+#include <vector>
 
-// Send iv_ along with encrypted data (key is derived from shared password)
-// The IV can be sent in plaintext — it's not secret
+void share_key_and_iv_example() {
+#if CTP_ENABLE_ENCRYPT
+    std::string plaintext = "message for the receiver";
+    size_t input_size = plaintext.size();
 
-// Receiver
-ctp::AES receiver_crypto;
-receiver_crypto.GenerateKey("shared_password");
-receiver_crypto.iv_ = sender_crypto.iv_;  // Use sender's IV
+    // --- Sender ---
+    ctp::AES sender_crypto;
+    sender_crypto.GenerateKey("shared_password");
+    sender_crypto.CreateInitialVector();
 
-// Decrypt data...
-size_t dec_size = ...;
-receiver_crypto.Decrypt(output, dec_size, encrypted, enc_size);
+    std::vector<char> encrypted(input_size + 256);
+    size_t enc_size = encrypted.size();
+    sender_crypto.Encrypt(encrypted.data(), enc_size,
+                          plaintext.data(), input_size);
+
+    // Send enc_size bytes of ciphertext along with sender_crypto.iv_.
+    // The IV can be sent in plaintext — it is not secret. The key is
+    // re-derived on the receiver from the shared password.
+
+    // --- Receiver ---
+    ctp::AES receiver_crypto;
+    receiver_crypto.GenerateKey("shared_password");
+    receiver_crypto.iv_ = sender_crypto.iv_;  // use the sender's IV
+
+    std::vector<char> decrypted(enc_size + 256);
+    size_t dec_size = decrypted.size();
+    receiver_crypto.Decrypt(decrypted.data(), dec_size,
+                            encrypted.data(), enc_size);
+
+    std::string result(decrypted.data(), dec_size);
+    assert(result == plaintext);
+#endif  // CTP_ENABLE_ENCRYPT
+}
 ```
 
 ## Buffer Sizing

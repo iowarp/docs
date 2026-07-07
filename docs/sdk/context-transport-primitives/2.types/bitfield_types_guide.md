@@ -10,49 +10,52 @@ The Bitfield Types API in Hermes Shared Memory (HSHM) provides efficient bit man
 
 ```cpp
 #include "clio_ctp/types/bitfield.h"
+#include <cstdint>
+#include <cstdio>
 
 void basic_bitfield_example() {
     // Create a 32-bit bitfield
     ctp::bitfield32_t flags;
-    
-    // Define some flag constants
+
+    // Define some flag constants. BIT_OPT(T, n) expands to ((T)1 << n).
     constexpr uint32_t FLAG_ENABLED    = BIT_OPT(uint32_t, 0);  // Bit 0: 0x1
     constexpr uint32_t FLAG_VISIBLE    = BIT_OPT(uint32_t, 1);  // Bit 1: 0x2
     constexpr uint32_t FLAG_ACTIVE     = BIT_OPT(uint32_t, 2);  // Bit 2: 0x4
     constexpr uint32_t FLAG_PERSISTENT = BIT_OPT(uint32_t, 3);  // Bit 3: 0x8
-    
+
     // Set individual bits
     flags.SetBits(FLAG_ENABLED);
     flags.SetBits(FLAG_VISIBLE);
-    
+
     // Set multiple bits at once
     flags.SetBits(FLAG_ACTIVE | FLAG_PERSISTENT);
-    
-    // Check if specific bits are set
+
+    // Any(mask) returns the matching bits (non-zero if any are set).
     if (flags.Any(FLAG_ENABLED)) {
         printf("Object is enabled\n");
     }
-    
-    // Check if all specified bits are set
+
+    // All(mask) is true only when every bit in the mask is set.
     if (flags.All(FLAG_ENABLED | FLAG_VISIBLE)) {
         printf("Object is enabled and visible\n");
     }
-    
+
     // Unset specific bits
     flags.UnsetBits(FLAG_PERSISTENT);
-    
+
     // Check individual bits
     bool is_active = flags.Any(FLAG_ACTIVE);
     bool is_persistent = flags.Any(FLAG_PERSISTENT);
-    
-    printf("Active: %s, Persistent: %s\n", 
-           is_active ? "yes" : "no", 
+
+    printf("Active: %s, Persistent: %s\n",
+           is_active ? "yes" : "no",
            is_persistent ? "yes" : "no");
-    
+
     // Clear all bits
     flags.Clear();
-    
-    printf("All flags cleared: %s\n", 
+
+    // ALL_BITS(T) expands to ~((T)0): a mask with every bit set.
+    printf("All flags cleared: %s\n",
            flags.Any(ALL_BITS(uint32_t)) ? "no" : "yes");
 }
 ```
@@ -60,66 +63,82 @@ void basic_bitfield_example() {
 ### Different Bitfield Sizes
 
 ```cpp
+#include "clio_ctp/types/bitfield.h"
+#include <cstdint>
+#include <cstdio>
+
 void bitfield_sizes_example() {
     // Different sized bitfields
     ctp::bitfield8_t   small_flags;    // 8-bit
-    ctp::bitfield16_t  medium_flags;   // 16-bit  
+    ctp::bitfield16_t  medium_flags;   // 16-bit
     ctp::bitfield32_t  large_flags;    // 32-bit
     ctp::bitfield64_t  huge_flags;     // 64-bit
-    
-    // Generic integer bitfield
+
+    // Generic int-sized bitfield
     ctp::ibitfield int_flags;          // int-sized
-    
+    int_flags.SetBits(0x1);
+
     // Set some bits in each
     small_flags.SetBits(0x03);          // Set bits 0,1
     medium_flags.SetBits(0xFF00);       // Set bits 8-15
     large_flags.SetBits(0xAAAAAAAA);    // Alternating bits
     huge_flags.SetBits(0x123456789ABCDEFULL);
-    
-    printf("8-bit:  0x%02X\n", small_flags.bits_.load());
-    printf("16-bit: 0x%04X\n", medium_flags.bits_.load());
-    printf("32-bit: 0x%08X\n", large_flags.bits_.load());
-    printf("64-bit: 0x%016lX\n", huge_flags.bits_.load());
+
+    // bits_.load() returns the underlying integer value. Cast to a matching
+    // width so the printf format specifiers are portable across compilers.
+    printf("8-bit:  0x%02X\n",   (unsigned)small_flags.bits_.load());
+    printf("16-bit: 0x%04X\n",   (unsigned)medium_flags.bits_.load());
+    printf("32-bit: 0x%08X\n",   (unsigned)large_flags.bits_.load());
+    printf("64-bit: 0x%016llX\n", (unsigned long long)huge_flags.bits_.load());
 }
 ```
 
 ### Bit Masking and Ranges
 
 ```cpp
+#include "clio_ctp/types/bitfield.h"
+#include <cstdint>
+#include <cstdio>
+
 void bitfield_masking_example() {
     ctp::bitfield32_t permissions;
-    
-    // Define permission masks using MakeMask
+
+    // Define permission masks using MakeMask(start, length).
     uint32_t read_mask  = ctp::bitfield32_t::MakeMask(0, 3);  // Bits 0-2
     uint32_t write_mask = ctp::bitfield32_t::MakeMask(3, 3);  // Bits 3-5
     uint32_t exec_mask  = ctp::bitfield32_t::MakeMask(6, 3);  // Bits 6-8
     uint32_t owner_mask = ctp::bitfield32_t::MakeMask(9, 3);  // Bits 9-11
-    
+
     printf("Permission masks:\n");
-    printf("Read:  0x%03X (bits 0-2)\n", read_mask);
-    printf("Write: 0x%03X (bits 3-5)\n", write_mask);
-    printf("Exec:  0x%03X (bits 6-8)\n", exec_mask);
-    printf("Owner: 0x%03X (bits 9-11)\n", owner_mask);
-    
+    printf("Read:  0x%03X (bits 0-2)\n", (unsigned)read_mask);
+    printf("Write: 0x%03X (bits 3-5)\n", (unsigned)write_mask);
+    printf("Exec:  0x%03X (bits 6-8)\n", (unsigned)exec_mask);
+    printf("Owner: 0x%03X (bits 9-11)\n", (unsigned)owner_mask);
+
     // Set permissions for user, group, others
     permissions.SetBits(read_mask | write_mask | exec_mask);  // Owner: RWX
     permissions.SetBits(read_mask << 3);                      // Group: R--
     permissions.SetBits(read_mask << 6);                      // Others: R--
-    
+
     // Check specific permission groups
     bool owner_can_read = permissions.Any(read_mask);
     bool group_can_write = permissions.Any(write_mask << 3);
     bool others_can_exec = permissions.Any(exec_mask << 6);
-    
+
     printf("Owner can read: %s\n", owner_can_read ? "yes" : "no");
-    printf("Group can write: %s\n", group_can_write ? "yes" : "no");  
+    printf("Group can write: %s\n", group_can_write ? "yes" : "no");
     printf("Others can exec: %s\n", others_can_exec ? "yes" : "no");
-    
-    // Copy specific bits between bitfields
-    ctp::bitfield32_t new_permissions;
+
+    // CopyBits(field, mask) does an in-place intersection:
+    //   bits_ = bits_ & (field.bits_ & mask)
+    // It keeps only the bits that are set in BOTH this field and the masked
+    // source. Pre-filling with ALL_BITS therefore extracts exactly the
+    // masked bits of `permissions` into `new_permissions`.
+    ctp::bitfield32_t new_permissions(ALL_BITS(uint32_t));
     new_permissions.CopyBits(permissions, read_mask | exec_mask);
-    
-    printf("Copied R-X permissions: 0x%08X\n", new_permissions.bits_.load());
+
+    printf("Extracted R-X permissions: 0x%08X\n",
+           (unsigned)new_permissions.bits_.load());
 }
 ```
 
@@ -129,77 +148,92 @@ void bitfield_masking_example() {
 
 ```cpp
 #include "clio_ctp/types/bitfield.h"
+#include <bit>
+#include <chrono>
+#include <cstdint>
+#include <cstdio>
 #include <thread>
 #include <vector>
 
 void atomic_bitfield_example() {
     // Atomic bitfield for thread-safe operations
     ctp::abitfield32_t shared_status;
-    
-    constexpr uint32_t WORKER_READY   = BIT_OPT(uint32_t, 0);
-    constexpr uint32_t WORKER_BUSY    = BIT_OPT(uint32_t, 1);
-    constexpr uint32_t WORKER_DONE    = BIT_OPT(uint32_t, 2);
+
+    constexpr uint32_t WORKER_READY    = BIT_OPT(uint32_t, 0);
+    constexpr uint32_t WORKER_BUSY     = BIT_OPT(uint32_t, 1);
+    constexpr uint32_t WORKER_DONE     = BIT_OPT(uint32_t, 2);
     constexpr uint32_t SYSTEM_SHUTDOWN = BIT_OPT(uint32_t, 31);
-    
+
     const int num_workers = 4;
     std::vector<std::thread> workers;
-    
+
     // Launch worker threads
     for (int i = 0; i < num_workers; ++i) {
         workers.emplace_back([&shared_status, i]() {
-            // Signal worker is ready
+            // Signal this worker is ready (atomic OR via SetBits).
             shared_status.SetBits(WORKER_READY);
-            
-            // Wait for all workers to be ready
-            while (shared_status.bits_.load() & WORKER_READY != 
-                   (WORKER_READY * num_workers)) {
+
+            // Wait until the ready flag is observed. Note the parentheses:
+            // & binds looser than ==, so the mask test MUST be parenthesized.
+            while ((shared_status.bits_.load() & WORKER_READY) == 0) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
-            
+
             // Set busy flag and do work
             shared_status.SetBits(WORKER_BUSY);
             std::this_thread::sleep_for(std::chrono::milliseconds(100 * i));
             shared_status.UnsetBits(WORKER_BUSY);
-            
+
             // Signal completion
             shared_status.SetBits(WORKER_DONE);
-            
+
             printf("Worker %d completed\n", i);
         });
     }
-    
-    // Monitor progress
+
+    // Monitor progress until the DONE flag is set.
     while (!shared_status.All(WORKER_DONE)) {
         uint32_t status = shared_status.bits_.load();
-        int ready_count = __builtin_popcount(status & WORKER_READY);
-        int busy_count = __builtin_popcount(status & WORKER_BUSY);
-        int done_count = __builtin_popcount(status & WORKER_DONE);
-        
-        printf("Status - Ready: %d, Busy: %d, Done: %d\n", 
+        // Portable population count (C++20 <bit>) instead of the GCC-only
+        // __builtin_popcount. std::popcount requires an unsigned argument.
+        int ready_count = std::popcount<uint32_t>(status & WORKER_READY);
+        int busy_count  = std::popcount<uint32_t>(status & WORKER_BUSY);
+        int done_count  = std::popcount<uint32_t>(status & WORKER_DONE);
+
+        printf("Status - Ready: %d, Busy: %d, Done: %d\n",
                ready_count, busy_count, done_count);
-        
+
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
-    
+
     // Signal shutdown
     shared_status.SetBits(SYSTEM_SHUTDOWN);
-    
+
     // Wait for all workers
     for (auto& worker : workers) {
         worker.join();
     }
-    
-    printf("All workers completed. Final status: 0x%08X\n", 
-           shared_status.bits_.load());
+
+    printf("All workers completed. Final status: 0x%08X\n",
+           (unsigned)shared_status.bits_.load());
 }
 ```
 
 ### Lock-Free Status Tracking
 
 ```cpp
+#include "clio_ctp/types/bitfield.h"
+#include <bit>
+#include <chrono>
+#include <cstdint>
+#include <cstdio>
+#include <thread>
+#include <vector>
+
 class TaskManager {
-    ctp::abitfield64_t task_status_;  // Track up to 64 tasks
-    
+    // There is no abitfield64_t typedef; use the abitfield<T> alias directly.
+    ctp::abitfield<uint64_t> task_status_;  // Track up to 64 tasks
+
 public:
     bool StartTask(int task_id) {
         if (task_id >= 64) return false;
@@ -231,7 +265,9 @@ public:
     }
     
     int GetActiveTaskCount() {
-        return __builtin_popcountll(task_status_.bits_.load());
+        // Portable 64-bit population count (C++20 <bit>) instead of the
+        // GCC-only __builtin_popcountll.
+        return std::popcount<uint64_t>(task_status_.bits_.load());
     }
     
     std::vector<int> GetActiveTasks() {
@@ -300,34 +336,36 @@ void task_management_example() {
 ### Variable-Length Bitfields
 
 ```cpp
+#include "clio_ctp/types/bitfield.h"
+#include <cstddef>
+#include <cstdio>
+
 void big_bitfield_example() {
     // Create a bitfield with 256 bits (8 x 32-bit words)
     ctp::big_bitfield<256> large_bitfield;
-    
+
+    // size() returns the number of 32-bit words backing the bitfield.
     printf("Bitfield size: %zu 32-bit words\n", large_bitfield.size());
-    
-    // Set a range of bits
+
+    // SetBits(start, length) sets a range of bits.
     large_bitfield.SetBits(10, 20);  // Set 20 bits starting from bit 10
-    
-    // Check if any bits in range are set
+
+    // Any(start, length) is true if any bit in the range is set.
     bool has_bits_30_40 = large_bitfield.Any(30, 10);
     bool has_bits_10_30 = large_bitfield.Any(10, 20);
-    
+
     printf("Bits 30-39 set: %s\n", has_bits_30_40 ? "yes" : "no");
     printf("Bits 10-29 set: %s\n", has_bits_10_30 ? "yes" : "no");
-    
-    // Check if all bits in range are set
+
+    // All(start, length) is true only if every bit in the range is set.
     bool all_bits_10_30 = large_bitfield.All(10, 20);
     printf("All bits 10-29 set: %s\n", all_bits_10_30 ? "yes" : "no");
-    
-    // Set specific patterns
-    large_bitfield.SetBits(64, 32);   // Set bits 64-95 (entire second word)
-    large_bitfield.SetBits(128, 64);  // Set bits 128-191 (third and fourth words)
-    
-    // Unset a range
-    large_bitfield.UnsetBits(80, 16); // Unset bits 80-95
-    
-    // Clear entire bitfield
+
+    // Set additional ranges
+    large_bitfield.SetBits(64, 32);   // Set bits 64-95
+    large_bitfield.SetBits(128, 64);  // Set bits 128-191
+
+    // Clear() resets every word back to zero.
     large_bitfield.Clear();
     printf("Bitfield cleared\n");
 }
@@ -336,6 +374,11 @@ void big_bitfield_example() {
 ### Custom-Sized Bitfields
 
 ```cpp
+#include "clio_ctp/types/bitfield.h"
+#include <cstddef>
+#include <cstdio>
+#include <vector>
+
 template<size_t NUM_NODES>
 class NodeStatusTracker {
     ctp::big_bitfield<NUM_NODES> online_nodes_;
@@ -445,6 +488,11 @@ void cluster_monitoring_example() {
 ### State Machine Implementation
 
 ```cpp
+#include "clio_ctp/types/bitfield.h"
+#include <cstdint>
+#include <cstdio>
+#include <string>
+
 enum class ProcessState : uint32_t {
     CREATED    = BIT_OPT(uint32_t, 0),  // 0x001
     RUNNING    = BIT_OPT(uint32_t, 1),  // 0x002
@@ -549,9 +597,16 @@ void state_machine_example() {
 ### Feature Flag System
 
 ```cpp
+#include "clio_ctp/types/bitfield.h"
+#include <cstdint>
+#include <cstdio>
+#include <sstream>
+#include <string>
+#include <vector>
+
 class FeatureFlags {
     ctp::bitfield64_t enabled_features_;
-    
+
 public:
     enum Feature : uint64_t {
         ADVANCED_LOGGING    = BIT_OPT(uint64_t, 0),
@@ -657,7 +712,11 @@ void feature_flags_example() {
 ## Serialization and Persistence
 
 ```cpp
+#include "clio_ctp/types/bitfield.h"
+#include <cstdint>
+#include <cstdio>
 #include <fstream>
+#include <ios>
 #include <cereal/archives/binary.hpp>
 
 void serialization_example() {
@@ -680,8 +739,8 @@ void serialization_example() {
         archive(loaded_flags);
     }
     
-    printf("Original:  0x%08X\n", config_flags.bits_.load());
-    printf("Loaded:    0x%08X\n", loaded_flags.bits_.load());
+    printf("Original:  0x%08X\n", (unsigned)config_flags.bits_.load());
+    printf("Loaded:    0x%08X\n", (unsigned)loaded_flags.bits_.load());
     printf("Match:     %s\n", 
            (config_flags.bits_.load() == loaded_flags.bits_.load()) ? "yes" : "no");
 }

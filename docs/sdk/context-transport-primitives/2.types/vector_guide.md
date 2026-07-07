@@ -16,21 +16,33 @@ A dynamic array stored in shared memory using offset-based pointers (`OffsetPtr<
 
 ```cpp
 #include <clio_ctp/data_structures/ipc/vector.h>
+#include <clio_ctp/memory/backend/malloc_backend.h>
+#include <clio_ctp/memory/allocator/arena_allocator.h>
 
-// Create with an allocator
-ctp::ipc::vector<int, AllocT> vec(alloc, 10);  // 10 elements
+void example() {
+  using namespace ctp::ipc;
 
-// Standard vector operations
-vec.push_back(42);
-vec.emplace_back(100);
-int val = vec[0];
-vec.resize(20);
-vec.reserve(50);
-vec.clear();
+  // Create a memory backend and a concrete allocator (mirrors the unit tests)
+  MallocBackend backend;
+  backend.shm_init(MemoryBackendId(0, 0), 1024 * 1024);
+  auto *alloc = backend.MakeAlloc<ArenaAllocator<false>>();
 
-// Iteration
-for (auto it = vec.begin(); it != vec.end(); ++it) {
-  process(*it);
+  // Construct with an allocator; the optional second argument is an initial size
+  vector<int, ArenaAllocator<false>> vec(alloc, 10);  // 10 default-initialized elements
+
+  // Standard vector operations
+  vec.push_back(42);
+  vec.emplace_back(100);
+  int val = vec[0];
+  vec.resize(20);
+  vec.reserve(50);
+  vec.clear();
+
+  // Iteration
+  int sum = 0;
+  for (auto it = vec.begin(); it != vec.end(); ++it) {
+    sum += *it;
+  }
 }
 ```
 
@@ -52,20 +64,57 @@ A private-memory vector with allocator integration. Supports the same API as `st
 
 ```cpp
 #include <clio_ctp/data_structures/priv/vector.h>
+#include <cstdlib>
 
-// Standard construction
-ctp::priv::vector<int> vec = {1, 2, 3, 4, 5};
-ctp::priv::vector<int> vec2(10, 0);  // 10 zeros
+// A minimal allocator providing the AllocateObjs/Allocate/Free API the
+// vector requires (mirrors SimpleHeapAllocator from the unit tests).
+class SimpleHeapAllocator {
+ public:
+  template <typename T>
+  ctp::ipc::FullPtr<T> AllocateObjs(size_t count) {
+    ctp::ipc::FullPtr<T> result;
+    result.ptr_ = static_cast<T*>(malloc(count * sizeof(T)));
+    result.shm_.off_ = 0;
+    result.shm_.alloc_id_ = ctp::ipc::AllocatorId::GetNull();
+    return result;
+  }
 
-// Full STL-compatible API
-vec.push_back(6);
-vec.pop_back();
-vec.insert(vec.begin() + 2, 99);
-vec.erase(vec.begin());
+  template <typename T = char>
+  ctp::ipc::FullPtr<T> Allocate(size_t size) {
+    ctp::ipc::FullPtr<T> result;
+    result.ptr_ = static_cast<T*>(malloc(size));
+    result.shm_.off_ = 0;
+    result.shm_.alloc_id_ = ctp::ipc::AllocatorId::GetNull();
+    return result;
+  }
 
-// Reverse iteration
-for (auto it = vec.rbegin(); it != vec.rend(); ++it) {
-  process(*it);
+  template <typename T, bool ATOMIC = false>
+  void Free(const ctp::ipc::FullPtr<T, ATOMIC>& ptr) {
+    if (ptr.ptr_ != nullptr) {
+      free(ptr.ptr_);
+    }
+  }
+};
+
+void example() {
+  using namespace ctp::priv;
+  SimpleHeapAllocator alloc;
+
+  // Construction takes the allocator as the last argument
+  vector<int, SimpleHeapAllocator> vec({1, 2, 3, 4, 5}, &alloc);
+  vector<int, SimpleHeapAllocator> vec2(10, 0, &alloc);  // 10 zeros
+
+  // Full STL-compatible API
+  vec.push_back(6);
+  vec.pop_back();
+  vec.insert(vec.cbegin() + 2, 99);
+  vec.erase(vec.cbegin());
+
+  // Reverse iteration
+  int sum = 0;
+  for (auto it = vec.rbegin(); it != vec.rend(); ++it) {
+    sum += *it;
+  }
 }
 ```
 
