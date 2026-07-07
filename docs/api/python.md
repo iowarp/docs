@@ -227,44 +227,97 @@ else:
 
 ---
 
-#### `context_query(tag_re, blob_re, max_results=0)`
+#### `context_query(tag_re, blob_re, max_results=0, prompt="", time_begin=0, time_end=0)`
 
-Query for blob names matching tag and blob patterns.
+Query for blob names matching tag and blob patterns. Supports three search
+modes selected by the keyword arguments you supply.
 
 **Signature:**
 ```python
-blob_names = ctx_interface.context_query(tag_re, blob_re, max_results=0)
+blob_names = ctx_interface.context_query(
+    tag_re,
+    blob_re,
+    max_results=0,
+    prompt="",
+    time_begin=0,
+    time_end=0,
+)
 ```
 
 **Parameters:**
-- **`tag_re`** (str): Regular expression pattern to match tag names
-- **`blob_re`** (str): Regular expression pattern to match blob names
-- **`max_results`** (int, optional): Maximum number of results to return
-  - `0` = unlimited (default)
-  - Positive integer = limit to that many results
+- **`tag_re`** (str): Full-string regex matched against tag names
+- **`blob_re`** (str): Full-string regex matched against blob names within matching tags
+- **`max_results`** (int, optional): Result cap — `0` = unlimited for regex/temporal; falls back to `10` for semantic
+- **`prompt`** (str, optional): BM25 query text; non-empty selects semantic search mode
+- **`time_begin`** (int, optional): Temporal lower bound, epoch nanoseconds; `0` = no lower bound
+- **`time_end`** (int, optional): Temporal upper bound, epoch nanoseconds; `0` = no upper bound
 
 **Returns:**
 - **List[str]**: List of matching blob names (empty list if none found)
 
-**Description:**
+**Search modes:**
 
-Queries for blobs matching the specified regex patterns across all nodes. Returns only the blob names, not the data.
+| Mode | When selected | How results are ordered |
+|---|---|---|
+| **Regex** | `time_begin == 0`, `time_end == 0`, `prompt` empty | unspecified |
+| **Semantic** | `prompt` is non-empty | descending BM25 relevance score |
+| **Temporal** | `time_begin != 0` or `time_end != 0` | ascending `last_modified` timestamp |
 
-**Example:**
+Temporal takes priority over semantic; semantic takes priority over regex.
+Both regex patterns use `std::regex_match` (full-string) — use `.*pattern.*`
+for substring matching.
+
+**Examples:**
 
 ```python
-# Query all blobs in a specific tag
-blobs = ctx_interface.context_query("experiment_data", ".*", 0)
+import time
+
+ctx = clio_cee.ContextInterface()
+
+# --- Regex mode (default) ---
+# List all blobs in a specific tag
+blobs = ctx.context_query("experiment_data", ".*")
 print(f"Found {len(blobs)} blobs: {blobs}")
 
-# Query blobs matching a pattern, limit to 10 results
-blobs = ctx_interface.context_query("dataset.*", "chunk_[0-9]+", 10)
-print(f"Found {len(blobs)} matching blobs")
+# Filter by blob name pattern, limit to 10 results
+blobs = ctx.context_query("dataset.*", "chunk_[0-9]+", max_results=10)
 
-# Query specific blob name
-blobs = ctx_interface.context_query("my_tag", "exact_blob_name", 0)
-if blobs:
+# Check whether a specific blob exists
+if ctx.context_query("my_tag", "exact_blob_name"):
     print("Blob exists!")
+
+# --- Semantic mode ---
+# Return the 5 blobs most relevant to a keyword query (BM25)
+blobs = ctx.context_query(
+    ".*", ".*",
+    max_results=5,
+    prompt="plasma temperature gradient anomaly",
+)
+print(f"Top semantic matches: {blobs}")
+
+# Restrict candidates before scoring
+blobs = ctx.context_query(
+    "simulation_.*", "timestep_.*",
+    max_results=3,
+    prompt="shock wave propagation",
+)
+
+# --- Temporal mode ---
+# Blobs written in the last hour
+one_hour_ago = int((time.time() - 3600) * 1e9)
+recent = ctx.context_query(".*", ".*", time_begin=one_hour_ago)
+print(f"Blobs modified in last hour: {recent}")
+
+# Blobs from a specific time window
+recent = ctx.context_query(
+    "experiment_.*", ".*",
+    max_results=100,
+    time_begin=window_start_ns,
+    time_end=window_end_ns,
+)
+
+# Blobs written before a checkpoint (open lower bound)
+old = ctx.context_query(".*", ".*", time_end=checkpoint_ns)
 ```
 
 ---
@@ -409,8 +462,8 @@ try:
     result = ctx_interface.context_bundle([ctx])
     print(f"Assimilation: {'Success' if result == 0 else 'Failed'}")
 
-    # 2. Query for blobs
-    blobs = ctx_interface.context_query("demo_tag", ".*", 0)
+    # 2. Query for blobs (regex mode — list all)
+    blobs = ctx_interface.context_query("demo_tag", ".*")
     print(f"Found {len(blobs)} blobs: {blobs}")
 
     # 3. Retrieve blob data
@@ -473,7 +526,7 @@ result = ctx_interface.context_bundle([ctx])
 if result != 0:
     print(f"Error code: {result}")
 
-# context_query returns empty list on error
+# context_query returns empty list on error or no match
 blobs = ctx_interface.context_query("tag", ".*")
 if not blobs:
     print("No blobs found or error occurred")
