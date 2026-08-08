@@ -1,37 +1,38 @@
 ---
 sidebar_position: 9
 title: Deprecation Notes
-description: Legacy names, config paths, env vars, and CLI invocations that still work as aliases of their canonical replacements.
+description: Legacy names that have been removed, the ones that still work, and how to migrate a downstream project.
 ---
 
 # Deprecation Notes
 
-This page lists everything in IOWarp that has been renamed or relocated but
-**still works under its old name** as a backward-compatibility alias. If you
-have existing scripts, pipelines, container images, or downstream C++ code
-written against the legacy names, you do not need to migrate immediately:
-every legacy form below resolves to the new canonical form at runtime.
+IOWarp was renamed from `chimaera` / `hermes_shm` to `clio` / `clio_ctp`.
+For a period, every legacy name kept working as a compatibility alias.
 
-The rest of the documentation uses the **new canonical** name in every
-example. This page is the single place to look up "what was the old name?"
-or "what should I update to?".
+:::danger The compatibility shims have been removed
+The `CHI_*` env vars, `<chimaera/…>` and `<hermes_shm/…>` header shims, the
+`hshm::` / `hipc::` namespace aliases, the `HSHM_*` and `CHI_*` macro
+`#define`s, the `~/.chimaera/` config paths, and the `chimaera` CLI symlink
+**no longer exist**. Code or scripts still written against them will fail to
+compile or will silently fall back to defaults.
 
-:::tip TL;DR
-Old names still work. Migrate at your own pace. No removal is planned at
-this time; an explicit deprecation announcement will precede any future
-removal.
+The [migration sweep](#migrating-a-downstream-project) below is now
+mandatory rather than optional.
 :::
+
+The rest of the documentation uses the canonical name in every example. This
+page is where you look up "what was the old name?" and "what should I update
+to?".
 
 ---
 
-## CLI binaries
+## What still works
 
 | Canonical | Legacy alias | How the alias works |
 |-----------|--------------|---------------------|
-| `clio_run` | `chimaera` | `chimaera` is installed as a symlink to `clio_run` in the same `bin/` dir. The binary adapts its usage text via `argv[0]` so each name prints the right help. |
-| `clio_cae` | `clio_cae_omni` | `clio_cae_omni` is installed as a symlink to `clio_cae`. |
+| `clio_cae` | `clio_cae_omni` | `clio_cae_omni` is installed as a symlink to `clio_cae` (a copy on Windows). |
 
-### Flat vs nested subcommand forms
+### Flat vs nested `clio_run` subcommands
 
 `clio_run` accepts both a flat and a nested subcommand form:
 
@@ -43,31 +44,49 @@ removal.
 | `clio_run refresh` | `clio_run repo refresh` |
 
 Both forms resolve to the same handler. The flat form is shorter and is the
-form used in docs and examples.
+form used in docs and examples. The newer subcommands — `compose`, `config`,
+`migrate`, `monitor` — have **no** nested form.
 
 ---
 
-## Configuration files and directories
+## What has been removed
 
-| Canonical | Legacy alias | How the alias works |
-|-----------|--------------|---------------------|
-| `~/.clio/clio.yaml` | `~/.clio/chimaera.yaml`, `~/.chimaera/clio.yaml`, `~/.chimaera/chimaera.yaml` | The runtime checks all four paths in priority order; first hit wins. `make install` and the pip wheel seed **both** `~/.clio/clio.yaml` and `~/.chimaera/chimaera.yaml` with identical content. |
-| `clio_repo.yaml` | `chimaera_repo.yaml` | The CMake repo parser checks `clio_repo.yaml` first, then falls back to the legacy name. |
-| `clio_mod.yaml` | `chimaera_mod.yaml` | Same — parser checks `clio_mod.yaml` first. |
+### CLI binaries
 
-See [Configuration Reference](./deployment/configuration) for the full
-priority order including the env-var override.
+| Canonical | Removed alias |
+|-----------|---------------|
+| `clio_run` | `chimaera` — the symlink is no longer installed. |
 
----
+### Configuration files and directories
 
-## Environment variables
+The runtime now looks **only** at `$CLIO_SERVER_CONF` and then
+`~/.clio/clio.yaml`. These paths are no longer consulted:
 
-Every runtime env var migrated from a `CHI_` prefix to a `CLIO_` prefix.
-Both prefixes work; the runtime uses an internal `GetCompat()` helper that
-reads `CLIO_<suffix>` first and falls back to `CHI_<suffix>`.
+- `~/.clio/chimaera.yaml`
+- `~/.chimaera/clio.yaml`
+- `~/.chimaera/chimaera.yaml`
 
-| Canonical | Legacy alias |
-|-----------|--------------|
+Installers seed `~/.clio/clio.yaml` only. If your config still lives under
+`~/.chimaera/`, move it or point `CLIO_SERVER_CONF` at it — otherwise the
+runtime starts on the **built-in defaults**, which have an empty `compose`
+section and therefore no storage tiers.
+
+Repository and module manifests are likewise `clio_repo.yaml` and
+`clio_mod.yaml` only; the `chimaera_repo.yaml` / `chimaera_mod.yaml`
+fallbacks are gone. The file contents did not change — only the filename.
+
+### Environment variables
+
+Every runtime env var moved from a `CHI_` prefix to a `CLIO_` prefix. The
+`GetCompat()` helper that used to fall back to `CHI_<suffix>` now reads
+`CLIO_<suffix>` and nothing else.
+
+This is the failure mode to watch for: an unset variable is not an error, so
+a launch script still exporting `CHI_SERVER_CONF` or `CHI_PORT` will start
+the runtime successfully **on the wrong configuration**. Rename them:
+
+| Canonical | Removed alias |
+|-----------|---------------|
 | `CLIO_SERVER_CONF` | `CHI_SERVER_CONF` |
 | `CLIO_IPC_MODE` | `CHI_IPC_MODE` |
 | `CLIO_WITH_RUNTIME` | `CHI_WITH_RUNTIME` |
@@ -81,91 +100,57 @@ reads `CLIO_<suffix>` first and falls back to `CHI_<suffix>`.
 | `CLIO_LBM_THALLIUM_PROTOCOL`, `CLIO_LBM_THALLIUM_RPC_THREADS`, `CLIO_LBM_ZMQ_STATS` | `CHI_LBM_*` |
 | `CLIO_MEMFD_DIR`, `CLIO_TEST_DATA_DIR`, `CLIO_WAIT_SERVER`, `CLIO_ZMQ_IO_THREADS` | `CHI_*` (same suffix) |
 
-Any new `CLIO_` env var you find in the docs has a `CHI_` legacy form;
-they're documented by their canonical name only.
+The rule is mechanical: `CHI_<suffix>` → `CLIO_<suffix>`. See the
+[Configuration Reference](./deployment/configuration#environment-variables)
+for the full current list.
 
----
+### C++ headers
 
-## C++ headers
-
-The runtime header tree moved from `<chimaera/...>` to `<clio_runtime/...>`,
-and the transport-primitives layer moved from `<hermes_shm/...>` to
-`<clio_ctp/...>`. The umbrella headers also renamed:
-
-| Canonical | Legacy alias |
-|-----------|--------------|
+| Canonical | Removed alias |
+|-----------|---------------|
 | `<clio_runtime/clio_runtime.h>` | `<chimaera/chimaera.h>` |
-| `<clio_runtime/...>` (whole tree) | `<chimaera/...>` |
+| `<clio_runtime/…>` (whole tree) | `<chimaera/…>` |
 | `<clio_ctp/clio_ctp.h>` | `<hermes_shm/hermes_shm.h>` |
-| `<clio_ctp/...>` (whole tree) | `<hermes_shm/...>` |
+| `<clio_ctp/…>` (whole tree) | `<hermes_shm/…>` |
 
-Every legacy path is a one-line forwarder shim that `#include`s the
-canonical path, so any TU built against either form sees the same symbols.
+The forwarder shims have been deleted; the legacy trees are not installed.
 
----
+### C++ macros and namespaces
 
-## C++ macros and namespaces
-
-### Init / finalize
-
-| Canonical | Legacy alias |
-|-----------|--------------|
+| Canonical | Removed alias |
+|-----------|---------------|
 | `CLIO_RUNTIME_INIT(mode, with_runtime)` | `CHIMAERA_INIT(mode, with_runtime)` |
 | `CLIO_RUNTIME_FINALIZE()` | `CHIMAERA_FINALIZE()` |
-
-### Singletons and accessors
-
-| Canonical | Legacy alias |
-|-----------|--------------|
 | `CLIO_IPC`, `CLIO_ADMIN`, `CLIO_POOL_MANAGER`, `CLIO_CONFIG_MANAGER`, `CLIO_MODULE_MANAGER`, `CLIO_WORK_ORCHESTRATOR`, `CLIO_CUR_WORKER` | `CHI_*` (same suffix) |
-
-### Module / task macros
-
-| Canonical | Legacy alias |
-|-----------|--------------|
 | `CLIO_CHIMOD_CC(...)`, `CLIO_TASK_CC(...)` | `CHI_CHIMOD_CC(...)`, `CHI_TASK_CC(...)` |
 | `CLIO_TASK_BODY_BEGIN`, `CLIO_TASK_BODY_END`, `CLIO_CO_AWAIT`, `CLIO_CO_RETURN` | `CHI_*` (same suffix) |
 | `CLIO_QUEUE_ALLOC_T`, `CLIO_TASK_ALLOC_T`, `CLIO_PRIV_ALLOC[_T]`, `CLIO_PRIV_SHARED_ALLOC[_T]` | `CHI_*` (same suffix) |
-
-Each `CLIO_*` form is a `#define` to the matching `CHI_*` macro, placed in
-`<clio_runtime/clio_runtime.h>`.
-
-### Transport-primitive namespaces and macros
-
-| Canonical | Legacy alias |
-|-----------|--------------|
-| `ctp::` namespace | `hshm::` (`namespace hshm = ctp;`) |
+| `ctp::` namespace | `hshm::` |
 | `ctp::ipc::` namespace | `hshm::ipc::`, `hipc::` |
 | `ctp::thread::`, `ctp::lbm::`, … | `hshm::thread::`, `hshm::lbm::`, … |
-| 89 `CTP_*` macros (`CTP_CROSS_FUN`, `CTP_INLINE`, `CTP_GPU_FUN`, `CTP_MALLOC`, …) | matching `HSHM_*` forms (one `#define HSHM_X CTP_X` per macro) |
+| `CTP_*` macros (`CTP_CROSS_FUN`, `CTP_INLINE`, `CTP_GPU_FUN`, `CTP_MALLOC`, …) | matching `HSHM_*` forms |
 
-The compat header `<clio_ctp/compat/hshm_aliases.h>` is auto-included by the
-umbrella `<clio_ctp/clio_ctp.h>`, so any TU that pulls the umbrella sees
-all aliases.
+The compat header `<clio_ctp/compat/hshm_aliases.h>` no longer exists.
 
----
+### Namespaces, enums, and CMake targets
 
-## What is **not** renamed
+The `chi::` namespace, the `ChimaeraMode` enum, and the `chimaera_*` CMake
+target and library filenames were previously kept for ABI and
+dynamic-loader stability. They have since been renamed too:
 
-These intentionally kept their `chimaera` / `hermes_shm` form to keep the
-public ABI surface and dynamic-loader paths stable:
+| Canonical | Removed |
+|-----------|---------|
+| `clio::run::` namespace (plus `clio::run::priv::`, `clio::run::ipc::`) | `chi::` |
+| `clio::run::RuntimeMode::kClient` / `kServer` | `ChimaeraMode::kClient` / `kServer` |
+| `clio_run_cxx`, `clio_admin_client`, … | `chimaera_cxx`, `chimaera_admin_runtime`, … |
 
-- The C++ namespace `chi::` (still the canonical runtime namespace).
-- CMake target names and installed shared-library filenames:
-  `chimaera_cxx`, `libchimaera_cxx.so`, `chimaera_admin_runtime`,
-  `libchimaera_admin_runtime.so`, …
-- The `ChimaeraMode` enum class (`chi::ChimaeraMode::kClient` / `kServer`).
-- Identifiers that have `chimaera` as a fragment, e.g. the `chi::Chimaera`
-  class itself and any internal `chimaera_manager` symbol.
-
-These can be done in a follow-up pass if there's demand; for now they're
-load-bearing for everything that links against the runtime.
+Downstream CMake must `find_package` / link the `clio_*` target names.
 
 ---
 
 ## Migrating a downstream project
 
-You do not have to migrate. If you want to anyway, the mechanical sweep is:
+The mechanical sweep:
 
 ```bash
 # Header paths
@@ -193,22 +178,25 @@ grep -rl '\bhshm::\|\bhipc::\|\bHSHM_' \
     -e 's/\bhipc::/ctp::ipc::/g' \
     -e 's/\bHSHM_/CTP_/g'
 
-# Env vars in launch scripts: just rename CHI_<suffix> -> CLIO_<suffix>.
+# Runtime namespace and mode enum
+grep -rl '\bchi::\|\bChimaeraMode\b' \
+    --include='*.cc' --include='*.h' --include='*.cpp' \
+  | xargs sed -i -E \
+    -e 's/\bchi::/clio::run::/g' \
+    -e 's/\bChimaeraMode\b/RuntimeMode/g'
+
+# Env vars in launch scripts: rename CHI_<suffix> -> CLIO_<suffix>.
+grep -rl '\bCHI_[A-Z_]' --include='*.sh' --include='*.bash' --include='*.yaml' \
+  | xargs sed -i -E 's/\bCHI_([A-Z_]+)\b/CLIO_\1/g'
 
 # Config YAMLs (in your repo, not the runtime's):
 # rename chimaera_repo.yaml -> clio_repo.yaml and
 # rename chimaera_mod.yaml  -> clio_mod.yaml. No content changes needed.
+
+# Per-user config, if you still have one under the legacy directory:
+# mkdir -p ~/.clio && mv ~/.chimaera/chimaera.yaml ~/.clio/clio.yaml
 ```
 
-After the sweep your project will build against the canonical names and
-remain compatible with both the current IOWarp Core release and any future
-release that keeps the compat shims.
-
----
-
-## Removal timeline
-
-**None planned.** The shims, aliases, dual-name parsers, and symlinks are
-intended to be permanent. If a specific alias is ever scheduled for removal,
-the deprecation will be announced here with at least one full release of
-overlap before the alias is dropped.
+Then update your `CMakeLists.txt` to `find_package` / link the `clio_*`
+target names, and grep your launch scripts one more time for a stray
+`CHI_` — that is the failure that does not announce itself.
