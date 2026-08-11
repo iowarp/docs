@@ -36,6 +36,10 @@ No in-memory metadata structures are needed. All state — file contents, sizes,
 
 :::note macOS is a source build
 The macOS wheel does not ship `clio_cte_fuse`. Build from source against macFUSE — see the macOS tab below. (Older notes claiming macOS "has no FUSE3 API" predate macFUSE 5, which does ship libfuse3.)
+
+The `clio_cte_fuse` **console script is declared in every wheel, including macOS**, so the command exists on `PATH` there even though the binary behind it does not. Running it prints `Error: clio_cte_fuse binary not found at <path>` and exits 1 — that is the expected symptom on a pip-installed macOS host, not a broken install.
+
+macOS wheels are also published for **Apple Silicon only** (`macosx_14_0_arm64`), and there is no sdist, so `pip install iowarp-core` has nothing to resolve on an Intel Mac.
 :::
 
 ---
