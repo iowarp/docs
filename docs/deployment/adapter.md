@@ -226,14 +226,49 @@ The macOS build and its unit + in-process operation suites are enforced in CI, b
 </TabItem>
 <TabItem value="windows" label="Windows">
 
-WinFsp mounts drive letters natively, which is the usual choice:
+The mountpoint is the **first argument** to `clio_cte_fuse`, exactly as on Linux — only the form differs. WinFsp accepts two:
+
+**A drive letter** (the usual choice — WinFsp mounts these natively):
 
 ```powershell
 $env:CLIO_WITH_RUNTIME = "0"
+
+# Mount at exactly Z:
 clio_cte_fuse Z: -f
 ```
 
-A host directory also works in place of `Z:`. Pick a drive letter that is actually free — `Get-PSDrive -PSProvider FileSystem` lists the ones in use.
+Pick a letter that is actually free; mounting onto a letter already in use fails. List the ones taken:
+
+```powershell
+Get-PSDrive -PSProvider FileSystem | Select-Object -ExpandProperty Name
+```
+
+To choose the first free letter programmatically instead of hard-coding one — this is what the CI smoke test does:
+
+```powershell
+$used = (Get-PSDrive -PSProvider FileSystem).Name
+$mount = @('X','Y','W','V','U') | Where-Object { $used -notcontains $_ } | Select-Object -First 1
+if (-not $mount) { throw "no free drive letter" }
+$mount = "${mount}:"
+
+$env:CLIO_WITH_RUNTIME = "0"
+clio_cte_fuse $mount -f
+```
+
+**A directory path**, if you would rather have the mount appear inside an existing tree than as a new drive:
+
+```powershell
+$env:CLIO_WITH_RUNTIME = "0"
+clio_cte_fuse C:\iowarp\cte -f
+```
+
+The parent (`C:\iowarp`) must exist. Drive-letter mounting is the form CI exercises end to end, so prefer it if either will do.
+
+Confirm the mount came up before using it — the daemon needs a moment, and CI polls for up to 20 seconds:
+
+```powershell
+Test-Path Z:\
+```
 
 </TabItem>
 </Tabs>
@@ -251,11 +286,15 @@ Set `CLIO_WITH_RUNTIME=0` so the FUSE daemon attaches to the runtime you already
 
 ### 3. Use it
 
-Any application can read and write files on the mount point with standard tools:
+Any application can read and write files on the mount point with standard tools — nothing is IOWarp-specific, which is the whole point of the adapter. Each tab uses the mountpoint from the matching mount step above.
+
+<Tabs groupId="os">
+<TabItem value="linux" label="Linux" default>
 
 ```bash
 # Write
 echo "Hello, IOWarp!" > /mnt/cte/greeting.txt
+mkdir -p /mnt/cte/data
 cp dataset.csv /mnt/cte/data/dataset.csv
 
 # Read
@@ -263,11 +302,68 @@ cat /mnt/cte/greeting.txt
 md5sum /mnt/cte/data/dataset.csv
 
 # List
-ls /mnt/cte/
+ls -l /mnt/cte/
 
 # Delete
 rm /mnt/cte/greeting.txt
 ```
+
+</TabItem>
+<TabItem value="macos" label="macOS">
+
+Identical to Linux apart from the mountpoint and the checksum tool — macOS ships `md5`, not `md5sum`. Use `/Volumes/cte-mnt` instead of `~/cte-mnt` if you mounted with the FSKit backend.
+
+```bash
+# Write
+echo "Hello, IOWarp!" > ~/cte-mnt/greeting.txt
+mkdir -p ~/cte-mnt/data
+cp dataset.csv ~/cte-mnt/data/dataset.csv
+
+# Read
+cat ~/cte-mnt/greeting.txt
+md5 ~/cte-mnt/data/dataset.csv
+
+# List
+ls -l ~/cte-mnt/
+
+# Delete
+rm ~/cte-mnt/greeting.txt
+```
+
+</TabItem>
+<TabItem value="windows" label="Windows">
+
+Substitute the drive letter or directory you mounted at — `Z:` below matches the mount example above.
+
+```powershell
+# Write
+Set-Content -Path Z:\greeting.txt -Value "Hello, IOWarp!"
+New-Item -ItemType Directory -Path Z:\data -Force | Out-Null
+Copy-Item dataset.csv Z:\data\dataset.csv
+
+# Read
+Get-Content Z:\greeting.txt
+Get-FileHash Z:\data\dataset.csv -Algorithm MD5
+
+# List
+Get-ChildItem Z:\
+
+# Delete
+Remove-Item Z:\greeting.txt
+```
+
+The mount is an ordinary volume, so Explorer, `cmd.exe`, and any application that takes a path work against it too:
+
+```bat
+echo Hello, IOWarp! > Z:\greeting.txt
+type Z:\greeting.txt
+dir Z:\
+```
+
+If you mounted a directory rather than a drive letter, use that path instead — e.g. `C:\iowarp\cte\greeting.txt`.
+
+</TabItem>
+</Tabs>
 
 ### 4. Unmount
 
