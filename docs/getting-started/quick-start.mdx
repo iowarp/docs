@@ -63,13 +63,29 @@ You can edit it directly or point the runtime at a custom file with
 overwritten on reinstall.
 
 The default configuration starts **4 worker threads** on **port 9413** and
-composes three modules automatically:
+composes these modules automatically:
 
-| Module | Purpose |
-|--------|---------|
-| `clio_bdev` | 512 MB RAM block device |
-| `clio_cte_core` | Context Transfer Engine with a 512 MB RAM cache |
-| `clio_cae_core` | Context Assimilation Engine |
+| Module | Pool | Purpose |
+|--------|------|---------|
+| `clio_bdev` | `301.0` | DRAM block device (`0g` = 80% of total system DRAM) |
+| `clio_cae_core` | `400.0` | Context Assimilation Engine — forwards its data path to CTE |
+| `clio_cte_core` | `512.0` | Context Transfer Engine: a DRAM tier plus a 10 GB persistent disk tier at `~/.clio/cte_disk_tier.dat`, with metadata logging to `~/.clio/cte_metadata_log` |
+| `clio_cte_replication` | `561.0` | One persistent replica of every blob on the disk tier |
+| `clio_cte_indexer` | `564.0` | BM25 index that serves semantic search |
+| `clio_cte_cache` | `563.0` | Node-local raw copies (the zero-IPC read fast path) |
+| `clio_cte_filesystem` | `560.0` | POSIX-style filesystem the FUSE / POSIX adapters drive |
+
+The last four form the **interposition chain** — each speaks the CTE core's
+own task interface and stacks over the next via `next_pool_id`:
+
+```
+cache(563.0) → indexer(564.0) → replication(561.0) → core(512.0)
+```
+
+Because they share the core's vocabulary, none of this changes how you call
+CTE. Every layer is optional: delete its `compose` entry and re-point the
+entry above it. See
+[Cache / Replication / Indexing ChiMods](../sdk/context-transfer-engine/chimod-chain).
 
 ## 3. Start the Runtime
 
@@ -162,10 +178,17 @@ Done!
 | Variable | Description |
 |----------|-------------|
 | `CLIO_SERVER_CONF` | Path to YAML configuration file (highest priority) |
-| `CLIO_IPC_MODE` | Transport: `SHM` (shared memory), `TCP` (default), `IPC` (Unix socket) |
+| `CLIO_IPC_MODE` | Force a transport: `SHM`, `IPC` (Unix socket), or `TCP`. Unset (the default) auto-probes for the fastest usable one in that order. |
 | `CLIO_PORT` | Override the RPC port (default: `9413`). Takes priority over YAML config. |
-| `CLIO_SERVER_ADDR` | Override the server address clients connect to (default: `127.0.0.1`). |
-| `CTP_LOG_LEVEL` | Logging verbosity: `debug`, `info`, `warning`, `error`, `fatal` |
+| `CLIO_SERVER_ADDR` | Address clients dial to reach the runtime (default: `127.0.0.1`). |
+| `CLIO_BIND_ADDR` | Address the runtime's listeners bind to (default: `0.0.0.0`). |
+| `CLIO_EPHEMERAL` | `1` starts the runtime bare — the `compose` section is skipped. |
+| `CLIO_CTE_POOL` | Bind the CTE client to an interposing pool, e.g. `563.0` for the chain top. |
+| `CTP_LOG_LEVEL` | Logging verbosity: `debug`, `info`, `success`, `warning`, `error`, `fatal` |
+| `CTP_LOG_OUT` | Also write log output to this file. |
+
+See the [Configuration Reference](../deployment/configuration#environment-variables)
+for the full list.
 
 ## Next Steps
 

@@ -1,3 +1,9 @@
+---
+sidebar_position: 1
+title: CTE Core API
+description: Blob storage API, storage tiers, data placement, and configuration for the Context Transfer Engine core.
+---
+
 # Core API Documentation
 
 ## Overview
@@ -19,7 +25,7 @@ CTE Core implements a Module (CLIO Runtime Module) that integrates with the CLIO
 
 - CMake 3.20 or higher
 - C++17 compatible compiler
-- Clio framework (chimaera and chimaera_admin packages)
+- Clio framework (`clio-core` umbrella package, which provides `clio::run::cxx` and the admin Module)
 - yaml-cpp library
 - Python 3.7+ (for Python bindings)
 - nanobind (for Python bindings)
@@ -50,8 +56,7 @@ To use CTE Core in your CMake project, follow the patterns established in the MO
 
 ```cmake
 # Find required Clio framework packages
-find_package(chimaera REQUIRED)              # Core Clio framework
-find_package(chimaera_admin REQUIRED)        # Admin Module (required)
+find_package(clio-core CONFIG REQUIRED)      # Core Clio framework + admin Module
 
 # Find CTE Core Module package
 find_package(clio_cte_core REQUIRED)          # CTE Core Module
@@ -64,7 +69,7 @@ target_link_libraries(my_app
   PRIVATE 
     clio_cte::core_client                     # CTE Core client library
     # clio_cte::core_runtime                  # Optional - if you need runtime functionality
-    # chimaera::admin_client                 # Optional - if you need admin functionality
+    # clio::run::admin_client                # Optional - if you need admin functionality
 )
 
 # Note: Include directories are handled automatically by the Module targets
@@ -86,7 +91,7 @@ CTE Core follows the CLIO Runtime Module naming conventions:
 The CTE Core Module targets automatically include all required dependencies:
 
 - **Core CLIO Runtime Framework**: Automatically linked via `clio_cte::core_client` target
-- **Admin Module**: Available via `chimaera::admin_client` if needed
+- **Admin Module**: Available via `clio::run::admin_client` if needed
 - **Include Paths**: Automatically configured by Module targets
 - **System Dependencies**: Handled by the build system (threading, YAML, etc.)
 
@@ -109,8 +114,7 @@ set(CMAKE_CXX_STANDARD_20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Find required packages
-find_package(chimaera REQUIRED)              # Core Clio framework
-find_package(chimaera_admin REQUIRED)        # Admin Module
+find_package(clio-core CONFIG REQUIRED)      # Core Clio framework + admin Module
 find_package(clio_cte_core REQUIRED)          # CTE Core Module
 
 # Find additional dependencies
@@ -124,7 +128,7 @@ add_executable(my_cte_app main.cpp)
 target_link_libraries(my_cte_app
   clio_cte::core_client                       # CTE Core client (required)
   # clio_cte::core_runtime                    # Optional - if needed
-  # chimaera::admin_client                   # Optional - if needed
+  # clio::run::admin_client                  # Optional - if needed
   ${CMAKE_THREAD_LIBS_INIT}                 # Threading support
 )
 ```
@@ -1795,7 +1799,7 @@ void example() {
 Enable debug logging by setting environment variables:
 
 ```bash
-export CHIMAERA_LOG_LEVEL=DEBUG
+export CTP_LOG_LEVEL=debug
 export CTE_LOG_LEVEL=DEBUG
 ```
 

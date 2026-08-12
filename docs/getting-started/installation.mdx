@@ -133,7 +133,26 @@ docker run -d -p 9413:9413 --memory=8g --name iowarp iowarp/deploy-cpu:latest cl
 
 ### Using Docker Compose
 
-Create a `docker-compose.yml`:
+The image already ships the default config at
+`/home/iowarp/.clio/clio.yaml` and runs as the `iowarp` user, so the shortest
+working `docker-compose.yml` is just:
+
+```yaml
+services:
+  iowarp:
+    image: iowarp/deploy-cpu:latest
+    container_name: iowarp
+    hostname: iowarp
+    ports:
+      - "9413:9413"
+    mem_limit: 8g
+    command: ["clio_run", "start"]
+    restart: unless-stopped
+```
+
+In practice you want two more things: your own config, and a volume so the
+persistent tier, metadata log, and search index survive `docker compose down`
+(the default config writes all three under `~/.clio/`).
 
 ```yaml
 services:
@@ -142,18 +161,31 @@ services:
     container_name: iowarp
     hostname: iowarp
     volumes:
-      - ./clio.yaml:/home/iowarp/.clio/clio.yaml:ro
+      - ./clio.yaml:/etc/iowarp/clio.yaml:ro
+      - iowarp-state:/home/iowarp/.clio
+    environment:
+      - CLIO_SERVER_CONF=/etc/iowarp/clio.yaml
+      - CTP_LOG_LEVEL=info
     ports:
       - "9413:9413"
     mem_limit: 8g
     command: ["clio_run", "start"]
     restart: unless-stopped
+
+volumes:
+  iowarp-state:
 ```
+
+Mounting the config at `/etc/iowarp/clio.yaml` and pointing
+`CLIO_SERVER_CONF` at it keeps the config mount and the state volume from
+fighting over the same directory.
 
 Start the service:
 
 ```bash
 docker compose up -d
+docker compose logs -f      # "SpawnWorkerThreads" means the runtime is up
+docker compose down
 ```
 
 :::info

@@ -1,3 +1,9 @@
+---
+sidebar_position: 4
+title: GPU Infinite Memory (UVM)
+description: Software-managed GPU demand paging over the CUDA VMM primitives.
+---
+
 # GPU Infinite Memory (UVM)
 
 The `clio_cte_uvm` module provides a **software-managed GPU demand-paging

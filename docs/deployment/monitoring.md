@@ -202,7 +202,7 @@ The dashboard reads the same config file as the runtime, using the same search o
 | `CLIO_SERVER_CONF` environment variable | **1st** |
 | `~/.clio/clio.yaml` | **2nd** |
 
-Legacy paths (`~/.clio/chimaera.yaml`, `~/.chimaera/clio.yaml`, `~/.chimaera/chimaera.yaml`) and the legacy env var (`CHI_SERVER_CONF`) are also accepted. See [Deprecation Notes](../deprecation-notes) for the full list, and [Configuration](./configuration) for the file format.
+Legacy paths (`~/.chimaera/…`) and the legacy `CHI_SERVER_CONF` env var are **no longer** accepted. See [Deprecation Notes](../deprecation-notes), and [Configuration](./configuration) for the file format.
 
 ### Connection lifecycle
 
