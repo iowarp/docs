@@ -535,6 +535,17 @@ void example() {
 }
 ```
 
+:::tip From the dashboard
+The runtime's [web dashboard](../../deployment/monitoring#runtime-dashboard)
+gives every CTE core pool a management page at `/viz/clio_cte_core/`: the
+target roster (score, free space, capacity, latency, bandwidth, bytes read/written) with **register** and
+**unregister** buttons, backed by
+`GET /api/mod/clio_cte_core/{pool}/targets` and
+`POST …/register_target` / `…/unregister_target`. `register_target` takes a
+fresh `name` + `bdev_type` + `capacity`, or `name` + `attach_pool_id` to
+attach an existing pool such as a safe-bdev array.
+:::
+
 ### Working with Tags and Blobs
 
 #### Using the Core Client Directly
