@@ -185,6 +185,45 @@ swim:
 
 ---
 
+## Web Dashboard (`viz`)
+
+The runtime serves its own web dashboard: the admin ChiMod starts one HTTP
+server per node, and every ChiMod that ships a `viz/` directory of
+HTML/CSS/JS is mounted at `/viz/<mod_name>` with the routes its container
+registered. Nothing here is collective, so each node serves the same UI
+independently. See [Monitoring → Runtime Dashboard](./monitoring#runtime-dashboard)
+for the pages and the REST API.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `enabled` | *(see note)* | Serve the dashboard on this node. Setting this key is an explicit choice that overrides the CLI default. |
+| `port` | `8080` | TCP port. `0` binds an ephemeral port (the bound port is logged). |
+| `bind` | `"127.0.0.1"` | Bind address. Loopback by default: the dashboard exposes runtime internals and has no authentication, so binding `0.0.0.0` publishes them to the network — prefer an SSH tunnel. |
+| `max_threads` | `16` | HTTP request threads. Thread-per-connection: a browser parks ~6 keep-alive sockets, so keep this comfortably above that. |
+
+```yaml
+viz:
+  enabled: true
+  port: 8080
+  bind: "127.0.0.1"
+  max_threads: 16
+```
+
+:::note Who gets the dashboard by default
+`clio_run start` / `clio_run restart` serve the dashboard by default; an
+**embedded** runtime — a unit test, an adapter, or a library user's
+`CLIO_INIT` — does not, so a library user never gets an unexpected listening
+socket. Setting `viz.enabled` here (or `CLIO_VIZ_ENABLE`) decides it for
+both. On the command line, `--viz` / `--no-viz`, `--viz-port N`, and
+`--viz-bind ADDR` do the same; naming a port or bind address implies `--viz`.
+:::
+
+A port that is already taken logs a warning and disables the dashboard; it
+never fails the runtime. The dashboard is only compiled in when `Poco::Net`
+is found at configure time.
+
+---
+
 ## Compose Section
 
 The `compose` section declaratively creates module pools at runtime startup. Each entry defines one pool.
@@ -867,6 +906,18 @@ engine's ranks stagger and retry their client init so they do not stampede it.
 | `CLIO_INIT_STAGGER_MS` | `250` | Per-local-rank stagger step. At the defaults, 12 ranks spread over 3 s. |
 | `CLIO_INIT_ATTEMPTS` | `60` | Client-init retry attempts. |
 | `CLIO_INIT_SLEEP_MS` | `3000` | **Mean** backoff between attempts; the actual sleep is uniform over `[0.5×, 1.5×]` with a per-rank seed, so same-node ranks do not all retry on the same second. Default budget: 60 × ~3 s ≈ 3 minutes. |
+
+### Web dashboard
+
+These override the [`viz`](#web-dashboard-viz) section.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CLIO_VIZ_ENABLE` | *(daemon: on, embedded: off)* | `1`/`0`. Counts as an explicit choice, so `clio_run start` will not override it. |
+| `CLIO_VIZ_PORT` | `8080` | Dashboard TCP port. `0` = pick a free one. |
+| `CLIO_VIZ_BIND` | `127.0.0.1` | Dashboard bind address. |
+| `CLIO_VIZ_MAX_THREADS` | `16` | HTTP thread-pool size. |
+| `CLIO_VIZ_PATH` | *(unset)* | `:`-separated list of viz roots (each holding one subdirectory per ChiMod) to serve pages from instead of the ones next to the loaded ChiMod libraries — edit pages against a running daemon without rebuilding. |
 
 ### Task scheduling
 

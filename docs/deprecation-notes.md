@@ -146,6 +146,27 @@ dynamic-loader stability. They have since been renamed too:
 
 Downstream CMake must `find_package` / link the `clio_*` target names.
 
+### The Python `context-visualizer` {#context-visualizer}
+
+The standalone Flask dashboard has been removed; the runtime now serves the
+dashboard itself (see [Monitoring → Runtime Dashboard](./deployment/monitoring#runtime-dashboard)).
+
+| Then | Now |
+|------|-----|
+| `python -m context_visualizer [--host H] [--port P]`, `context-visualizer` console script | `clio_run start` serves it; `--viz-bind H --viz-port P` (or `viz:` in `clio.yaml`, or `CLIO_VIZ_*`) |
+| `http://127.0.0.1:5000` | `http://127.0.0.1:8080` |
+| `pip install iowarp-core[visualizer]`, the `flask` dependency | nothing to install — no Python involved |
+| `-DCLIO_CORE_ENABLE_VISUALIZER=ON` | option removed; the dashboard builds whenever `Poco::Net` is found |
+| `GET /api/node/<id>/workers`, `/api/node/<id>/system_stats`, `/api/node/<id>/bdev_stats` | `GET /api/nodes/{node}/workers`, `…/system_stats`, `…/bdevs` (`{node}` may be `local`) |
+| `GET /api/system`, `/api/workers` | `GET /api/nodes/local/workers` (`/api/health` for liveness) |
+| `POST /api/topology/node/<id>/shutdown` / `restart` (via SSH) | no equivalent — run `clio_run stop` / `clio_run restart` on the node |
+| Pools page listing the config's `compose` section | Pools page listing the pools actually composed, with **Add Pool** and per-pool destroy |
+
+The `context_visualizer` package, `installers/*` entries, and the pip
+`[visualizer]` extra are gone; a script that still runs
+`python -m context_visualizer` will fail with `No module named
+context_visualizer`.
+
 ---
 
 ## Migrating a downstream project

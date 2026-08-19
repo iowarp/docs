@@ -1,15 +1,15 @@
 ---
 sidebar_position: 2
 title: Quick Start
-description: Start the CLIO Runtime and run your first CEE example.
+description: Start the CLIO Runtime, mount the IOWarp filesystem, write files to it, and watch it in the dashboard.
 ---
 
 # Quick Start
 
 This guide assumes you have already [installed IOWarp](./installation).
-It walks you through activating your environment, the default
-configuration, starting the CLIO Runtime, and running a Context
-Exploration Engine (CEE) example.
+In a few minutes you will start the CLIO Runtime, mount the IOWarp
+filesystem on your machine, write files to it with ordinary tools, and
+watch what happens in the runtime's dashboard.
 
 ## 1. Activate Your Environment
 
@@ -55,55 +55,192 @@ Verify the environment is active:
 clio_run --help
 ```
 
-## 2. Default Configuration
-
-During installation a default `~/.clio/clio.yaml` is seeded for you.
-You can edit it directly or point the runtime at a custom file with
-`CLIO_SERVER_CONF=/path/to/config.yaml`. Existing files are never
-overwritten on reinstall.
-
-The default configuration starts **4 worker threads** on **port 9413** and
-composes these modules automatically:
-
-| Module | Pool | Purpose |
-|--------|------|---------|
-| `clio_bdev` | `301.0` | DRAM block device (`0g` = 80% of total system DRAM) |
-| `clio_cae_core` | `400.0` | Context Assimilation Engine — forwards its data path to CTE |
-| `clio_cte_core` | `512.0` | Context Transfer Engine: a DRAM tier plus a 10 GB persistent disk tier at `~/.clio/cte_disk_tier.dat`, with metadata logging to `~/.clio/cte_metadata_log` |
-| `clio_cte_replication` | `561.0` | One persistent replica of every blob on the disk tier |
-| `clio_cte_indexer` | `564.0` | BM25 index that serves semantic search |
-| `clio_cte_cache` | `563.0` | Node-local raw copies (the zero-IPC read fast path) |
-| `clio_cte_filesystem` | `560.0` | POSIX-style filesystem the FUSE / POSIX adapters drive |
-
-The last four form the **interposition chain** — each speaks the CTE core's
-own task interface and stacks over the next via `next_pool_id`:
-
-```
-cache(563.0) → indexer(564.0) → replication(561.0) → core(512.0)
-```
-
-Because they share the core's vocabulary, none of this changes how you call
-CTE. Every layer is optional: delete its `compose` entry and re-point the
-entry above it. See
-[Cache / Replication / Indexing ChiMods](../sdk/context-transfer-engine/chimod-chain).
-
-## 3. Start the Runtime
+## 2. Start the Runtime
 
 ```bash
-# Start in the background
 clio_run start &
+```
 
-# Verify it is running
+That is the whole deployment. The default `~/.clio/clio.yaml` seeded at
+install time brings up everything the filesystem needs on this node:
+
+- a **DRAM block device** (80% of system memory by default) and a **10 GB
+  persistent disk tier** at `~/.clio/cte_disk_tier.dat`
+- the **Context Transfer Engine** core with its interposition chain
+  (cache → indexer → replication → core), plus the Context Assimilation
+  Engine
+- the **filesystem pool** (`clio_cte_filesystem`) that the FUSE mount in the
+  next step drives — paths become CTE tags, file contents become 1 MiB
+  page blobs, and every page rides the chain
+- the **web dashboard** on [http://127.0.0.1:8080](http://127.0.0.1:8080)
+
+Confirm it is up:
+
+```bash
 clio_run monitor --once
+```
 
-# When done
+or open the dashboard in a browser. Nothing here needs to be composed by
+hand; every layer is optional and can be trimmed later — see the
+[shipped default](../deployment/configuration#the-shipped-default-clioclioyaml)
+in the Configuration Reference.
+
+## 3. Mount the Filesystem
+
+The FUSE adapter (`clio_cte_fuse`) presents the runtime's filesystem pool as
+an ordinary directory. It attaches as a client to the runtime you just
+started, so set `CLIO_WITH_RUNTIME=0` — without it the adapter would spin up
+a private runtime of its own and nothing you write would be visible to
+anyone else.
+
+<Tabs groupId="os">
+<TabItem value="linux" label="Linux" default>
+
+Needs the distro's FUSE 3 runtime (`sudo apt install fuse3` /
+`sudo dnf install fuse3`). In a second terminal:
+
+```bash
+mkdir -p ~/cte-mnt
+CLIO_WITH_RUNTIME=0 clio_cte_fuse ~/cte-mnt -f
+```
+
+</TabItem>
+<TabItem value="macos" label="macOS">
+
+Needs [macFUSE](https://macfuse.github.io/) (`brew install --cask macfuse`,
+then approve the kernel extension in System Settings → Privacy & Security
+and reboot). The macOS wheel does not include the adapter, so build it with
+the `release-mac-fuse` preset first — see
+[FUSE Adapter → Installation](../deployment/adapter#installation). In a
+second terminal:
+
+```bash
+mkdir -p ~/cte-mnt
+CLIO_WITH_RUNTIME=0 clio_cte_fuse ~/cte-mnt -f
+```
+
+</TabItem>
+<TabItem value="windows" label="Windows">
+
+Needs [WinFsp](https://winfsp.dev). Pick a free drive letter; in a second
+PowerShell window:
+
+```powershell
+$env:CLIO_WITH_RUNTIME = "0"
+clio_cte_fuse Z: -f
+```
+
+Give it a moment, then confirm with `Test-Path Z:\`.
+
+</TabItem>
+</Tabs>
+
+`-f` keeps the adapter in the foreground so you can see what it is doing;
+omit it to run it as a daemon. Everything about the mount — other
+mountpoints, the FSKit backend on macOS, mounting at a directory on Windows,
+libfuse options — is in the [FUSE Adapter](../deployment/adapter) guide.
+
+## 4. Use It
+
+Any program can now read and write files on the mount with standard tools;
+nothing is IOWarp-specific.
+
+<Tabs groupId="os">
+<TabItem value="linux" label="Linux" default>
+
+```bash
+echo "Hello, IOWarp!" > ~/cte-mnt/greeting.txt
+mkdir -p ~/cte-mnt/data
+cp dataset.csv ~/cte-mnt/data/
+
+cat ~/cte-mnt/greeting.txt
+ls -l ~/cte-mnt/
+```
+
+</TabItem>
+<TabItem value="macos" label="macOS">
+
+```bash
+echo "Hello, IOWarp!" > ~/cte-mnt/greeting.txt
+mkdir -p ~/cte-mnt/data
+cp dataset.csv ~/cte-mnt/data/
+
+cat ~/cte-mnt/greeting.txt
+ls -l ~/cte-mnt/
+```
+
+</TabItem>
+<TabItem value="windows" label="Windows">
+
+```powershell
+Set-Content -Path Z:\greeting.txt -Value "Hello, IOWarp!"
+New-Item -ItemType Directory -Path Z:\data -Force | Out-Null
+Copy-Item dataset.csv Z:\data\
+
+Get-Content Z:\greeting.txt
+Get-ChildItem Z:\
+```
+
+Explorer, `cmd.exe`, and anything else that takes a path work against `Z:`
+too.
+
+</TabItem>
+</Tabs>
+
+## 5. Watch It in the Dashboard
+
+Open [http://127.0.0.1:8080](http://127.0.0.1:8080). While files land on the
+mount:
+
+- **Cluster** shows this node's CPU and memory and the workers' processed
+  task count climbing.
+- **Pools** lists every pool the runtime composed. Click `clio_cte_core` to
+  see the storage targets your writes are landing on, or the `clio_bdev`
+  card to watch the DRAM device's capacity and statistics.
+- **Config** shows the settings the daemon actually came up with.
+
+Take the [Dashboard tour](./dashboard) for the rest, including creating pools
+from the browser.
+
+## 6. Stop
+
+Unmount, then stop the runtime:
+
+<Tabs groupId="os">
+<TabItem value="linux" label="Linux" default>
+
+```bash
+fusermount3 -u ~/cte-mnt      # or Ctrl-C in the clio_cte_fuse terminal
 clio_run stop
 ```
 
-## 4. Context Exploration Engine Example
+</TabItem>
+<TabItem value="macos" label="macOS">
 
-The Context Exploration Engine (CEE) lets you assimilate data into IOWarp,
-query for it by name or regex, retrieve it, and clean up -- all from Python.
+```bash
+umount ~/cte-mnt              # or Ctrl-C in the clio_cte_fuse terminal
+clio_run stop
+```
+
+</TabItem>
+<TabItem value="windows" label="Windows">
+
+```powershell
+Stop-Process -Name clio_cte_fuse -Force   # or Ctrl-C in the clio_cte_fuse window
+clio_run stop
+```
+
+</TabItem>
+</Tabs>
+
+Files on the DRAM tier are gone when the runtime stops; the persistent disk
+tier and its metadata log under `~/.clio/` survive a restart.
+
+## 7. Optional: Assimilate Data from Python
+
+The filesystem is one door into IOWarp. The Context Exploration Engine
+(CEE) is another: it lets you assimilate data into IOWarp, query for it by
+name or regex, retrieve it, and clean up -- all from Python.
 
 Save the following as **`cee_quickstart.py`**:
 
@@ -156,7 +293,7 @@ os.unlink(tmp.name)
 print("Done!")
 ```
 
-Run it (make sure the runtime is still running in the background):
+Run it against a running runtime (`clio_run start &` again if you stopped it above):
 
 ```bash
 python3 cee_quickstart.py
@@ -173,7 +310,7 @@ Destroyed tag 'quickstart_demo'
 Done!
 ```
 
-## 5. Key Environment Variables
+## 8. Key Environment Variables
 
 | Variable | Description |
 |----------|-------------|
@@ -183,6 +320,8 @@ Done!
 | `CLIO_SERVER_ADDR` | Address clients dial to reach the runtime (default: `127.0.0.1`). |
 | `CLIO_BIND_ADDR` | Address the runtime's listeners bind to (default: `0.0.0.0`). |
 | `CLIO_EPHEMERAL` | `1` starts the runtime bare — the `compose` section is skipped. |
+| `CLIO_WITH_RUNTIME` | `0` makes a client (such as `clio_cte_fuse`) attach to the running daemon instead of embedding its own runtime. |
+| `CLIO_VIZ_PORT` / `CLIO_VIZ_BIND` / `CLIO_VIZ_ENABLE` | Dashboard port (default `8080`), bind address (default `127.0.0.1`), and on/off. |
 | `CLIO_CTE_POOL` | Bind the CTE client to an interposing pool, e.g. `563.0` for the chain top. |
 | `CTP_LOG_LEVEL` | Logging verbosity: `debug`, `info`, `success`, `warning`, `error`, `fatal` |
 | `CTP_LOG_OUT` | Also write log output to this file. |
@@ -192,6 +331,10 @@ for the full list.
 
 ## Next Steps
 
+- [Dashboard](./dashboard) -- tour the runtime's web dashboard and create
+  pools from the browser
+- [FUSE Adapter](../deployment/adapter) -- every mount option, platform
+  notes, and troubleshooting
 - Edit `~/.clio/clio.yaml` to tune thread counts, storage tiers, or add
   file-backed block devices
 - [Configuration Reference](../deployment/configuration) -- full parameter

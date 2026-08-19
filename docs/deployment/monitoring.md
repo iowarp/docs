@@ -1,14 +1,14 @@
 ---
 sidebar_position: 4
 title: Monitoring
-description: Monitoring and debugging Clio deployments — logging, the runtime dashboard, and Darshan I/O analysis.
+description: Monitoring and debugging Clio deployments — logging, the runtime's built-in web dashboard, and Darshan I/O analysis.
 ---
 
 # Monitoring & Debugging
 
 This page covers everything you need to observe a running CLIO Runtime
-cluster: structured logging, the real-time runtime dashboard
-(`context_visualizer`), and external I/O analysis via Darshan.
+cluster: structured logging, the runtime's built-in web dashboard, and
+external I/O analysis via Darshan.
 
 :::info In active development
 Additional capabilities being added:
@@ -42,218 +42,356 @@ docker exec iowarp-runtime clio_run monitor
 
 ## Runtime Dashboard
 
-The `context_visualizer` package provides a lightweight Flask web
-application that lets you inspect and manage a live CLIO Runtime cluster
-from your browser. It connects to the runtime using the same client API
-used by application code and surfaces cluster topology, per-node worker
-statistics, system resource utilization, block device stats, pool
-configuration, and the active YAML config.
+The runtime serves its own web dashboard. When you start a daemon with
+`clio_run start`, the admin ChiMod brings up an HTTP server on that node
+(default `http://127.0.0.1:8080`) that shows cluster membership, per-node
+worker and utilization stats, every pool composed on the node, the settings
+the daemon actually came up with, and a management page for every ChiMod that
+ships one (bdev, safe-bdev, CTE core). Pools can be created and destroyed
+from it.
 
-### Prerequisites
+Nothing about the dashboard is collective: each node answers from its own
+state, or forwards an explicitly-addressed query to a peer, so an N-node
+cluster serves the same UI from every node without coordinating.
 
-- IOWarp installed with Python support (`CLIO_CORE_ENABLE_PYTHON=ON`)
-- A running CLIO Runtime (`clio_run start`)
-- Python dependencies: `flask`, `pyyaml`, `msgpack`
+:::note The Python `context_visualizer` is retired
+Earlier releases shipped a separate Flask process (`python -m
+context_visualizer`, `pip install iowarp-core[visualizer]`) on port 5000.
+It has been removed: the package, its console script, and the `flask`
+dependency are gone from the pip, conda, spack, and cpack installers, and
+`CLIO_CORE_ENABLE_VISUALIZER` is no longer a CMake option. Everything it did
+now lives in the runtime, with no Python required. See
+[Deprecation Notes](../deprecation-notes#context-visualizer).
+:::
 
-Install the Python dependencies with any of:
-
-```bash
-pip install flask pyyaml msgpack
-# or
-pip install iowarp-core[visualizer]
-# or (conda)
-conda install flask pyyaml python-msgpack
-```
-
-### Starting the dashboard
-
-```bash
-python -m context_visualizer
-```
-
-Then open [http://127.0.0.1:5000](http://127.0.0.1:5000) in your browser.
-
-#### CLI options
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--host` | `127.0.0.1` | Bind address. Use `0.0.0.0` to expose on all interfaces. |
-| `--port` | `5000` | Listen port. |
-| `--debug` | *(off)* | Enable Flask debug mode (auto-reload, verbose errors). |
+### Starting it
 
 ```bash
-# Expose on all interfaces, non-default port
-python -m context_visualizer --host 0.0.0.0 --port 8080
-
-# Debug mode (development only)
-python -m context_visualizer --debug
+clio_run start                       # dashboard on http://127.0.0.1:8080
+clio_run start --viz-port 9000       # a different port
+clio_run start --viz-bind 0.0.0.0    # reachable off-box (see the warning below)
+clio_run start --no-viz              # don't serve it
 ```
+
+When the server comes up the daemon logs the address in green:
+
+```
+Viz: dashboard listening at http://127.0.0.1:8080
+```
+
+The same knobs are available in `~/.clio/clio.yaml` (which overrides the
+CLI's default) and in the environment (which overrides the file):
+
+```yaml
+viz:
+  enabled: true        # serve the dashboard on this node
+  port: 8080           # 0 = bind an ephemeral port
+  bind: "127.0.0.1"
+  max_threads: 16      # HTTP request threads
+```
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CLIO_VIZ_ENABLE` | *(see below)* | `1`/`0`. Counts as an explicit choice, so `clio_run start` will not override it. |
+| `CLIO_VIZ_PORT` | `8080` | TCP port. `0` picks a free one (the bound port is logged). |
+| `CLIO_VIZ_BIND` | `127.0.0.1` | Bind address. |
+| `CLIO_VIZ_MAX_THREADS` | `16` | HTTP thread-pool size. Thread-per-connection; a browser parks ~6 keep-alive sockets, so keep this comfortably above that. |
+| `CLIO_VIZ_PATH` | *(unset)* | `:`-separated list of viz roots to serve pages from instead of the ones next to the loaded ChiMod libraries — edit pages against a running daemon without rebuilding. |
+
+`clio_run start` / `clio_run restart` also accept `--viz` / `--no-viz`,
+`--viz-port <port>`, and `--viz-bind <addr>`. Naming a port or bind address
+implies `--viz`. See the [Configuration Reference](./configuration#web-dashboard-viz)
+for the full table.
+
+Two defaults are deliberate:
+
+- **Loopback only.** The dashboard exposes worker queues, pool layout, and
+  device inventory, and it has **no authentication**. Binding `0.0.0.0`
+  publishes all of that to the network; prefer an SSH tunnel
+  (`ssh -L 8080:127.0.0.1:8080 node1`).
+- **Off for embedded runtimes.** A unit test, an adapter, or any process that
+  calls `CLIO_INIT` itself gets no listening socket unless it asks. Only the
+  daemon CLI turns the dashboard on by default, so a daemon has it and a
+  library user does not. Setting `viz.enabled` or `CLIO_VIZ_ENABLE`
+  decides it for both.
+
+A port that is already taken logs a warning and disables the dashboard; it
+never fails the runtime.
 
 ### Pages
 
-#### Topology (`/`) {#topology}
+The admin ChiMod's shell has three tabs — **Cluster**, **Pools**, **Config** —
+plus per-node and per-pool drilldowns. Every page polls the JSON API below
+every couple of seconds.
 
-The landing page shows a live grid of all nodes in the cluster. Each node card displays:
+#### Cluster (`/`, `/viz/clio_admin/index.html`) {#topology}
 
-- **Hostname** and **IP address**
-- **Status badge** (alive)
-- **CPU**, **RAM**, and **GPU** utilization bars (GPU shown only when GPUs are present)
-- **Restart** and **Shutdown** action buttons
+Cluster membership as this node sees it (from its SWIM host table): one card
+per node with its IP, alive/dead state, and leader / "this node" badges.
+Membership comes from local state, so a dead peer costs nothing to display.
+Below the grid, **This node** shows the local CPU and memory meters (with a
+sparkline) and a workers summary — queued, blocked, and processed task
+counts. Clicking a node card opens its detail page.
 
-The search bar supports filtering by node ID (single `3`, range `1-20`, comma-separated `1,3,5`) or by hostname/IP substring.
+#### Node detail (`/viz/clio_admin/node.html?node=<id>`) {#node-detail}
 
-Clicking a node card navigates to the per-node detail page.
+Utilization (CPU sparkline, memory, hostname/IP/leader) and the per-worker
+table: active, queued, blocked, periodic, retry, processed, load, and suspend
+period. `?node=local` (the default) is this node; a node id forwards each
+panel's query to that node.
 
-#### Node detail (`/node/<id>`) {#node-detail}
+#### Pools (`/viz/clio_admin/pools.html`)
 
-A per-node drilldown page showing:
+Every pool composed on this node, grouped into one section per ChiMod. Each
+pool is a card:
 
-- **Worker statistics** — per-worker queue depth, blocked tasks, processed count, and more
-- **System stats** — time-series CPU, RAM, GPU, and HBM utilization
-- **Block device stats** — per-bdev pool throughput and capacity
+- **Click** the card to open the pool's website — its module's own page with
+  `?pool=<id>` preselected, or the generic pool page
+  (`/viz/clio_admin/pool.html`) for modules that ship none.
+- The card's corner **×** shuts the pool down after a confirmation
+  (`POST /api/pools/{pool}/destroy`). Destroying the admin pool is refused,
+  since that is the runtime itself.
+- Cards summarize the pool's own `Monitor("stats")` where the module answers
+  one, and the tab paints the pool list immediately and streams stats in;
+  a partial failure shows a visible error rather than a blank tab.
 
-#### Pools (`/pools`)
+**Add Pool** lists every loaded ChiMod (with a search box). Modules that
+register a create form (bdev, safe-bdev, CTE core) get a typed form with a
+**Validate** button that checks every field without creating anything;
+any other module gets the generic **compose editor** — identity fields
+(`mod_name`, `pool_name`, `pool_id`, `pool_query`) plus a raw-YAML box whose
+contents are the compose entry's module parameters, driven through the same
+path as `clio_run compose`. Pool ids are prefilled with a free suggestion
+that you may edit.
 
-Lists all pools defined in the `compose` section of the active configuration file:
+The **Monitor explorer** at the bottom forwards any query string to a pool's
+own `Monitor()` handler (`local` or `broadcast` routing) and shows the raw
+JSON — the same endpoint a module's own page uses.
 
-| Column | Description |
-|--------|-------------|
-| **Module** | Module shared-library name (`mod_name`) |
-| **Pool Name** | User-defined pool name |
-| **Pool ID** | Unique pool identifier |
-| **Query** | Routing policy (`local`, `dynamic`, `broadcast`) |
+Every pool page shows the pool's **task predictions**: the learned per-method
+CPU/wall coefficients the scheduler routes with, and their MAPE (average
+prediction error).
 
-#### Config (`/config`)
+:::caution Known issue
+Destroying a pool whose module runs periodic tasks (safe-bdev, CTE) currently
+leaves those periodics retrying against the destroyed pool
+([#1000](https://github.com/iowarp/core/issues/1000)).
+:::
 
-Displays the full contents of the active YAML configuration file as formatted JSON, for quick inspection without opening a terminal.
+#### Config (`/viz/clio_admin/config.html`)
+
+The runtime settings this daemon **actually came up with** — not what a file
+says — plus the full route table: every endpoint and asset mount, and which
+ChiMod registered it. This is how you can tell which modules shipped a UI.
+
+#### Module websites
+
+Any ChiMod may ship a `viz/` directory of HTML/CSS/JS, mounted at
+`/viz/<mod_name>/`. Three do today:
+
+| Page | What it shows / does |
+|------|----------------------|
+| `/viz/clio_bdev/` | One block-device pool at a time: a capacity meter plus the full statistics table (bandwidth, latency, ops, …) from the pool's `Monitor("stats")`. |
+| `/viz/clio_safe_bdev/` | Pick an array, watch recovery progress and the member roster live. **Add** a member (an existing bdev pool by name, or name + capacity to create one on the spot; `as_parity=1` raises the parity level), **replace** a failed member, or **remove** one. |
+| `/viz/clio_cte_core/` | The pool's storage-target roster (score, free space, capacity, latency, bandwidth, bytes read/written) with **register** (a fresh bdev by type + capacity, or `attach_pool_id` to attach an existing pool such as a safe-bdev array) and **unregister** buttons. |
+
+See [Adding a dashboard page to your ChiMod](../sdk/context-runtime/2.module_dev_guide.md#web-dashboard-integration-registerviz)
+to ship your own.
 
 ### REST API
 
-All pages are backed by a JSON API. You can query these endpoints directly for scripting or integration with other monitoring tools.
+Every page is backed by a JSON API on the same port, which you can hit
+directly with `curl` or wire into other monitoring tools. All responses are
+`application/json`; errors carry an HTTP status (`400` for a bad node/pool
+id, `503` when the runtime or a peer did not answer, `404` for an unknown
+route) and an `{"error": "..."}` body.
 
-#### Cluster-wide
+#### Node-local
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/topology` | GET | List all nodes with hostname, IP, CPU/RAM/GPU utilization |
-| `/api/system` | GET | High-level system overview (connected, worker/queue/blocked/processed counts) |
-| `/api/workers` | GET | Per-worker stats plus a fleet summary (local node) |
-| `/api/pools` | GET | Pool list from the `compose` section of the config |
-| `/api/config` | GET | Full active configuration as JSON |
+| `/api/health` | GET | Liveness plus this node's identity. |
+| `/api/topology` | GET | Cluster membership and SWIM state, from the local host table. |
+| `/api/pools` | GET | Pools composed on this node, from the pool manager. |
+| `/api/config` | GET | The settings this daemon came up with. |
+| `/api/routes` | GET | Every route and asset mount, per ChiMod. |
+| `/api/chimods` | GET | Loaded modules, and which registered a create form or shipped pages. |
 
 #### Per-node
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/node/<id>/workers` | GET | Worker stats for a specific node |
-| `/api/node/<id>/system_stats` | GET | System resource utilization entries for a specific node |
-| `/api/node/<id>/bdev_stats` | GET | Block device stats for a specific node |
-
-#### Node management
+`{node}` is a node id from `/api/topology`, or `local`. Addressing this
+node by its own id routes locally, so the single-node case never touches the
+network. Each of these is one `Monitor()` task to the admin pool on that
+node; the admin's forwards use a 5 s timeout so an unreachable peer cannot
+pin an HTTP thread.
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/topology/node/<id>/shutdown` | POST | Gracefully shut down a node via SSH |
-| `/api/topology/node/<id>/restart` | POST | Restart a node via SSH |
+| `/api/nodes/{node}/workers` | GET | Per-worker queue depth, load, and task counts. |
+| `/api/nodes/{node}/system_stats` | GET | Sampled CPU / RAM / GPU utilization ring, newer than `?min_event_id`. |
+| `/api/nodes/{node}/containers` | GET | Per-pool containers and their learned task-cost models. |
+| `/api/nodes/{node}/bdevs` | GET | Every block device on the node, with capacity and throughput. |
 
-Shutdown and restart are performed by SSHing from the dashboard host to the target node and running `clio_run stop` or `clio_run restart`. This avoids the problem of a node killing itself mid-RPC. The SSH connection uses `StrictHostKeyChecking=no` and `ConnectTimeout=5`.
+#### Per-pool
 
-**Shutdown response:**
-```json
-{
-  "success": true,
-  "returncode": 0,
-  "stdout": "",
-  "stderr": ""
-}
-```
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/pools/{pool}/monitor` | GET | Forward `?query=<string>` to the pool's own `Monitor()` (`?routing=local\|broadcast\|…`). |
+| `/api/pools/{pool}/destroy` | POST | Shut a pool down (refused for the admin pool). |
+| `/api/pools/compose` | POST | Create a pool of any ChiMod via the compose path — fields `mod_name`, `pool_name`, `pool_id`, `pool_query`, `config` (raw YAML), optional `action=validate`. |
 
-Exit codes `0` and `134` (SIGABRT from `std::abort()` in `InitiateShutdown`) are both treated as success.
+#### Per-module
 
-**Restart** uses `nohup` so the SSH session returns immediately while the node restarts in the background.
+Modules register their own endpoints under `/api/mod/<mod_name>/…`; the
+convention is `GET …/pools` (this node's pools of that module),
+`GET …/create` (a form spec) and `POST …/create` (validate or create), plus
+whatever management actions the module offers:
 
-All endpoints return `Content-Type: application/json`. On error they return an appropriate HTTP status code (e.g., `503` if the runtime is unreachable, `404` if a node is not found) with an `"error"` field in the response body.
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/mod/clio_bdev/pools` | GET | Block-device pools on this node. |
+| `/api/mod/clio_safe_bdev/{pool}/add_member` | POST | Add a data or parity member (`member_name[, capacity, bdev_type, node_id, as_parity]`). |
+| `/api/mod/clio_safe_bdev/{pool}/replace_member` | POST | Replace a failed member with a fresh bdev and recover onto it (`failed_pool_id, member_name, capacity[, bdev_type, node_id]`). |
+| `/api/mod/clio_safe_bdev/{pool}/remove_member` | POST | Take a member out of service (`member_pool_id[, was_faulty]`). |
+| `/api/mod/clio_cte_core/{pool}/targets` | GET | The pool's registered storage targets, with score and capacity. |
+| `/api/mod/clio_cte_core/{pool}/register_target` | POST | Register a bdev as a storage target (`name[, bdev_type, capacity \| attach_pool_id]`). |
+| `/api/mod/clio_cte_core/{pool}/unregister_target` | POST | Remove a target from placement (`name`). |
+| `/api/mod/<mod>/create` | GET / POST | The module's create-form spec, and the validate/create action. |
+
+`GET /api/routes` on a running daemon is the authoritative list, including
+any module you added yourself.
+
+POST bodies of type `application/x-www-form-urlencoded` are parsed into the
+same parameter map as the query string (the query string wins on a
+collision), so `curl -d` and `?key=value` are interchangeable. Create
+endpoints answer `{"ok":true,"pool_id":…}` on success and
+`{"ok":false,"errors":{field: message}}` at HTTP 400 on validation failure,
+all fields at once.
+
+The GETs are all read-only. The POSTs create pools and manage module
+resources — the same operations any local RPC client can already perform —
+and stay node-local; nothing here shuts a node down or deletes data. (The
+retired Python dashboard's SSH-driven node shutdown/restart buttons have no
+equivalent; use `clio_run stop` / `clio_run restart` on the node.)
 
 #### Examples
 
 ```bash
-# Get cluster topology
-curl http://127.0.0.1:5000/api/topology
+# Is the dashboard up, and which node am I talking to?
+curl http://127.0.0.1:8080/api/health
 
-# Get system overview
-curl http://127.0.0.1:5000/api/system
+# Cluster membership
+curl http://127.0.0.1:8080/api/topology
 
-# Get worker stats for node 2
-curl http://127.0.0.1:5000/api/node/2/workers
+# Worker stats on this node, then on node 2
+curl http://127.0.0.1:8080/api/nodes/local/workers
+curl http://127.0.0.1:8080/api/nodes/2/workers
 
-# Shut down node 3
-curl -X POST http://127.0.0.1:5000/api/topology/node/3/shutdown
+# Ask the CTE core pool (512.0) for its stats, and list its targets
+curl "http://127.0.0.1:8080/api/pools/512.0/monitor?query=stats"
+curl http://127.0.0.1:8080/api/mod/clio_cte_core/512.0/targets
 
-# Restart node 3
-curl -X POST http://127.0.0.1:5000/api/topology/node/3/restart
+# Validate, then create, a 1 GB RAM bdev through the module's own form
+curl -d "action=validate&pool_name=ram::scratch&pool_id=305.0&bdev_type=ram&capacity=1GB" \
+     http://127.0.0.1:8080/api/mod/clio_bdev/create
+curl -d "pool_name=ram::scratch&pool_id=305.0&bdev_type=ram&capacity=1GB" \
+     http://127.0.0.1:8080/api/mod/clio_bdev/create
+
+# Shut that pool down again
+curl -X POST http://127.0.0.1:8080/api/pools/305.0/destroy
+
+# What did this daemon register?
+curl http://127.0.0.1:8080/api/routes
 ```
 
-### Configuration file discovery
+### Where the pages come from
 
-The dashboard reads the same config file as the runtime, using the same search order:
+A ChiMod's assets are found **relative to the library the runtime actually
+loaded**, so a built-but-not-installed tree and an installed tree both work
+with no configuration:
 
-| Source | Priority |
-|--------|----------|
-| `CLIO_SERVER_CONF` environment variable | **1st** |
-| `~/.clio/clio.yaml` | **2nd** |
+| Layout | Libraries | Assets |
+|--------|-----------|--------|
+| built, not installed | `<build>/bin` | `<build>/bin/viz/<mod_name>` |
+| installed (make install, wheel, deb/rpm) | `<prefix>/lib` | `<prefix>/share/clio/viz/<mod_name>` |
 
-Legacy paths (`~/.chimaera/…`) and the legacy `CHI_SERVER_CONF` env var are **no longer** accepted. See [Deprecation Notes](../deprecation-notes), and [Configuration](./configuration) for the file format.
+`$CLIO_VIZ_PATH` is checked first. If the daemon logs
+`Viz: no viz/ assets found for ChiMod <name>`, the module's `viz/` directory
+was not staged next to its library — rebuild, or point `CLIO_VIZ_PATH` at
+the source tree.
 
-### Connection lifecycle
+### Build requirements
 
-The dashboard connects to the runtime lazily — on the first request that needs live data. If the runtime is not yet running when the dashboard starts, it will show a disconnected state and retry on subsequent requests. Shutdown is handled automatically via `atexit` so the client is finalized cleanly when the server process exits.
+The HTTP server is `Poco::Net`, linked privately into the runtime library
+and picked up by `find_package(Poco COMPONENTS Net …)` at configure time.
+The `iowarp/deps-cpu` devcontainer image (`libpoco-dev`) and the conda
+recipe (`poco`) provide it, so source builds in the devcontainer and conda
+installs have the dashboard. Without Poco the runtime still builds and
+starts — CMake reports `Web dashboard (viz): DISABLED (Poco::Net not found)`,
+`clio_run start` logs a warning, and the dashboard is simply absent. Install
+`libpoco-dev` (apt), `poco-devel` (dnf), or `poco` (conda-forge / brew) and
+reconfigure to enable it. `ctest -R cr_viz_tests` exercises the router and
+drives the real server over TCP.
 
 ### Docker / remote access
 
-When running the runtime inside Docker or on a remote host, bind the dashboard to all interfaces and forward the port:
-
-```bash
-# On the host running the runtime
-python -m context_visualizer --host 0.0.0.0 --port 5000
-```
+The daemon serves the dashboard itself, so exposing it from a container is
+just a bind address and a port mapping:
 
 ```yaml
 # docker-compose.yml — expose the dashboard port alongside the runtime
 services:
   iowarp:
     image: iowarp/deploy-cpu:latest
+    environment:
+      - CLIO_VIZ_BIND=0.0.0.0
+      - CLIO_VIZ_PORT=8080
     ports:
       - "9413:9413"   # CLIO Runtime RPC
-      - "5000:5000"   # Dashboard
-    command: >
-      bash -c "clio_run start &
-               python -m context_visualizer --host 0.0.0.0"
+      - "8080:8080"   # Dashboard
+    command: ["clio_run", "start"]
+```
+
+For a remote host, leave the bind address on loopback and tunnel instead:
+
+```bash
+ssh -L 8080:127.0.0.1:8080 user@node1
+# then open http://127.0.0.1:8080 locally
 ```
 
 :::warning
-The dashboard has no authentication. Do not expose it on a public network without a reverse proxy that enforces access control.
+The dashboard has no authentication, and it can create and destroy pools.
+Do not bind it to a public interface without a reverse proxy that enforces
+access control.
 :::
 
 ### Try it: interactive Docker cluster {#interactive-cluster}
 
-An interactive test environment is provided that spins up a **4-node CLIO Runtime cluster** with the dashboard so you can explore all features from your browser.
+An interactive test environment spins up an **8-node CLIO Runtime cluster**
+with the dashboard served by node 1 so you can explore every page from your
+browser.
 
 #### Location
 
 ```
 context-runtime/test/integration/interactive/
-├── docker-compose.yml   # 4-node runtime cluster
-├── hostfile             # Node IP addresses (172.28.0.10-13)
+├── docker-compose.yml   # 8-node runtime cluster
+├── hostfile             # Node IP addresses
 ├── clio_conf.yaml       # Runtime configuration
 └── run.sh               # Launcher script
 ```
 
 #### How it works
 
-- **4 Docker containers** (`iowarp-interactive-node1` through `node4`) run the CLIO Runtime on a private `172.28.0.0/16` network, each with `sshd` for SSH-based shutdown/restart
-- **Node 1** also runs the dashboard alongside its runtime
-- The script connects the devcontainer to the Docker network and starts a local port-forward so that `localhost:5000` reaches the dashboard inside Docker — VS Code then auto-forwards this to your host browser
-- SSH keys are distributed via a shared Docker volume so the dashboard can authenticate to all nodes
+- **8 Docker containers** (`iowarp-interactive-node1` through `node8`) run
+  the CLIO Runtime on a private Docker network
+- **Node 1** starts its runtime with `CLIO_VIZ_ENABLE=1`, `CLIO_VIZ_PORT=5000`,
+  and `CLIO_VIZ_BIND=0.0.0.0`, so its built-in dashboard is reachable from
+  outside the container; it also runs a `bdev_io` throughput benchmark for a
+  few minutes so the worker and device pages have something to show
+- The script connects the devcontainer to the Docker network and starts a
+  local port-forward so that `localhost:5000` reaches node 1's dashboard —
+  VS Code then auto-forwards this to your host browser
 
 #### Running
 
@@ -269,13 +407,17 @@ bash run.sh start
 # Follow runtime container logs
 bash run.sh logs
 
-# Stop everything (cluster + dashboard)
+# Stop everything (cluster + port forward)
 bash run.sh stop
 ```
 
-Once the cluster is up (~15 seconds), open [http://localhost:5000](http://localhost:5000) to browse the topology, click into individual nodes, and use the Restart/Shutdown buttons.
+Once the cluster is up (~15 seconds), open [http://localhost:5000](http://localhost:5000)
+to browse the cluster, click into individual nodes, open the Pools tab, and
+try **Add Pool** against a real multi-node runtime. `DASHBOARD_PORT` changes
+the forwarded port.
 
-If running from a devcontainer or a host where the workspace is at a different path, set `HOST_WORKSPACE`:
+If running from a devcontainer or a host where the workspace is at a
+different path, set `HOST_WORKSPACE`:
 
 ```bash
 HOST_WORKSPACE=/host/path/to/workspace bash run.sh

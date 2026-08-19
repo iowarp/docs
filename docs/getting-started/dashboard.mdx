@@ -1,0 +1,176 @@
+---
+sidebar_position: 3
+title: Dashboard
+description: Open the runtime's built-in web dashboard, take a tour of its pages, and create your first pool from the browser.
+---
+
+# Dashboard
+
+Every CLIO Runtime daemon serves a web dashboard. Start the runtime and open
+[http://127.0.0.1:8080](http://127.0.0.1:8080) — there is nothing to install,
+no separate process to run, and no Python involved.
+
+This page is a tour. The full reference — configuration, the REST API, and
+how to add pages for your own ChiMod — is under
+[Deployment → Monitoring](../deployment/monitoring#runtime-dashboard).
+
+## 1. Open it
+
+Start the runtime as in the [Quick Start](./quick-start):
+
+```bash
+clio_run start &
+```
+
+The daemon logs where the dashboard is listening:
+
+```
+Viz: dashboard listening at http://127.0.0.1:8080
+```
+
+Open that address in a browser. If `:8080` is taken on your machine, pick
+another port; if you are on a remote host, keep the dashboard on loopback
+and tunnel to it:
+
+```bash
+# Different port
+clio_run start --viz-port 9000 &
+
+# Remote host: tunnel from your laptop, then open http://127.0.0.1:8080 locally
+ssh -L 8080:127.0.0.1:8080 user@node1
+```
+
+Running in Docker? Bind the dashboard to all interfaces inside the
+container and publish the port:
+
+```yaml
+services:
+  iowarp:
+    image: iowarp/deploy-cpu:latest
+    environment:
+      - CLIO_VIZ_BIND=0.0.0.0
+    ports:
+      - "9413:9413"   # runtime RPC
+      - "8080:8080"   # dashboard
+    command: ["clio_run", "start"]
+```
+
+:::warning No authentication
+The dashboard shows runtime internals and can create and destroy pools. It
+listens on loopback by default for a reason — do not bind it to a public
+interface without a reverse proxy that enforces access control.
+:::
+
+:::note If nothing is listening on 8080
+The dashboard is compiled into the runtime only when the build found
+`Poco::Net`. If `clio_run start` logs a `Viz:` warning instead of the
+green *listening* line, your build lacks it — see
+[Build requirements](../deployment/monitoring#build-requirements).
+:::
+
+## 2. The tour
+
+The navigation bar has three tabs — **Cluster**, **Pools**, **Config** — and
+a connection indicator. Every page refreshes itself every couple of seconds.
+
+### Cluster
+
+The landing page. One card per node in the cluster with its IP, alive/dead
+state, and *leader* / *this node* badges — on a laptop that is a single
+card. Below it, **This node** shows live CPU and memory meters and a
+workers summary: how many tasks are queued, blocked, and processed. Click a
+node card (or the Workers card) to open the node page: utilization plus a
+per-worker table of queue depth, blocked and periodic tasks, load, and
+suspend period.
+
+### Pools
+
+Everything composed on this node, grouped by ChiMod. With the default
+configuration you will see the DRAM block device (`clio_bdev`), the CTE
+core (`clio_cte_core`) and its interposition chain (cache, indexer,
+replication), the CAE, and the filesystem pool (`clio_cte_filesystem`)
+that the FUSE mount drives.
+
+Each pool is a card. Click it to open the pool's own website:
+
+| Module | What its page shows |
+|--------|---------------------|
+| `clio_bdev` | One block device at a time: a capacity meter and the device's full statistics (bandwidth, latency, ops, …). |
+| `clio_cte_core` | The storage-target roster — score, free space, capacity, latency, bandwidth, bytes read/written — with **register** / **unregister** buttons. |
+| `clio_safe_bdev` | Array members and recovery progress, with add / replace / remove. |
+| everything else | A generic pool page: identity, the scheduler's learned **task predictions** for the pool, and a box to run any of the pool's `Monitor()` queries. |
+
+The corner **×** on a card destroys that pool (after a confirmation). The
+admin pool cannot be destroyed — that is the runtime itself.
+
+### Config
+
+The settings the daemon **actually came up with** — after the config file,
+environment variables, and CLI flags were applied — plus the route table:
+every REST endpoint and static-page mount, and which ChiMod registered it.
+Handy when a setting does not seem to take effect.
+
+## 3. Create a pool from the browser
+
+Try the **Add Pool** button on the Pools tab:
+
+1. Pick `clio_bdev` from the module list.
+2. Fill in the form — a RAM device is the quickest:
+   - **pool_name**: `ram::scratch`
+   - **pool_id**: leave the suggested free id
+   - **bdev_type**: `ram`
+   - **capacity**: `256MB`
+3. Click **Validate**. Every field is checked and nothing is created; errors
+   come back per field.
+4. Click **Create**. A new card appears under `clio_bdev`; click it to watch
+   the device's stats.
+
+Modules that ship a form (bdev, safe-bdev, CTE core) get typed fields like
+these. Any other module gets a **compose editor** instead — the same identity
+fields plus a raw-YAML box for module parameters, so anything you can put in
+`clio.yaml`'s `compose` section you can also create here.
+
+To retire the pool, click the **×** on its card.
+
+## 4. Watch real work
+
+With the [FUSE mount from the Quick Start](./quick-start#3-mount-the-filesystem)
+up, copy a few files into it and keep the dashboard open:
+
+- **Cluster → This node**: the *processed* count climbs and the worker
+  meters move.
+- **Pools → `clio_cte_core`**: the target roster's *bytes written* and
+  *writes* columns show the pages landing on the DRAM tier.
+- **Pools → `clio_bdev`**: the block device's capacity meter and statistics
+  update as pages are written.
+
+## 5. Turn it off or move it
+
+```bash
+clio_run start --no-viz               # don't serve it on this node
+clio_run start --viz-bind 0.0.0.0     # reachable off-box (see the warning above)
+```
+
+Or set it once in `~/.clio/clio.yaml`:
+
+```yaml
+viz:
+  enabled: true
+  port: 8080
+  bind: "127.0.0.1"
+```
+
+Only a daemon started with `clio_run start` serves the dashboard by default.
+A program that embeds the runtime (a test, an adapter, your own
+`CLIO_INIT`) does not open a port unless you set `viz.enabled` or
+`CLIO_VIZ_ENABLE=1`.
+
+## Next steps
+
+- [Monitoring → Runtime Dashboard](../deployment/monitoring#runtime-dashboard) —
+  the REST API behind every page, config knobs, and the multi-node
+  interactive cluster
+- [Web Dashboard Integration](../sdk/context-runtime/2.module_dev_guide.md#web-dashboard-integration-registerviz) —
+  give your own ChiMod a page and endpoints
+- [Configuration → Web Dashboard](../deployment/configuration#web-dashboard-viz) —
+  the `viz` section and `CLIO_VIZ_*` variables
