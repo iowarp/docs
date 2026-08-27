@@ -8,6 +8,8 @@ sidebar_position: 1
 
 The Context Assimilation Engine (CAE) is a CLIO Runtime module (`clio_cae::core`) that ingests external data sources into the CLIO Runtime. It reads data from files, HDF5 datasets, or remote Globus endpoints and stores them as blobs in the Context Transfer Engine (CTE). The CAE is registered as a Module container with pool ID `400.0`.
 
+CAE ships a second, optional ChiMod: the **summarizer** (`clio_cae_summarizer`, pool `401.0`). It interposes on the CTE core's task interface and attaches an LLM-generated summary to each matching blob on the way through. See [the interposition chain](../context-transfer-engine/chimod-chain#summarizer-chimod-clio_cae_summarizer) for its behavior and [deployment configuration](../../deployment/configuration) for its keys.
+
 ## Architecture
 
 ```

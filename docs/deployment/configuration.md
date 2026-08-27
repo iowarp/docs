@@ -473,15 +473,17 @@ CAE is the assimilation / discovery entrypoint: CEE calls `ParseOmni` here,
 and CAE forwards the data-path tasks it owns (`GetOrCreateTag`, `PutBlob`,
 `GetBlob`, `SemanticSearch`) on to CTE at `next_pool_id`.
 
+Transparent LLM summarization used to be configured on this pool
+(`label_endpoint` / `label_prompts` / `label_matches`). It now lives in the
+`clio_cae_summarizer` ChiMod documented below — move those keys onto its pool
+entry and point this pool's `next_pool_id` at it.
+
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `pool_name` | Yes | User-defined pool name. |
 | `pool_query` | Yes | Routing policy (`local`, `dynamic`, `broadcast`). |
 | `pool_id` | Yes | Unique pool ID. Canonical CAE pool ID is `"400.0"`. |
 | `next_pool_id` | No | CTE pool the data path is forwarded to (`"512.0"`). |
-| `label_endpoint` | No | Ollama-compatible server URL for transparent LLM labeling. |
-| `label_prompts` | No | Named prompt templates. |
-| `label_matches` | No | Rules (`tag_re`, `blob_re`, `model`, `prompt`, `context_length`) selecting which blobs get labeled. |
 
 ```yaml
 - mod_name: clio_cae_core
@@ -491,17 +493,51 @@ and CAE forwards the data-path tasks it owns (`GetOrCreateTag`, `PutBlob`,
   next_pool_id: "512.0"
 ```
 
-### Transparent LLM labeling (optional)
+---
 
-When configured, `PutBlob` calls `model` on `label_endpoint` for every blob
-whose tag and name match a rule, and stores the response as
-`{blob_name}_label` in the same tag. Leave it out for a pure-passthrough CAE.
+## Summarizer Module Parameters (`clio_cae_summarizer`)
+
+Transparent LLM summarization. This used to be configured on `clio_cae_core`
+itself; it is now its own ChiMod, an **interposer** on the CTE core's task
+interface — it forwards every core verb to `next_pool_id`, and additionally
+prompts a model on each matching `PutBlob`, storing the response as
+`{blob_name}_label` in the same tag. Leave the pool out entirely for a
+pure-passthrough deployment.
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `pool_name` | Yes | User-defined pool name. |
+| `pool_query` | Yes | Routing policy (`local`, `dynamic`, `broadcast`). |
+| `pool_id` | Yes | Unique pool ID. Canonical summarizer pool ID is `"401.0"`. |
+| `next_pool_id` | No | Pool the chain is forwarded to (usually the CTE core, `"512.0"`). |
+| `label_endpoint` | No | Ollama-compatible server URL. Without it no rule can fire. |
+| `label_prompts` | No | Named prompt templates, referenced by a rule's `prompt`. |
+| `label_matches` | No | Rules selecting which blobs get summarized. Empty (the default) makes the pool a pure forwarder. |
+
+Each `label_matches` entry takes:
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `tag_re` | — | Regex matched (`regex_search`) against the blob's tag name. |
+| `blob_re` | — | Regex matched (`regex_search`) against the blob name. |
+| `model` | — | Model name passed to the inference server. |
+| `prompt` | — | Key into `label_prompts`. |
+| `context_length` | `4096` | Ollama `num_ctx`. Also drives chunking: payloads larger than the per-request budget are split, prompted per chunk, and the responses concatenated. `0` disables chunking and takes Ollama's default (~2048), which silently truncates. |
+| `num_predict` | `0` | Cap on response tokens. `0` = no cap. With chunking the final summary is roughly `num_predict` x (#chunks). |
+
+Compose the summarizer **after** the pool it forwards to, and point whatever
+sits above it (typically the CAE core's `next_pool_id`) at `401.0`:
 
 ```yaml
-- mod_name: clio_cae_core
-  pool_name: cae_main
+- mod_name: clio_cte_core       # composed first - the summarizer forwards here
+  pool_name: cte_main
   pool_query: local
-  pool_id: "400.0"
+  pool_id: "512.0"
+
+- mod_name: clio_cae_summarizer
+  pool_name: clio_cae_summarizer
+  pool_query: local
+  pool_id: "401.0"
   next_pool_id: "512.0"
   label_endpoint: "http://127.0.0.1:11434"
   label_prompts:
@@ -512,7 +548,26 @@ whose tag and name match a rule, and stores the response as
       model: "gemma3:1b"
       prompt: "summarize"
       context_length: 4096
+
+- mod_name: clio_cae_core
+  pool_name: cae_main
+  pool_query: local
+  pool_id: "400.0"
+  next_pool_id: "401.0"         # data path runs through the summarizer
 ```
+
+:::warning Inference is synchronous on the handling worker
+The model call runs inline in the `PutBlob` handler, so a rule that matches a
+hot write path serializes that path behind the model. Scope `tag_re` and
+`blob_re` tightly. Summarization failures are logged and swallowed — they
+never change a `PutBlob` return code, and the original blob is always stored.
+:::
+
+:::note Where the summary is written
+The summary blob is stored through `next_pool_id`, i.e. *below* the
+summarizer, so it never re-enters the handler. A rule with `blob_re: ".*"`
+does not loop.
+:::
 
 :::danger Never put CAE in front of CTE at pool 512.0
 CAE only mirrors the four data-path method ids above. The rest of its method

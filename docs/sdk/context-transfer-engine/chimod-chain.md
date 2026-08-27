@@ -1,7 +1,7 @@
 ---
 sidebar_position: 2
-title: Cache / Replication / Indexing ChiMods
-description: The CTE interposition chain — node-local caching, persistent replication, and the semantic-search index, stacked over the CTE core.
+title: Cache / Replication / Indexing / Summarizer ChiMods
+description: The CTE interposition chain — node-local caching, persistent replication, the semantic-search index, and LLM summarization, stacked over the CTE core.
 ---
 
 # The CTE Interposition Chain
@@ -47,12 +47,17 @@ The `clio_cte_filesystem` ChiMod (pool `560.0`, driven by the FUSE and POSIX
 adapters) sits above the whole thing and points its own `next_pool_id` at
 the chain top.
 
+An interposer does not have to ship in the CTE package — it only has to speak
+the CTE core's vocabulary. The **summarizer** (`clio_cae_summarizer`, pool
+`401.0`) lives in the Context Assimilation Engine and slots into the same
+chain; see [its section below](#summarizer-chimod-clio_cae_summarizer).
+
 :::info Separation of concerns
 Each layer owns exactly one axis: **replication** = reliability,
-**cache** = locality, **compressor** = encoding, **indexer** = search. They
-compose because they all speak the same task vocabulary, and each is
-independently removable — delete its `compose` entry and re-point the entry
-above it.
+**cache** = locality, **compressor** = encoding, **indexer** = search,
+**summarizer** = enrichment. They compose because they all speak the same
+task vocabulary, and each is independently removable — delete its `compose`
+entry and re-point the entry above it.
 :::
 
 ---
@@ -97,6 +102,7 @@ would make an interposer forward to itself.
 | Compressor | `clio_cte_compressor` | `562.0` | — |
 | Cache | `clio_cte_cache` | `563.0` | `cache::kCachePoolId` |
 | Indexer | `clio_cte_indexer` | `564.0` | `indexer::kIndexerPoolId` |
+| Summarizer | `clio_cae_summarizer` | `401.0` | `summarizer::kSummarizerPoolId` |
 | CTE core | `clio_cte_core` | `512.0` | `core::kCtePoolId` |
 
 Each module's own verbs (`ReplicateBlob`, `FlushTag`, `ReindexScan`, …) are
@@ -427,6 +433,97 @@ To enable it, uncomment its `compose` entry **and** re-point the indexer's
 
 ---
 
+## Summarizer ChiMod (`clio_cae_summarizer`)
+
+**Enrichment.** Ships in the Context Assimilation Engine, not CTE, but it is
+an interposer like the rest: it speaks the CTE core's task interface and
+slots anywhere in the chain. It overrides exactly **one** verb — `PutBlob` —
+and forwards everything else untouched.
+
+This logic used to live inside `clio_cae_core`'s `PutBlob` handler. It is now
+its own pool so the assimilation entrypoint and the LLM enrichment can be
+composed, scaled, and disabled independently.
+
+### Behavior
+
+On each `PutBlob` the module:
+
+1. **Forwards down `next_pool_id` first**, so the user's write completes and
+   acks with the same return code whatever the model does.
+2. Resolves the blob's **tag name** (via `GetTagName` on the chain below;
+   `PutBlobTask` carries only the id) and matches it plus the blob name
+   against the configured rules, in order.
+3. On a match, prompts `model` on `label_endpoint` with the rule's prompt
+   template followed by the blob payload, chunking when the payload exceeds
+   the context budget and concatenating the per-chunk responses.
+4. Stores the result as **`{blob_name}_label`** in the same tag.
+
+Everything after step 1 is best-effort: a bad regex, an unknown prompt name,
+an unreachable endpoint, or an empty response is logged and swallowed. **A
+summarization failure never changes a `PutBlob` return code**, and the
+original blob is always stored.
+
+Replica-addressed writes (`Context::replica_ != 0`) are skipped — the primary
+write already flowed through here.
+
+### Configuration
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `next_pool_id` | *(none)* | Pool below. Null falls back to the CTE core. |
+| `label_endpoint` | `""` | Ollama-compatible server base URL. The handler POSTs to `{label_endpoint}/api/generate`. |
+| `label_prompts` | *(empty)* | Named prompt templates, keyed by name. |
+| `label_matches` | *(empty)* | Ordered rules. Empty makes the pool a pure forwarder. |
+
+Each `label_matches` entry:
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `tag_re` | — | Regex matched with `regex_search` against the tag name. |
+| `blob_re` | — | Regex matched with `regex_search` against the blob name. |
+| `model` | — | Model name sent to the inference server. |
+| `prompt` | — | Key into `label_prompts`. |
+| `context_length` | `4096` | Ollama `num_ctx`. Also drives chunking. `0` disables chunking and accepts Ollama's ~2048 default, which silently truncates. |
+| `num_predict` | `0` | Cap on response tokens; `0` = uncapped. With chunking the final summary is roughly `num_predict` x (#chunks). |
+
+```yaml
+- mod_name: clio_cae_summarizer
+  pool_name: clio_cae_summarizer
+  pool_query: local
+  pool_id: "401.0"
+  next_pool_id: "512.0"
+  label_endpoint: "http://127.0.0.1:11434"
+  label_prompts:
+    summarize: "Summarize the following text in one short sentence."
+  label_matches:
+    - tag_re: ".*\\.txt$"
+      blob_re: ".*"
+      model: "gemma3:1b"
+      prompt: "summarize"
+      context_length: 4096
+```
+
+### No summarize-the-summary loop
+
+The `{blob_name}_label` blob is written through `next_pool_id` — *below* this
+container — so it never re-enters the handler. A rule with `blob_re: ".*"` is
+safe.
+
+:::warning Inference is synchronous on the handling worker
+The model call blocks the worker that owns the task (libcurl, easy interface).
+A rule matching a hot write path serializes that path behind the model, so
+scope `tag_re` / `blob_re` tightly. This is the one interposer whose overhead
+is measured in seconds rather than microseconds.
+:::
+
+:::info Build flag
+Summarization needs libcurl and nlohmann/json. Without them the module still
+builds and forwards — the inference client compiles to a stub that always
+fails, so every rule is a no-op.
+:::
+
+---
+
 ## Putting it together
 
 The full standard chain as shipped in the default `~/.clio/clio.yaml`. Note
@@ -484,6 +581,15 @@ What a put through the chain top now does:
 
 And a read: **cache** serves the raw local copy — including over the
 zero-IPC SHM fast path — or falls through to the owner and re-populates.
+
+:::note The summarizer is not in the default chain
+It is opt-in and commented out in the shipped config, because every rule it
+matches costs an LLM round-trip on the write path. It normally sits on the
+**assimilation** path rather than the filesystem one: point
+`clio_cae_core`'s `next_pool_id` at `401.0` and the summarizer's at the CTE
+chain. Nothing stops you putting it in the filesystem chain instead — it
+speaks the same vocabulary — but then every FUSE write pays for it.
+:::
 
 ### Trimming the chain
 
