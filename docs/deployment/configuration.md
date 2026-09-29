@@ -182,6 +182,7 @@ Block devices provide the shared memory allocator used by other modules. At leas
 |-----------|----------|-------------|
 | `bdev_type` | Yes | `"ram"` for DRAM-backed, `"file"` for filesystem-backed. |
 | `capacity` | Yes | Maximum capacity (e.g., `"512MB"`, `"100GB"`). |
+| `alloc_log` | No | File bdevs only. Allocator log path; default `"<pool_name>.alloc_log"`. The default log is replayed only on a runtime restart (a fresh start discards it); an explicit path is replayed on every start. |
 
 ```yaml
 compose:
@@ -203,6 +204,8 @@ compose:
 ```
 
 For DRAM devices the `pool_name` uses the `ram::<name>` convention. For file-backed devices the `pool_name` is the filesystem path where data is stored.
+
+A file-backed device records every allocation and free in its allocator log as it happens and makes the log durable every 50 ms. On restart it rebuilds its allocator from the log: blocks still in use stay reserved for every client that placed data there (including CTE containers on other nodes), and freed space is reused.
 
 ---
 
@@ -284,6 +287,7 @@ All fields are optional and override compile-time defaults.
 | `flush_data_period_ms` | `10000` | Data flush interval (ms). |
 | `flush_data_min_persistence` | `1` | Min persistence level (1 = temp-nonvolatile). |
 | `transaction_log_capacity` | `"32MB"` | Write-ahead log capacity. |
+| `fsync_mode` | `"durable"` | What `fsync(2)` on clio-fs guarantees. `"durable"`: it returns once the file's bytes sit on a tier at `flush_data_min_persistence` or above (moving them off RAM first) and are synced to the device, together with the metadata WAL and the namespace log, so they survive power loss. `"deferred"`: it returns at once and the periodic flushes make the data durable, so a crash can lose up to `flush_data_period_ms` of fsync'd data. `fsync` on a directory syncs the namespace log (creates, renames and unlinks). A graceful `clio_run stop` also moves RAM-tier data to a persistent tier before exiting, bounded by `--grace-period`; a crash or power loss keeps only what was fsync'd or already flushed. |
 
 ---
 
