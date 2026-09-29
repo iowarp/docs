@@ -97,9 +97,23 @@ CHI_WITH_RUNTIME=0 wrp_cte_fuse /mnt/cte -f
 | `-f` | Run in the foreground (recommended for debugging). Omit to daemonize. |
 | `-d` | Debug mode — prints every FUSE callback to stderr. |
 | `-o allow_other` | Allow other users to access the mount (requires `user_allow_other` in `/etc/fuse.conf`). |
-| `-s` | Single-threaded mode. By default FUSE is multi-threaded. |
+| `-s` | Single-threaded mode. By default FUSE is multi-threaded (since release X). |
 
 Set `CHI_WITH_RUNTIME=0` so the FUSE daemon connects as a pure client to the existing runtime instead of trying to start its own.
+
+### Environment variables
+
+`wrp_cte_fuse` reads the following env vars at startup. Set them in the shell that exec's the binary (or in the `env:` of the jarvis package that owns it):
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `CHI_WITH_RUNTIME` | `0` (recommended for the typical "external runtime" deployment) | When set to `1` / `true`, the FUSE daemon **embeds** the chimaera runtime inside its own process (no separate `chimaera runtime start` needed). When `0` / unset, the daemon connects as a *pure client* to an externally-managed runtime. Embedded mode avoids the fork-after-`CHIMAERA_INIT` corner case where the libfuse daemonize step orphans the chimaera worker threads, so it is the more reliable choice when the FUSE daemon is the only chimaera consumer on the node. In a jarvis pipeline, set this via `embedded_runtime: true` on the `wrp_cte_libfuse` package; in that case also set `do_start: false` on a same-pipeline `wrp_runtime` package so it skips spawning a competing daemon (port 9413 conflict) while still emitting `chimaera_config.yaml`. Order the pipeline so the runtime-owning package starts before any client (`wrp_cte`, the workload). |
+| `CHI_SERVER_CONF` | (none) | Path to the chimaera runtime YAML config. Required when `CHI_WITH_RUNTIME=1`. Optional when `0` — the daemon picks it up from the running runtime. |
+| `CHI_IPC_MODE` | `SHM` | Transport between the FUSE daemon (as chimaera client) and the runtime. `SHM` for same-node, `TCP` or `IPC` for cross-node. Ignored in embedded mode. |
+| `WRP_CTE_FUSE_SINGLE_THREAD` | unset | Set to `1` / `true` to force libfuse into single-threaded dispatch (equivalent to passing `-s`). Useful for debugging deadlocks or comparing MT vs ST throughput. By default the adapter runs multi-threaded. |
+| `CHI_FUSE_OVERHEAD` | unset | Set to `1` / `true` to make the FUSE daemon a **chimaera-bypass / overhead-only** server. Writes become no-ops that bump a per-path size counter; reads return zeros. The mount still behaves as a real FUSE filesystem (`getattr`, `readdir`, `create`, `unlink` all work via an in-process map), so you can run `dd` / IOR against it to measure pure kernel ↔ libfuse round-trip cost in isolation from chimaera + bdev. Subtract from the chimaera-backed result to attribute overhead between the two layers. |
+| `CLIO_FUSE_PERMISSIONS` | `1` | The mount enforces POSIX mode bits and ownership (libfuse `default_permissions`): the kernel checks access against each file's mode/uid/gid before any request reaches the adapter, as on ext4. Set to `0` to mount without it (every caller that can reach the mount gets access). |
+| `WRP_CTE_FUSE_MOUNTPOINT` | (none) | Only consulted on the apptainer `--fusemount` path (when argv ends with `/dev/fd/<N>`). apptainer doesn't pass the mountpoint via argv, so the caller must export this. Unused in the normal `wrp_cte_fuse /path/to/mnt` invocation. |
 
 ### 3. Use it
 
@@ -221,6 +235,12 @@ Benchmark results (50 MB `dd` write, 1 MB block size):
 | Native filesystem | ~500 MB/s |
 
 The 1 MB default page size minimizes the number of CTE blob operations per write. The remaining overhead is from the FUSE kernel round-trip (user → kernel → FUSE daemon → CTE → back).
+
+### Multi-threaded dispatch
+
+libfuse multi-threading is the default. Multiple kernel FUSE requests can be served in parallel by separate worker threads inside `wrp_cte_fuse`, which on a 4-writer IOR run (`nprocs=4, ppn=4, xfer=1m, block=256m`) on a single Ares node measured **1,214 MiB/s** for the FUSE protocol path alone (chimaera bypassed via `CHI_FUSE_OVERHEAD=1`) — vs ~220 MiB/s for a single-writer single-threaded baseline (~5.5× scaling).
+
+Set `WRP_CTE_FUSE_SINGLE_THREAD=1` to force the legacy single-threaded loop when debugging concurrency issues.
 
 ---
 

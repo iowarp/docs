@@ -898,6 +898,36 @@ for (auto& task : tasks) {
 // buffers and tasks automatically cleaned up here
 ```
 
+### Conditional Puts
+
+A put can be made conditional through its `Context`, without a separate
+call. The owner of the blob decides under the blob's write lock, so of two
+racing conditional puts exactly one wins.
+
+| `Context::op_flags_` bit | Meaning | Failure code |
+|---|---|---|
+| `Context::kPutIfAbsent` | Write only if the blob does not exist yet. | `kPutExistsRc` |
+| `Context::kPutIfVersion` | Compare-and-swap: write only if the blob's version equals `context.version_` (an absent blob is version 0). | `kPutVersionMismatchRc` |
+
+On success `context_.version_` returns the blob's new version, and on a
+version mismatch it returns the current one, so a caller can retry.
+`GetBlob` also reports the version in `context_.version_`.
+
+```cpp
+clio::cte::core::Context ctx;
+ctx.op_flags_ |= clio::cte::core::Context::kPutIfVersion;
+ctx.version_ = seen_version;              // from an earlier GetBlob or put
+auto put = cte->AsyncPutBlob(tag, "rec", 0, data.size(), data.data(), -1.0f,
+                             ctx);
+put.Wait();
+if (put->GetReturnCode() == clio::cte::core::kPutVersionMismatchRc) {
+  seen_version = put->context_.version_;  // someone else wrote; re-read, retry
+}
+```
+
+Conditions apply to single primary puts (`replica_ == 0`); `MultiPutBlob`
+ignores them.
+
 ### Performance Monitoring
 
 ```cpp

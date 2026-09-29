@@ -220,6 +220,7 @@ storage:
 | `neighborhood` | `1` | Number of storage nodes CTE can buffer to simultaneously. |
 | `default_target_timeout_ms` | `30000` | Timeout for storage target operations (ms). |
 | `poll_period_ms` | `5000` | How often to rescan targets for bandwidth/capacity stats (ms). |
+| `failover_to_successor` | `false` | While a blob's owner node is dead, route the blob to the first live successor container, which serves it from the replication ChiMod's remote copy (`remote_copies`) until the owner returns. |
 
 ### Performance Tuning (`performance`)
 
@@ -235,6 +236,102 @@ All fields are optional and override compile-time defaults.
 | `flush_data_period_ms` | `10000` | Data flush interval (ms). |
 | `flush_data_min_persistence` | `1` | Min persistence level (1 = temp-nonvolatile). |
 | `transaction_log_capacity` | `"32MB"` | Write-ahead log capacity. |
+
+---
+
+## Replication ChiMod Parameters (`clio_cte_replication`)
+
+The replication ChiMod (pool `561.0`) sits in the data path below the cache
+and makes every put durable before it is acknowledged:
+
+- `num_replicas` copies on the same node's persistent tiers. A restart drops
+  the RAM primary; reads, and writes past its end, refill it from a replica.
+- `remote_copies` copies on the next containers by hash, which are other
+  nodes. Together with the core's `targets.failover_to_successor`, a blob
+  stays readable and writable while its owner's node is down. The successor
+  records what it changed and hands it back when the owner returns: a
+  restarting owner pulls the changes before it serves, and a background sweep
+  pushes anything left.
+
+Remote copies protect CTE blobs (file pages, extended attributes, inode
+records and staged appends). The filesystem's directory entries and the
+stream sizes live in those modules' own state and are not yet covered.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `next_pool_id` | — | Pool below (usually the core, `512.0`). |
+| `num_replicas` | `1` | Persistent copies per put on the owner's node. |
+| `replicate_period_ms` | `50` | `0`: replicas are written before the put returns. Otherwise a sweep copies dirty blobs every period. |
+| `cache_score` | `1.0` | Placement score for a primary re-cached from a replica. |
+| `replica_score` | `0.2` | Score of the persistent copies. |
+| `remote_copies` | `0` | Copies on the next containers by hash (other nodes), written before a put returns. Needs `failover_to_successor` on the core to be used while a node is down. |
+
+---
+
+## Filesystem ChiMod Parameters (`clio_cte_filesystem`)
+
+The filesystem ChiMod (pool `560.0`) is the POSIX layer the FUSE, POSIX and
+STDIO adapters drive. Its namespace is **hash-sharded across every node**;
+there is no metadata server:
+
+- A directory's entries and attributes live on the node its path hashes to,
+  so create, `O_EXCL`, `mkdir`, `unlink` and `readdir` in one directory are
+  handled by a single node.
+- A file's inode (mode, times, link count, open handles) lives on the
+  node that created it, and so does its size (in the stream pool). That node is chosen by hashing the file's directory
+  and is encoded in the file id, so a `stat` takes one hop. It takes two
+  after the file was renamed or hard-linked into a directory owned by
+  another node.
+- File data pages are spread by the CTE core's per-page hash.
+
+If a node dies, only the names and inodes it owns become unavailable. Those
+operations fail with `EIO` and everything else keeps working.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `next_pool_id` | — | Pool the page blobs go through, usually the top of the interposition chain (for example `561.0` for replication, or `512.0` for the bare core). |
+| `metadata_log_path` | unset | Node-local, append-only log of this node's slice of the namespace. The container id is appended to the file name. `clio_run restart` replays it; a fresh `start` discards it. Unset means the namespace is lost on restart. Keep it on node-local storage, never on shared NFS. |
+| `stream_pool_id` | `"565.0"` | Stream pool that holds every file's size and merges deferred appends (see below). Created with defaults if not composed. |
+
+---
+
+## Stream ChiMod Parameters (`clio_cte_stream`)
+
+The stream ChiMod (pool `565.0`) turns a CTE tag into a byte stream. It owns
+the stream's page layout (1 MiB page blobs named by page index), its logical
+size, and **deferred appends**:
+
+- Every stream has a home container, chosen by the caller. clio-fs uses the
+  file's inode home, so a `stat` reads the size without another hop.
+- An append is staged as a blob (for crash safety) and returns at once.
+  Each node ships its batch, bytes included, to the home every 1 ms. The home orders the
+  combined batch, reserves its range from the size, and copies it into the
+  pages.
+- `close`, `fsync`, and a read or `fstat` through the appending descriptor
+  wait for that descriptor's appends to be merged. Other descriptors see
+  them within milliseconds (close-to-open consistency).
+- Staged appends and merge plans survive a daemon crash: after
+  `clio_run restart` they are merged exactly once.
+
+The FUSE adapter uses deferred appends for `O_APPEND` writes on multi-node
+mounts. Set `CLIO_FUSE_APPEND` to `deferred`, `reserve` (reserve the end at
+the home before each write) or `kernel` (trust the kernel's cached size,
+the single-node default) to override.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `next_pool_id` | `"512.0"` | Pool staged and merged bytes go through, usually the top of the interposition chain. |
+| `staging_pool_id` | `next_pool_id` | Pool staged (not yet merged) appends are written to. They are written once and read at most once, after a restart, so point it below any cache (for example `561.0`). |
+| `log_path` | unset | Node-local log of the sizes, merge plans and merged-append names of the streams this node homes. The container id is appended. Without it, file sizes do not survive `clio_run restart`. |
+
+```yaml
+- mod_name: clio_cte_stream   # compose BEFORE clio_cte_filesystem
+  pool_name: clio_cte_stream
+  pool_query: local
+  pool_id: "565.0"
+  next_pool_id: "561.0"
+  log_path: "/mnt/nvme/$USER/clio/cte_stream_log"
+```
 
 ---
 
