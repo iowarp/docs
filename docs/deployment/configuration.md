@@ -130,6 +130,39 @@ Only `chimaera_bdev` is required. CTE (`wrp_cte_core`) and CAE (`wrp_cae_core`) 
 | `pool_name` | Yes | User-defined pool name. |
 | `pool_query` | Yes | Routing policy (see below). |
 | `pool_id` | Yes | Unique pool ID string (format: `"<major>.<minor>"`). |
+| `restart` | No | `true`: the pool is durable -- each node records it in its pool log and re-creates it on a restart. Default `false`. |
+
+### Reported capacity
+
+`df` on a clio-fs mount reports the **bdevs' capacity** -- each storage
+target's configured size (a `clio_safe_bdev` target: its usable size after
+parity), not the disk underneath -- summed once per target across the
+cluster. "Used" is raw device usage: replicas, remote copies and cache copies
+of a file count too. Values refresh every `stat_targets_period_ms`. When a
+`clio_safe_bdev` member fails, its free space leaves the total while the data
+it held stays counted as used (it is still stored, reconstructable).
+
+### Durable pools and restart
+
+Every node keeps one restart registry, its **pool log**
+(`<runtime.conf_dir>/wal/pools.<node>.bin`), recording every durable pool
+it holds a container of, however the pool was created:
+
+- a compose pool with `restart: true` (in the server config or a file
+  applied with `clio_run compose start`);
+- a pool created through the client API by a client that called
+  `SetPersistent(true)` before the create (e.g. disks added to a
+  `clio_safe_bdev` array at runtime).
+
+`DestroyPool` removes a pool from it. `clio_run restart` -- and
+`clio_run start` when it finds persistent state -- re-creates every pool in
+the log, in creation order, through each module's `Restart()` path, so the
+module recovers its own state. A fresh start (`clio_run start --fresh`, or no
+persistent state) clears the log: a new cluster lifetime begins, and pools
+created by tests or benchmarks never come back. `clio_run compose list
+--restartable` prints the logs of this host. (Compose files registered in the
+older `~/.clio/restart_log.bin` are still re-composed on a restart, which
+moves their pools into the pool log; nothing is registered there any more.)
 
 ### `pool_query` Values
 
@@ -243,7 +276,7 @@ All fields are optional and override compile-time defaults.
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `stat_targets_period_ms` | `50` | Periodic StatTargets interval (ms). |
+| `stat_targets_period_ms` | `1000` | How often each target's capacity and free space are re-read from its bdev (ms). `df` on a clio-fs mount and the dashboard converge within one period. |
 | `max_concurrent_operations` | `64` | Max concurrent I/O operations. |
 | `score_threshold` | `0.7` | Score above which blobs are reorganized. |
 | `score_difference_threshold` | `0.05` | Min score delta to trigger reorganization. |
