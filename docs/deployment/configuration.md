@@ -173,6 +173,21 @@ For DRAM devices the `pool_name` uses the `ram::<name>` convention. For file-bac
 
 ---
 
+## Safe Block Device ChiMod (`clio_safe_bdev`)
+
+An erasure-coded array over member bdevs: data members plus up to
+`max_failures` dedicated Reed-Solomon parity members. It starts on as few as
+one data member; data and parity members can be added at runtime, a failed
+member is marked faulty (reads reconstruct it, writes keep its bytes in the
+parity), and `RecoverBdev` rebuilds it onto a new disk.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `max_failures` | `1` | Parity members the array may take (simultaneous failures it survives). |
+| `alloc_log` | `""` | Allocator log path. With it set, the array restores its allocations and its membership (`<alloc_log>.members`: members added or replaced at runtime, failed members) at restart. |
+| `distributed` | `false` | `true`: each member is its pool's container on node `node_id` (disks on different nodes). The array runs on the first member's node; a member whose node dies is marked faulty. `false`: every member is this node's container of its pool. |
+| `members` | — | Initial members: `pool_name`, `node_id`, `pool_id_major`, `pool_id_minor` of existing bdev pools. |
+
 ## CTE ChiMod Parameters (`wrp_cte_core`)
 
 ### Storage Tiers (`storage`)
