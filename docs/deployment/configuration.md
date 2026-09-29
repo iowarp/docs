@@ -265,6 +265,7 @@ stream sizes live in those modules' own state and are not yet covered.
 | `cache_score` | `1.0` | Placement score for a primary re-cached from a replica. |
 | `replica_score` | `0.2` | Score of the persistent copies. |
 | `remote_copies` | `0` | Copies on the next containers by hash (other nodes), written before a put returns. Needs `failover_to_successor` on the core to be used while a node is down. |
+| `handoff_log_path` | `""` | Base path of the handoff log (one file per container, suffixed `.<container>`). It records the changes a container made while covering for a dead owner, so they are still handed back when this node restarts before the owner returns. Empty keeps them in memory only. |
 
 ---
 
