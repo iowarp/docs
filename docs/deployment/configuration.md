@@ -283,7 +283,7 @@ All fields are optional and override compile-time defaults.
 | `max_concurrent_operations` | `64` | Max concurrent I/O operations. |
 | `score_threshold` | `0.7` | Score above which blobs are reorganized. |
 | `score_difference_threshold` | `0.05` | Min score delta to trigger reorganization. |
-| `flush_metadata_period_ms` | `5000` | Metadata flush interval (ms). |
+| `flush_metadata_period_ms` | `5000` | Metadata flush interval (ms). Each period syncs the metadata write-ahead log, which is what makes metadata changes durable. The full metadata snapshot (a pass over every blob) is rebuilt only when the log grows past `transaction_log_capacity` and must be compacted, or at most once a minute to persist blob score changes the log does not record. |
 | `flush_data_period_ms` | `10000` | Data flush interval (ms). |
 | `flush_data_min_persistence` | `1` | Min persistence level (1 = temp-nonvolatile). |
 | `transaction_log_capacity` | `"32MB"` | Write-ahead log capacity. |
