@@ -154,12 +154,13 @@ it holds a container of, however the pool was created:
   `SetPersistent(true)` before the create (e.g. disks added to a
   `clio_safe_bdev` array at runtime).
 
-`DestroyPool` removes a pool from it. `clio_run restart` -- and
-`clio_run start` when it finds persistent state -- re-creates every pool in
-the log, in creation order, through each module's `Restart()` path, so the
-module recovers its own state. A fresh start (`clio_run start --fresh`, or no
-persistent state) clears the log: a new cluster lifetime begins, and pools
-created by tests or benchmarks never come back. `clio_run compose list
+`DestroyPool` removes a pool from it. `clio_run start` always recovers: it
+re-creates every pool in the log, in creation order, through each module's
+`Restart()` path, so the module recovers its own state (with no log it simply
+starts empty). Only `clio_run start --fresh` discards state: it clears the
+log and this node's metadata and allocator logs, a new cluster lifetime
+begins, and pools created by tests or benchmarks never come back. (There is
+no separate `restart` command any more.) `clio_run compose list
 --restartable` prints the logs of this host. (Compose files registered in the
 older `~/.clio/restart_log.bin` are still re-composed on a restart, which
 moves their pools into the pool log; nothing is registered there any more.)
@@ -182,7 +183,7 @@ Block devices provide the shared memory allocator used by other modules. At leas
 |-----------|----------|-------------|
 | `bdev_type` | Yes | `"ram"` for DRAM-backed, `"file"` for filesystem-backed. |
 | `capacity` | Yes | Maximum capacity (e.g., `"512MB"`, `"100GB"`). |
-| `alloc_log` | No | File bdevs only. Allocator log path; default `"<pool_name>.alloc_log"`. The default log is replayed only on a runtime restart (a fresh start discards it); an explicit path is replayed on every start. |
+| `alloc_log` | No | File bdevs only. Allocator log path; default `"<pool_name>.alloc_log"`. The default log is replayed by every `clio_run start` and discarded by `clio_run start --fresh`; an explicit path is replayed on every start, even `--fresh`. |
 
 ```yaml
 compose:
@@ -374,7 +375,7 @@ size, and **deferred appends**:
   wait for that descriptor's appends to be merged. Other descriptors see
   them within milliseconds (close-to-open consistency).
 - Staged appends and merge plans survive a daemon crash: after
-  `clio_run restart` they are merged exactly once.
+  `clio_run start` they are merged exactly once.
 
 The FUSE adapter uses deferred appends for `O_APPEND` writes on multi-node
 mounts. Set `CLIO_FUSE_APPEND` to `deferred`, `reserve` (reserve the end at
@@ -385,7 +386,7 @@ the single-node default) to override.
 |-----------|---------|-------------|
 | `next_pool_id` | `"512.0"` | Pool staged and merged bytes go through, usually the top of the interposition chain. |
 | `staging_pool_id` | `next_pool_id` | Pool staged (not yet merged) appends are written to. They are written once and read at most once, after a restart, so point it below any cache (for example `561.0`). |
-| `log_path` | unset | Node-local log of the sizes, merge plans and merged-append names of the streams this node homes. The container id is appended. Without it, file sizes do not survive `clio_run restart`. |
+| `log_path` | unset | Node-local log of the sizes, merge plans and merged-append names of the streams this node homes. The container id is appended. Without it, file sizes do not survive a stop and `clio_run start`. |
 
 ```yaml
 - mod_name: clio_cte_stream   # compose BEFORE clio_cte_filesystem

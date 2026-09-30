@@ -115,7 +115,7 @@ All pages are backed by a JSON API. You can query these endpoints directly for s
 | `/api/topology/node/<id>/shutdown` | POST | Gracefully shut down a node via SSH |
 | `/api/topology/node/<id>/restart` | POST | Restart a node via SSH |
 
-Shutdown and restart are performed by SSHing from the dashboard host to the target node and running `chimaera runtime stop` or `chimaera runtime restart`. This avoids the problem of a node killing itself mid-RPC. The SSH connection uses `StrictHostKeyChecking=no` and `ConnectTimeout=5`.
+Shutdown and restart are performed by SSHing from the dashboard host to the target node and running `clio_run runtime stop` or `clio_run runtime start` (which recovers the node's state). This avoids the problem of a node killing itself mid-RPC. The SSH connection uses `StrictHostKeyChecking=no` and `ConnectTimeout=5`.
 
 **Shutdown response:**
 ```json
