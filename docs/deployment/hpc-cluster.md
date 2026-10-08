@@ -79,6 +79,18 @@ export CLIO_IPC_MODE=TCP
 
 This variable is read by `CLIO_RUNTIME_INIT()`. If unset, the value of the `default_with_runtime` argument passed to `CLIO_RUNTIME_INIT()` is used instead.
 
+### Cloud Storage Credentials
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AWS_ACCESS_KEY_ID` | *(none)* | S3 access key, for `s3` storage tiers and CAE `s3://` imports. |
+| `AWS_SECRET_ACCESS_KEY` | *(none)* | S3 secret key. |
+| `AWS_DEFAULT_REGION` | `us-east-1` | The bucket's region. CAE has no default and fails if it is unset. |
+| `S3_ENDPOINT` | *(AWS)* | S3-compatible endpoint, e.g. MinIO. |
+| `GCS_ACCESS_TOKEN` | *(none)* | OAuth2 bearer token, for `gcs` storage tiers. |
+
+See [Configuration → Cloud object stores](./configuration#cloud-object-stores) for every variable and which component reads it.
+
 ---
 
 ## Single-Node Deployment

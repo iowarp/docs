@@ -6,7 +6,7 @@ sidebar_position: 1
 
 ## Introduction
 
-The Context Assimilation Engine (CAE) is a CLIO Runtime module (`clio_cae::core`) that ingests external data sources into the CLIO Runtime. It reads data from files, HDF5 datasets, or remote Globus endpoints and stores them as blobs in the Context Transfer Engine (CTE). The CAE is registered as a Module container with pool ID `400.0`.
+The Context Assimilation Engine (CAE) is a CLIO Runtime module (`clio_cae::core`) that ingests external data sources into the CLIO Runtime. It reads data from files, HDF5 datasets, remote Globus endpoints, or Amazon S3 buckets and stores them as blobs in the Context Transfer Engine (CTE). The CAE is registered as a Module container with pool ID `400.0`.
 
 CAE ships a second, optional ChiMod: the **summarizer** (`clio_cae_summarizer`, pool `401.0`). It interposes on the CTE core's task interface and attaches an LLM-generated summary to each matching blob on the way through. See [the interposition chain](../context-transfer-engine/chimod-chain#summarizer-chimod-clio_cae_summarizer) for its behavior and [deployment configuration](../../deployment/configuration) for its keys.
 
@@ -72,6 +72,8 @@ The CAE uses a factory pattern to select the correct assimilator based on the so
 | `file` | `file::/path/to/file` | `BinaryFileAssimilator` | Always enabled |
 | `hdf5` | `hdf5::/path/file.h5:/dataset` | `Hdf5FileAssimilator` | `-DWRP_CORE_ENABLE_HDF5=ON` |
 | `globus` | `globus://<endpoint_id>/<path>` | `GlobusFileAssimilator` | `-DCAE_ENABLE_GLOBUS=ON` |
+| `s3` | `s3://<bucket>/<key>` | `S3FileAssimilator` | `-DCAE_ENABLE_S3=ON` |
+| `gs` / `gcs` | `gs://<bucket>/<object>` | `GcsFileAssimilator` | `-DCAE_ENABLE_GCS=ON` |
 
 The factory also detects Globus web URLs (`https://app.globus.org/...`) and routes them to `GlobusFileAssimilator`.
 
@@ -105,6 +107,10 @@ class BaseAssimilator {
 
 **GlobusFileAssimilator** handles Globus transfers. It supports Globus-to-Globus transfers (via the Globus transfer API with submission IDs and polling) and Globus-to-local downloads (via HTTPS). Authentication tokens are passed through `ctx.src_token`.
 
+**S3FileAssimilator** imports objects from Amazon S3 or an S3-compatible store (MinIO, via `S3_ENDPOINT`). It reads in-process: requests are SigV4-signed and streamed over POCO HTTPS, and the AWS SDK is never loaded into the runtime. The body is stored as 1 MB `chunk_<n>` blobs plus a `description` blob, honoring `range_off` / `range_size`. A connection dropped mid-object is resumed with a ranged GET. Credentials and region are resolved inside the runtime from the `AWS_*` environment or a `~/.aws/credentials` profile; see the [S3 Connector](s3.md).
+
+**GcsFileAssimilator** imports objects from Google Cloud Storage (`gs://` or `gcs://`) using `google-cloud-cpp` and Application Default Credentials. Setting `GCS_ENDPOINT` points it at a GCS-compatible server such as `fake-gcs-server`.
+
 ## AssimilationCtx
 
 `AssimilationCtx` is the serializable descriptor for a single data transfer:
@@ -124,9 +130,13 @@ struct AssimilationCtx {
   std::string src_data;     // Inline payload for "string::..." sources
   std::vector<std::string> include_patterns;  // Glob patterns to include
   std::vector<std::string> exclude_patterns;  // Glob patterns to exclude
+  std::string s3_region;    // S3 region override (empty = resolve from env/config)
+  std::string s3_profile;   // AWS profile NAME (empty = AWS_PROFILE or "default")
 };
 }  // namespace clio::cae::core
 ```
+
+`s3_region` and `s3_profile` are used only by `S3FileAssimilator`. When set, `s3_region` overrides `AWS_DEFAULT_REGION` / `AWS_REGION`, and `s3_profile` overrides `AWS_PROFILE`. A key pair in the runtime's environment still wins over any profile. OMNI files do not set them; they are for programmatic callers that build `AssimilationCtx` directly.
 
 Serialization uses the [cereal](https://uscilab.github.io/cereal/) library with binary archives. The client serializes a `std::vector<AssimilationCtx>` into the `ParseOmniTask`, and the runtime deserializes it on the server side.
 
@@ -326,9 +336,13 @@ class MyAssimilator : public clio::cae::core::BaseAssimilator {
 |-------------|---------|-------------|
 | `WRP_CORE_ENABLE_HDF5` | OFF | Enable HDF5 assimilator (requires libhdf5) |
 | `CAE_ENABLE_GLOBUS` | OFF | Enable Globus assimilator (requires POCO) |
+| `CAE_ENABLE_S3` | OFF | Enable S3 assimilator (requires POCO and the AWS SDK). |
+| `CAE_ENABLE_GCS` | OFF | Enable GCS assimilator (requires `google-cloud-cpp` storage) |
 
 ## Related Documentation
 
 - [OMNI File Format](omni.md) - YAML configuration for data transfers
+- [S3 Connector](s3.md) - Importing from Amazon S3 and S3-compatible stores
+- [Globus Connector](globus.md) - Importing from Globus endpoints
 - [Module Development Guide](../context-runtime/2.module_dev_guide.md) - Module development
 - [CTE Documentation](../context-transfer-engine/cte.md) - CTE storage documentation

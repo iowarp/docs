@@ -1238,10 +1238,17 @@ void example() {
 
 ### Storage Device Types
 
+These are the values the config parser accepts; anything else is rejected at load time.
+
 - `"file"` - File-based block device
 - `"ram"` - RAM-based block device (for caching)
-- `"dev_dax"` - Persistent memory device
-- `"posix"` - POSIX file system interface
+- `"hbm"` - GPU high-bandwidth (device) memory
+- `"pinned"` - Pinned host memory
+- `"noop"` - No-op backend for latency testing (no actual I/O)
+- `"s3"` - Amazon S3 or S3-compatible bucket; `path` is `s3://<bucket>/<prefix>`
+- `"gcs"` - Google Cloud Storage bucket; `path` is `gcs://<bucket>/<prefix>`
+
+The cloud types need a runtime built with `CLIO_ENABLE_AMAZON_DRIVE` / `CLIO_ENABLE_GOOGLE_CLOUD`, and credentials in the runtime's environment. See [Configuration → Cloud object stores](../../deployment/configuration#cloud-object-stores).
 
 ### Manual Tier Scoring
 

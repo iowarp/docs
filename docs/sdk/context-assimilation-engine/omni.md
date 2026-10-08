@@ -52,13 +52,16 @@ The source URI specifying where to read data from. The URI format determines the
 - `file::<path>` - Local filesystem
 - `hdf5://<path>:<dataset>` - HDF5 file and dataset
 - `globus://<endpoint_id>/<path>` - Globus endpoint
-- `s3://<bucket>/<key>` - S3 object storage
+- `s3://<bucket>/<key>` - Amazon S3 or an S3-compatible store (also `s3::<bucket>/<key>`). Requires `-DCAE_ENABLE_S3=ON`; see the [S3 Connector](s3.md) for credentials.
+- `gs://<bucket>/<object>` - Google Cloud Storage (also `gcs://`). Requires `-DCAE_ENABLE_GCS=ON`.
 
 **Examples:**
 ```yaml
 src: file::/data/satellite/TERRA_2024.bin
 src: hdf5::/data/climate.h5:/temperature/surface
 src: globus://82f1b5c6-6e9b-11e5-ba47-22000b92c6ec/dataset.nc
+src: s3://my-bucket/climate/TERRA_2024.bin
+src: gs://my-bucket/climate/TERRA_2024.bin
 ```
 
 ### `dst` (string, required)

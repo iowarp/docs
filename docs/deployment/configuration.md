@@ -264,7 +264,7 @@ Block devices provide the shared memory allocator used by other modules. At leas
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `bdev_type` | Yes | `"ram"` for DRAM-backed, `"file"` for filesystem-backed. |
+| `bdev_type` | Yes | `"ram"` for DRAM-backed, `"file"` for filesystem-backed, `"s3"` for an Amazon S3 (or S3-compatible) bucket, `"gcs"` for a Google Cloud Storage bucket, `"hbm"` for GPU device memory, `"pinned"` for page-locked host memory, `"noop"` for no-I/O latency testing. |
 | `capacity` | Yes | Maximum capacity (e.g., `"512MB"`, `"100GB"`). |
 
 ```yaml
@@ -284,9 +284,29 @@ compose:
   #   pool_id: "302.0"
   #   bdev_type: file
   #   capacity: "100GB"
+
+  # Amazon S3 (or MinIO) bucket (optional)
+  # - mod_name: clio_bdev
+  #   pool_name: "s3://my-bucket/clio/pool_0"   # bucket "my-bucket", prefix "clio/pool_0"
+  #   pool_query: local
+  #   pool_id: "303.0"
+  #   bdev_type: s3
+  #   capacity: "1TB"
+
+  # Google Cloud Storage bucket (optional)
+  # - mod_name: clio_bdev
+  #   pool_name: "gcs://my-bucket/clio/pool_0"
+  #   pool_query: local
+  #   pool_id: "304.0"
+  #   bdev_type: gcs
+  #   capacity: "1TB"
 ```
 
-For DRAM devices the `pool_name` uses the `ram::<name>` convention. For file-backed devices the `pool_name` is the filesystem path where data is stored.
+For DRAM devices the `pool_name` uses the `ram::<name>` convention. For file-backed devices the `pool_name` is the filesystem path where data is stored. For `s3` / `gcs` devices the `pool_name` is `[s3://|gcs://]<bucket>[/<prefix>]`.
+
+:::caution Composing one cloud pool on several nodes
+A `clio_bdev` entry is created with the same `pool_name` on every node it reaches, and each node allocates blocks independently. With `pool_query: dynamic` or `broadcast`, every node therefore writes `block_<offset>` keys under the **same** prefix and overwrites the others' data. For multi-node deployments, use a CTE storage tier, which gives each node its own `<prefix>_node<N>`.
+:::
 
 ---
 
@@ -298,9 +318,9 @@ Array of storage targets. At least one entry is required when CTE is enabled.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `path` | Yes | `ram::<name>` for DRAM storage, or a filesystem path for disk. Supports `${HOME}` expansion. |
-| `bdev_type` | Yes | `file`, `ram`, `hbm`, `pinned`, or `noop`. |
-| `capacity_limit` | Yes | Maximum capacity (e.g., `"512MB"`, `"200GB"`). `0` / `"0g"` = 80% of total system DRAM. For file tiers this is a cap, not an upfront allocation — the file grows lazily in 1 GB units. |
+| `path` | Yes | `ram::<name>` for DRAM storage, a filesystem path for disk, or `s3://<bucket>/<prefix>` / `gcs://<bucket>/<prefix>` for a cloud bucket. Supports `${HOME}` expansion. |
+| `bdev_type` | Yes | `file`, `ram`, `hbm`, `pinned`, `noop`, `s3`, or `gcs`. |
+| `capacity_limit` | Yes | Maximum capacity (e.g., `"512MB"`, `"200GB"`). `0` / `"0g"` = 80% of total system DRAM for `ram` tiers. For `file` tiers this is a cap, not an upfront allocation — the file grows lazily in 1 GB units. For `s3` / `gcs` it is a logical cap; the bucket has no quota. |
 | `score` | No | Placement priority (0.0–1.0). Higher = preferred. `-1.0` (default) = automatic scoring. |
 | `persistence_level` | No | `"volatile"` (default), `"temporary"`, or `"long_term"`. |
 | `existing_pool_id` | No | Bind this target to an already-composed bdev pool instead of creating one. Skips `path` / `capacity_limit` validation — routing is purely by pool id. |
@@ -327,7 +347,22 @@ storage:
     capacity_limit: 2TB
     score: 0.3
     persistence_level: long_term
+
+  # Cloud tier — an S3 (or MinIO) bucket; use gcs:// + bdev_type: gcs for GCS
+  - path: s3://my-bucket/clio-cte
+    bdev_type: s3
+    capacity_limit: 10TB
+    score: 0.1
+    persistence_level: long_term
 ```
+
+:::caution Always give a cloud tier a key prefix
+Write `s3://my-bucket/clio-cte`, never `s3://my-bucket`. CTE appends `_node<N>` to the whole path, one target per node: with no prefix it lands on the **bucket name** (`my-bucket_node0`), which names a bucket that does not exist (and is not a valid S3 bucket name). The config parses either way; the bare form only fails later, when the target is created.
+:::
+
+:::caution Credentials must reach the runtime daemon
+Cloud credentials have no YAML keys, so secret keys never end up in a config file that gets shared or committed. Export them where `clio_run start` runs, on every node. See [Cloud object stores](#cloud-object-stores).
+:::
 
 :::caution `persistence_level` is load-bearing
 Placement filters (`Context::min_persistence_level_`) and durable replicas
@@ -800,6 +835,53 @@ compose:
       poll_period_ms: 5000
 ```
 
+### RAM + Amazon S3 Tier
+
+A DRAM cache in front of an S3 bucket. Needs a runtime built with `-DCLIO_ENABLE_AMAZON_DRIVE=ON`, and credentials exported where the runtime starts:
+
+```bash
+export AWS_ACCESS_KEY_ID=...
+export AWS_SECRET_ACCESS_KEY=...
+export AWS_DEFAULT_REGION=us-east-2      # the bucket's real region
+# export S3_ENDPOINT=http://127.0.0.1:9000   # MinIO / S3-compatible store
+clio_run start
+```
+
+```yaml
+networking:
+  port: 9413
+
+runtime:
+  num_threads: 8
+
+compose:
+  - mod_name: clio_bdev
+    pool_name: "ram::chi_default_bdev"
+    pool_query: local
+    pool_id: "301.0"
+    bdev_type: ram
+    capacity: "2GB"
+
+  - mod_name: clio_cte_core
+    pool_name: cte_main
+    pool_query: local
+    pool_id: "512.0"
+    storage:
+      - path: "ram::cte_cache"
+        bdev_type: ram
+        capacity_limit: 1GB
+        score: 1.0
+      - path: s3://my-bucket/clio-cte      # prefix is mandatory
+        bdev_type: s3
+        capacity_limit: 10TB
+        score: 0.1
+        persistence_level: long_term
+    dpe:
+      dpe_type: max_bw
+```
+
+For Google Cloud Storage, use `path: gcs://my-bucket/clio-cte` with `bdev_type: gcs`, build with `-DCLIO_ENABLE_GOOGLE_CLOUD=ON`, and export `GCS_ACCESS_TOKEN` instead of the AWS variables.
+
 ---
 
 ## Docker Deployment
@@ -913,6 +995,7 @@ concerns). The old `CHI_` prefix is **no longer recognized** — see
 | `CLIO_ZMQ_LOCAL_IPC` | *(on for macOS)* | Run the local client↔runtime ROUTER/DEALER over `ipc://` instead of TCP. The cross-node ROUTER is untouched, so multi-node TCP is unaffected. |
 | `CLIO_LBM_THALLIUM_PROTOCOL` | — | Thallium/Mercury protocol string (e.g. `ofi+verbs`). |
 | `CLIO_LBM_THALLIUM_RPC_THREADS` | — | Thallium RPC handler threads. |
+| `CLIO_STRICT_RESPONSE_IDENTITY` | `0` | Client-side. `0` logs replies meant for an earlier task (`RESPONSE IDENTITY MISMATCH`); `1` drops them and keeps waiting. |
 
 ### Shared-memory ingest tuning
 
@@ -948,6 +1031,35 @@ concerns). The old `CHI_` prefix is **no longer recognized** — see
 |----------|---------|-------------|
 | `CLIO_BDEV_STATS_DIR` | `~/.clio/bdev_perf` | Directory holding per-bdev `.perf` files (measured latency/bandwidth plus the learned wall-clock model). |
 | `CLIO_BDEV_PERSIST_STATS` | `1` | `0` disables persistence, so each start begins from a cold model. |
+
+### Cloud object stores (S3 / GCS) {#cloud-object-stores}
+
+**Amazon S3 and S3-compatible stores**
+
+| Variable | Default | Read by | Description |
+|----------|---------|---------|-------------|
+| `AWS_ACCESS_KEY_ID` | *(none)* | S3 bdev, CAE S3 | Access key. **Required** by the S3 bdev, which reads credentials only from the environment. CAE falls back to a credentials-file profile when it is unset. |
+| `AWS_SECRET_ACCESS_KEY` | *(none)* | S3 bdev, CAE S3 | Secret key. Same rules as `AWS_ACCESS_KEY_ID`. |
+| `AWS_SESSION_TOKEN` | *(none)* | S3 bdev, CAE S3 | Session token for temporary (STS) credentials. |
+| `AWS_DEFAULT_REGION` | S3 bdev: `us-east-1`; CAE: *(required)* | S3 bdev, CAE S3 | Bucket region. Must be the bucket's **real** region — a mismatch is answered with HTTP 301, which is not followed. The S3 bdev falls back to `us-east-1`; CAE has no fallback and fails instead. |
+| `AWS_REGION` | *(none)* | CAE S3 | Region fallback when `AWS_DEFAULT_REGION` is unset. |
+| `AWS_PROFILE` | `default` | CAE S3 | Profile read from the credentials file when no key pair is in the environment. The S3 bdev has **no** profile support. |
+| `AWS_SHARED_CREDENTIALS_FILE` | `~/.aws/credentials` | CAE S3 | Credentials file to read profiles from. |
+| `AWS_CONFIG_FILE` | `~/.aws/config` | CAE S3 | Config file consulted for the profile's `region` as a last resort. |
+| `S3_ENDPOINT` | *(unset = real AWS)* | S3 bdev, CAE S3 | S3-compatible endpoint (e.g. `http://127.0.0.1:9000` for MinIO). Setting it switches to path-style addressing. `AWS_ENDPOINT_URL` is **not** read by the runtime. |
+| `S3_ALLOW_BUCKET_CREATE` | `0` | S3 bdev | `1` lets the S3 bdev create a missing bucket. Otherwise a missing bucket fails pool creation, so a typo cannot create a new billed bucket. CAE never creates buckets. |
+
+**Google Cloud Storage**
+
+| Variable | Default | Read by | Description |
+|----------|---------|---------|-------------|
+| `GCS_ACCESS_TOKEN` | *(none — required)* | GCS bdev | OAuth2 bearer token, e.g. from `gcloud auth print-access-token`. Read once when the pool is created; `gcloud` access tokens are short-lived (typically one hour), so long runs need a fresh token at each start. |
+| `GCS_ENDPOINT` | `https://storage.googleapis.com` | GCS bdev, CAE GCS | GCS-compatible endpoint (e.g. `fake-gcs-server`). For the CAE importer, setting it also switches to unauthenticated requests. |
+| `GCS_PROJECT_ID` | `clio-prototype` | GCS bdev | Project a missing bucket is created in. Only used when the bucket does not exist. |
+
+The CAE GCS importer (`gs://`) authenticates with Google
+[Application Default Credentials](https://cloud.google.com/docs/authentication/application-default-credentials)
+rather than `GCS_ACCESS_TOKEN`.
 
 ### ADIOS2 adapter startup (large-scale MPI)
 
