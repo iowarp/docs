@@ -326,35 +326,49 @@ stream sizes live in those modules' own state and are not yet covered.
 
 The filesystem ChiMod (pool `560.0`) is the POSIX layer the FUSE, POSIX and
 STDIO adapters drive. Its namespace is stored in the CTE and cached by every
-node; there is no metadata server:
+node; there is no metadata server. It has two parts:
 
-- A directory is a CTE tag. Its entries live in **directory blocks**, one CTE
-  blob each, so the WAL, replication (`remote_copies`) and failover protect
-  them like any other data. A block splits in two once it holds more than
-  `dir_split_entries` entries, so a large directory spreads over the cluster
+- The **inode table** maps names to inodes. It is keyed by (parent directory,
+  canonical name), and each row holds the inode's id, its type and the name as
+  it was spelled. A hard link is two rows naming one inode. Each directory's
+  rows live in **table blocks**, one CTE blob each in the directory's tag, so
+  the WAL, replication (`remote_copies`) and failover protect them like any
+  other data. A block splits in two once it holds more than
+  `dir_split_entries` rows, so a large directory spreads over the cluster
   while a small one stays a single block on one node.
-- Each block's **home** (the node owning its blob) applies every change and
-  pushes it to every node caching the block before the change is
-  acknowledged. Path lookups, `stat` and `readdir` are answered from the
-  local cache; only the first access to a block reads the CTE.
-- A file's inode (mode, times, link count, open handles) lives on the node
-  that created it and is stored as a CTE blob in the file's tag; its size
-  lives in that node's stream pool. Other nodes cache its attributes the
-  same way as directory blocks.
-- Renaming a directory moves one entry: its contents are keyed by the
-  directory's id, not its path.
-- File data pages are spread by the CTE core's per-page hash.
+- An **inode record** holds one inode's attributes (mode, owner, times, link
+  count) -- for files, symlinks and directories alike. It lives on the node
+  its id names and is one key of the xattr section of the inode's own tag. A
+  file's size lives in that node's stream pool.
+
+Each block's **home** (the node owning its blob) applies every change and
+pushes it to every node caching the block before the change is acknowledged;
+inode homes do the same for attributes. Path lookups, `stat` and `readdir`
+are answered from the local cache; only the first access reads the CTE.
+Renaming a directory moves one row: its contents are keyed by the directory's
+id, not its path. File data pages are spread by the CTE core's per-page hash.
 
 If a node dies, its blocks and inodes are served by the next live node from
 their replicated CTE copies (with `remote_copies` on the replication ChiMod
 and `failover_to_successor` on the core). Handles open on the dead node are
 lost.
 
+**Case-insensitive volumes.** With `case_insensitive: true`, names compare as
+on NTFS: `Foo.TXT` and `foo.txt` are one file, listings show the spelling a
+name was created with, and a rename that only changes case changes the
+spelling. Names are keyed by their Unicode simple case fold (no
+normalization, no locale rules). The setting is fixed when the volume is
+created and recorded in its root; a runtime configured the other way refuses
+to start the filesystem pool, so recreate the volume to change it. Volumes
+written by clio-fs releases before the inode table cannot be opened and must
+be recreated.
+
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `next_pool_id` | — | Pool the page blobs go through, usually the top of the interposition chain (for example `561.0` for replication, or `512.0` for the bare core). |
-| `metadata_log_path` | unset | Base path for this node's stream log (`<path>.stream`), which records file sizes and pending appends. The namespace itself is stored in the CTE and needs no log. Keep it on node-local storage, never on shared NFS. |
-| `dir_split_entries` | `1024` | Entries a directory block holds before it splits in two. Smaller values spread large directories over more nodes sooner; each block is rewritten whole on a change, so very large values make every create in a big directory write more. |
+| `metadata_log_path` | unset | Base path for this node's metadata: `<path>.dirs.<container>` journals the table blocks this node is home for, and `<path>.stream` is the stream log (file sizes and pending appends). Unset, table blocks are stored as CTE blobs instead. Keep it on node-local storage, never on shared NFS. |
+| `dir_split_entries` | `1024` | Rows a table block holds before it splits in two. Smaller values spread large directories over more nodes sooner. |
+| `case_insensitive` | `false` | Compare names case-insensitively while keeping their spelling, as NTFS does. Fixed for the life of the volume. |
 | `stream_pool_id` | `"565.0"` | Stream pool that holds every file's size and merges deferred appends (see below). Created with defaults if not composed. |
 
 ---
