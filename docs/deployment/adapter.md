@@ -48,11 +48,11 @@ cmake --preset release-fuse
 cmake --build build -j$(nproc)
 
 # Or enable FUSE on any existing preset
-cmake -DWRP_CTE_ENABLE_FUSE_ADAPTER=ON ..
-cmake --build . --target wrp_cte_fuse -j$(nproc)
+cmake -DCLIO_CTE_ENABLE_FUSE_ADAPTER=ON ..
+cmake --build . --target clio_cte_fuse -j$(nproc)
 ```
 
-This produces the `wrp_cte_fuse` binary. The adapter links against `wrp_cte_core_client` and `libfuse3` — it does **not** require MPI or ELF interception.
+This produces the `clio_cte_fuse` binary. The adapter links against `clio_cte_core_client` and `libfuse3` — it does **not** require MPI or ELF interception.
 
 ### Prerequisites
 
@@ -64,23 +64,23 @@ ls -l /dev/fuse
 fusermount3 --version
 ```
 
-The IOWarp runtime must also be installed. See [Configuration](./configuration.md) for details.
+The CLIO Runtime must also be installed. See [Configuration](./configuration.md) for details.
 
 ---
 
 ## Usage
 
-### 1. Start the IOWarp runtime
+### 1. Start the CLIO Runtime
 
 ```bash
-chimaera runtime start
+clio_run start
 ```
 
 Or with a custom configuration:
 
 ```bash
-export CHI_SERVER_CONF=/path/to/config.yaml
-chimaera runtime start
+export CLIO_SERVER_CONF=/path/to/config.yaml
+clio_run start
 ```
 
 ### 2. Mount the FUSE filesystem
@@ -89,7 +89,7 @@ chimaera runtime start
 mkdir -p /mnt/cte
 
 # Connect as a client to the already-running runtime
-CHI_WITH_RUNTIME=0 wrp_cte_fuse /mnt/cte -f
+CLIO_WITH_RUNTIME=0 clio_cte_fuse /mnt/cte -f
 ```
 
 | Flag | Description |
@@ -99,7 +99,7 @@ CHI_WITH_RUNTIME=0 wrp_cte_fuse /mnt/cte -f
 | `-o allow_other` | Allow other users to access the mount (requires `user_allow_other` in `/etc/fuse.conf`). |
 | `-s` | Single-threaded mode. By default FUSE is multi-threaded (since release X). |
 
-Set `CHI_WITH_RUNTIME=0` so the FUSE daemon connects as a pure client to the existing runtime instead of trying to start its own.
+Set `CLIO_WITH_RUNTIME=0` so the FUSE daemon connects as a pure client to the existing runtime instead of trying to start its own.
 
 ### Environment variables
 
@@ -114,7 +114,33 @@ Set `CHI_WITH_RUNTIME=0` so the FUSE daemon connects as a pure client to the exi
 | `CHI_FUSE_OVERHEAD` | unset | Set to `1` / `true` to make the FUSE daemon a **chimaera-bypass / overhead-only** server. Writes become no-ops that bump a per-path size counter; reads return zeros. The mount still behaves as a real FUSE filesystem (`getattr`, `readdir`, `create`, `unlink` all work via an in-process map), so you can run `dd` / IOR against it to measure pure kernel ↔ libfuse round-trip cost in isolation from chimaera + bdev. Subtract from the chimaera-backed result to attribute overhead between the two layers. |
 | `CLIO_FUSE_PERMISSIONS` | `1` | The mount enforces POSIX mode bits and ownership (libfuse `default_permissions`): the kernel checks access against each file's mode/uid/gid before any request reaches the adapter, as on ext4. Set to `0` to mount without it (every caller that can reach the mount gets access). |
 | `CLIO_FUSE_ATIME` | relatime | How reads move access times: `relatime` (the Linux default: a read moves atime when it is not newer than the last modify/change, or is a day old), `strict` (every read), or `0` (noatime). The `-o noatime`, `-o strictatime` and `-o relatime` mount options set it too; an explicit variable wins. |
+| `CLIO_FUSE_ATTR_CACHE_S` | `1` single-node, `0` multi-node | Seconds the kernel may reuse attributes (size, mode, times) without asking the adapter. `0` sends every stat to the runtime. On a multi-node mount a non-zero value lets a reader keep a size another node has since changed for up to that long. |
+| `CLIO_FUSE_ENTRY_CACHE_S` | `1` | Seconds the kernel may reuse a name lookup. The adapter still resolves the full path at its owner on every operation, so a name removed on another node fails with `ENOENT` at once. |
+| `CLIO_FUSE_DIR_ATTR_CACHE_S` | the attribute TTL single-node, `0` (off) multi-node | Seconds the adapter itself reuses a **directory's** attributes. File attributes are never cached by it. Opt-in on multi-node mounts; see [Directory attribute cache](#directory-attribute-cache). |
 | `WRP_CTE_FUSE_MOUNTPOINT` | (none) | Only consulted on the apptainer `--fusemount` path (when argv ends with `/dev/fd/<N>`). apptainer doesn't pass the mountpoint via argv, so the caller must export this. Unused in the normal `wrp_cte_fuse /path/to/mnt` invocation. |
+
+### Directory attribute cache
+
+With the kernel attribute cache off (the multi-node default) and permissions
+enforced, the kernel asks for the attributes of every directory on a path
+each time it walks that path. A `stat`, `open`, `creat` or `unlink` of
+`/a/b/c/file` therefore costs one `getattr` per ancestor directory, each a
+round trip to the runtime, before the operation itself runs.
+
+`CLIO_FUSE_DIR_ATTR_CACHE_S=<seconds>` makes the adapter answer those
+directory `getattr`s from its own cache. It is off by default on multi-node
+mounts and is a per-mount choice, not a policy: set it on the mounts whose
+workload can accept the staleness below.
+
+- Only directories are cached. File sizes and times are always exact.
+- A change this mount makes (create, unlink, mkdir, rmdir, rename, chmod,
+  chown, utimens) drops the affected entries immediately.
+- A change made through **another node** is not seen until the entry expires.
+  For up to the TTL this mount can report a directory's old mode, owner, link
+  count and times, can keep applying its old permissions, and can still
+  `stat` a directory that was removed elsewhere.
+- `0` disables it. On single-node mounts it follows `CLIO_FUSE_ATTR_CACHE_S`
+  unless set.
 
 ### 3. Use it
 
@@ -165,9 +191,9 @@ cd context-transfer-engine/test/integration/fuse-manual
 
 ## Configuration
 
-The FUSE adapter inherits its CTE configuration from the running IOWarp runtime. The runtime's `compose` section controls storage backends, tiering, and placement policy. No FUSE-specific configuration file is needed.
+The FUSE adapter inherits its CTE configuration from the running CLIO Runtime. The runtime's `compose` section controls storage backends, tiering, and placement policy. No FUSE-specific configuration file is needed.
 
-Example runtime config (`~/.chimaera/chimaera.yaml`):
+Example runtime config (`~/.clio/clio.yaml`):
 
 ```yaml
 runtime:
@@ -175,7 +201,7 @@ runtime:
   queue_depth: 1024
 
 compose:
-  - mod_name: wrp_cte_core
+  - mod_name: clio_cte_core
     pool_name: cte_main
     pool_query: local
     pool_id: "512.0"
@@ -206,8 +232,8 @@ docker run --cap-add SYS_ADMIN --device /dev/fuse \
   --security-opt seccomp=unconfined \
   -v /workspace:/workspace \
   iowarp/deps-cpu:latest \
-  bash -c "chimaera runtime start & sleep 3 && \
-    CHI_WITH_RUNTIME=0 wrp_cte_fuse /mnt/cte -f"
+  bash -c "clio_run start & sleep 3 && \
+    CLIO_WITH_RUNTIME=0 clio_cte_fuse /mnt/cte -f"
 ```
 
 A ready-made Docker Compose configuration for integration testing is available at:

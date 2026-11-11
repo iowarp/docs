@@ -9,146 +9,117 @@ The Singleton Utilities API in Hermes Shared Memory (HSHM) provides multiple sin
 ### Basic Singleton (Thread-Safe)
 
 ```cpp
-#include "hermes_shm/util/singleton.h"
+#include <string>
 
-class DatabaseConfig {
-public:
-    std::string connection_string;
-    int max_connections;
-    
-    DatabaseConfig() {
-        connection_string = "localhost:5432";
-        max_connections = 100;
-    }
-    
-    void Configure(const std::string& host, int max_conn) {
-        connection_string = host;
-        max_connections = max_conn;
-    }
+#include "clio_ctp/util/singleton.h"
+
+struct MyStruct {
+  std::string string_;
+  int int_ = 0;
 };
 
-// Thread-safe singleton access
-DatabaseConfig* config = hshm::Singleton<DatabaseConfig>::GetInstance();
-config->Configure("prod-db:5432", 200);
+void example() {
+  // Thread-safe singleton access: MyStruct is constructed on the first call
+  // and the same instance is returned on every subsequent call.
+  MyStruct *config = ctp::Singleton<MyStruct>::GetInstance();
+  config->string_ = "localhost:5432";
+  config->int_ = 100;
 
-// Multiple access from different threads
-void worker_thread() {
-    DatabaseConfig* cfg = hshm::Singleton<DatabaseConfig>::GetInstance();
-    printf("Connecting to: %s\n", cfg->connection_string.c_str());
+  // A second access (e.g. from another thread) returns the same instance.
+  MyStruct *same = ctp::Singleton<MyStruct>::GetInstance();
+  same->int_ = 200;
 }
 ```
 
 ### Lockfree Singleton (High Performance)
 
 ```cpp
-class MetricsCollector {
-    std::atomic<size_t> counter_;
-    
-public:
-    MetricsCollector() : counter_(0) {}
-    
-    void Increment() {
-        counter_.fetch_add(1, std::memory_order_relaxed);
-    }
-    
-    size_t GetCount() const {
-        return counter_.load(std::memory_order_relaxed);
-    }
+#include <atomic>
+#include <cstddef>
+
+#include "clio_ctp/util/singleton.h"
+
+struct MetricsCollector {
+  std::atomic<size_t> counter_{0};
+
+  void Increment() { counter_.fetch_add(1, std::memory_order_relaxed); }
+  size_t GetCount() const { return counter_.load(std::memory_order_relaxed); }
 };
 
-// High-performance singleton without locking overhead
-void hot_path_function() {
-    auto* metrics = hshm::LockfreeSingleton<MetricsCollector>::GetInstance();
-    metrics->Increment();  // Very fast, no locks
+void example() {
+  // High-performance singleton without locking overhead. Use only with a
+  // type that is itself thread-safe (here, an atomic counter).
+  MetricsCollector *metrics =
+      ctp::LockfreeSingleton<MetricsCollector>::GetInstance();
+  metrics->Increment();  // Very fast, no locks
 }
 ```
 
 ### Cross-Device Singleton
 
 ```cpp
-class GPUManager {
-public:
-    int device_count;
-    std::vector<int> available_devices;
-    
-    GPUManager() {
-        device_count = GetGPUCount();
-        InitializeDevices();
-    }
-    
-private:
-    int GetGPUCount();
-    void InitializeDevices();
+#include <cstdio>
+
+#include "clio_ctp/util/singleton.h"
+
+struct GPUManager {
+  int device_count = 0;
 };
 
-// Works on both host and GPU code
-HSHM_CROSS_FUN
-void initialize_cuda_context() {
-    GPUManager* gpu_mgr = hshm::CrossSingleton<GPUManager>::GetInstance();
-    printf("Found %d GPU devices\n", gpu_mgr->device_count);
-}
+// Works on both host and device code.
+CTP_CROSS_FUN
+void example() {
+  GPUManager *gpu_mgr = ctp::CrossSingleton<GPUManager>::GetInstance();
+  printf("Found %d GPU devices\n", gpu_mgr->device_count);
 
-// Lockfree version for GPU performance
-HSHM_CROSS_FUN
-void gpu_kernel_function() {
-    auto* gpu_mgr = hshm::LockfreeCrossSingleton<GPUManager>::GetInstance();
-    // Access without locking overhead in GPU kernels
+  // Lockfree variant for device kernels: access without locking overhead.
+  GPUManager *fast = ctp::LockfreeCrossSingleton<GPUManager>::GetInstance();
+  (void)fast;
 }
 ```
 
 ### Global Singleton (Eager Initialization)
 
 ```cpp
-class Logger {
-public:
-    std::ofstream log_file;
-    std::mutex log_mutex;
-    
-    Logger() {
-        log_file.open("/var/log/application.log", std::ios::app);
-        printf("Logger initialized during program startup\n");
-    }
-    
-    void Log(const std::string& message) {
-        std::lock_guard<std::mutex> lock(log_mutex);
-        log_file << "[" << GetTimestamp() << "] " << message << std::endl;
-    }
-    
-private:
-    std::string GetTimestamp();
+#include <string>
+
+#include "clio_ctp/util/singleton.h"
+
+struct Logger {
+  std::string last_message_;
+
+  void Log(const std::string &message) { last_message_ = message; }
 };
 
-// Initialized immediately when program starts
-Logger* logger = hshm::GlobalSingleton<Logger>::GetInstance();
+// GlobalSingleton<T> holds a static T that is constructed during program
+// initialization, so the instance already exists before first use.
+Logger *g_logger = ctp::GlobalSingleton<Logger>::GetInstance();
 
-void application_function() {
-    // Logger already exists and is ready
-    hshm::GlobalSingleton<Logger>::GetInstance()->Log("Function called");
+void example() {
+  // Logger already exists and is ready.
+  ctp::GlobalSingleton<Logger>::GetInstance()->Log("Function called");
 }
 ```
 
 ### Platform-Aware Global Singleton
 
 ```cpp
-class NetworkManager {
-public:
-    std::string local_hostname;
-    std::vector<std::string> network_interfaces;
-    
-    NetworkManager() {
-        DiscoverNetworkInterfaces();
-        printf("Network manager initialized\n");
-    }
-    
-private:
-    void DiscoverNetworkInterfaces();
+#include <string>
+
+#include "clio_ctp/util/singleton.h"
+
+struct NetworkManager {
+  std::string local_hostname = "localhost";
 };
 
-// Automatically chooses best implementation for platform
-HSHM_CROSS_FUN
-void network_operation() {
-    auto* net_mgr = hshm::GlobalCrossSingleton<NetworkManager>::GetInstance();
-    printf("Local hostname: %s\n", net_mgr->local_hostname.c_str());
+// GlobalCrossSingleton<T> automatically chooses the best implementation for
+// the platform: a GlobalSingleton on the host, a LockfreeCrossSingleton on
+// the device.
+CTP_CROSS_FUN
+void example() {
+  NetworkManager *net_mgr =
+      ctp::GlobalCrossSingleton<NetworkManager>::GetInstance();
+  (void)net_mgr->local_hostname;
 }
 ```
 
@@ -157,113 +128,106 @@ void network_operation() {
 ### Basic Global Variables
 
 ```cpp
-// Header declaration
-HSHM_DEFINE_GLOBAL_VAR_H(DatabaseConfig, g_db_config);
+#include <string>
 
-// Source file definition  
-HSHM_DEFINE_GLOBAL_VAR_CC(DatabaseConfig, g_db_config);
+#include "clio_ctp/util/singleton.h"
+
+struct DatabaseConfig {
+  std::string connection_string_;
+  int max_connections_ = 0;
+};
+
+// Header declaration (place in a .h):
+CTP_DEFINE_GLOBAL_VAR_H(DatabaseConfig, g_db_config);
+
+// Source-file definition (place in exactly one .cc):
+CTP_DEFINE_GLOBAL_VAR_CC(DatabaseConfig, g_db_config);
 
 // Usage
-void configure_database() {
-    DatabaseConfig* config = HSHM_GET_GLOBAL_VAR(DatabaseConfig, g_db_config);
-    config->Configure("prod:5432", 500);
+void example() {
+  DatabaseConfig *config = CTP_GET_GLOBAL_VAR(DatabaseConfig, g_db_config);
+  config->connection_string_ = "prod:5432";
+  config->max_connections_ = 500;
 }
 ```
 
 ### Cross-Platform Global Variables
 
 ```cpp
-class SharedMemoryPool {
-public:
-    size_t pool_size;
-    void* memory_base;
-    
-    SharedMemoryPool() : pool_size(0), memory_base(nullptr) {
-        InitializePool();
-    }
-    
-private:
-    void InitializePool();
+#include <cstddef>
+
+#include "clio_ctp/util/singleton.h"
+
+struct SharedMemoryPool {
+  size_t pool_size_ = 0;
+  void *memory_base_ = nullptr;
 };
 
-// Header - works on host and device
-HSHM_DEFINE_GLOBAL_CROSS_VAR_H(SharedMemoryPool, g_memory_pool);
+// Header - works on host and device:
+CTP_DEFINE_GLOBAL_CROSS_VAR_H(SharedMemoryPool, g_memory_pool);
 
-// Source file
-HSHM_DEFINE_GLOBAL_CROSS_VAR_CC(SharedMemoryPool, g_memory_pool);
+// Source file:
+CTP_DEFINE_GLOBAL_CROSS_VAR_CC(SharedMemoryPool, g_memory_pool);
 
 // Usage in cross-platform code
-HSHM_CROSS_FUN
-void allocate_from_pool(size_t size) {
-    SharedMemoryPool* pool = HSHM_GET_GLOBAL_CROSS_VAR(SharedMemoryPool, g_memory_pool);
-    // Allocation logic here
+CTP_CROSS_FUN
+void example() {
+  SharedMemoryPool *pool =
+      CTP_GET_GLOBAL_CROSS_VAR(SharedMemoryPool, g_memory_pool);
+  (void)pool;
 }
 ```
 
 ### Pointer-Based Global Variables
 
 ```cpp
-class TaskScheduler {
-public:
-    std::queue<std::function<void()>> task_queue;
-    std::mutex queue_mutex;
-    std::condition_variable queue_cv;
-    bool running;
-    
-    TaskScheduler() : running(true) {
-        printf("Task scheduler created\n");
-    }
-    
-    void SubmitTask(std::function<void()> task);
-    void ProcessTasks();
-    void Shutdown();
+#include <string>
+
+#include "clio_ctp/util/singleton.h"
+
+struct TaskScheduler {
+  std::string name_;
+  bool running_ = true;
 };
 
-// Header - pointer version for lazy initialization
-HSHM_DEFINE_GLOBAL_PTR_VAR_H(TaskScheduler, g_task_scheduler);
+// Header - pointer version for lazy initialization:
+CTP_DEFINE_GLOBAL_PTR_VAR_H(TaskScheduler, g_task_scheduler);
 
-// Source file
-HSHM_DEFINE_GLOBAL_PTR_VAR_CC(TaskScheduler, g_task_scheduler);
+// Source file:
+CTP_DEFINE_GLOBAL_PTR_VAR_CC(TaskScheduler, g_task_scheduler);
 
-// Usage - automatically creates instance on first access
-void submit_work() {
-    TaskScheduler* scheduler = HSHM_GET_GLOBAL_PTR_VAR(TaskScheduler, g_task_scheduler);
-    
-    scheduler->SubmitTask([]() {
-        printf("Task executing\n");
-    });
+// Usage - the instance is automatically created on first access.
+void example() {
+  TaskScheduler *scheduler =
+      CTP_GET_GLOBAL_PTR_VAR(TaskScheduler, g_task_scheduler);
+  scheduler->running_ = false;
 }
 ```
 
 ### Cross-Platform Pointer Variables
 
 ```cpp
-class DeviceMemoryManager {
-public:
-    size_t total_memory;
-    size_t available_memory;
-    std::map<void*, size_t> allocations;
-    
-    DeviceMemoryManager() {
-        QueryDeviceMemory();
-    }
-    
-private:
-    void QueryDeviceMemory();
+#include <cstddef>
+
+#include "clio_ctp/util/singleton.h"
+
+struct DeviceMemoryManager {
+  size_t total_memory_ = 0;
+  size_t available_memory_ = 0;
 };
 
-// Header
-HSHM_DEFINE_GLOBAL_CROSS_PTR_VAR_H(DeviceMemoryManager, g_device_memory);
+// Header:
+CTP_DEFINE_GLOBAL_CROSS_PTR_VAR_H(DeviceMemoryManager, g_device_memory);
 
-// Source file  
-HSHM_DEFINE_GLOBAL_CROSS_PTR_VAR_CC(DeviceMemoryManager, g_device_memory);
+// Source file:
+CTP_DEFINE_GLOBAL_CROSS_PTR_VAR_CC(DeviceMemoryManager, g_device_memory);
 
 // Cross-platform usage
-HSHM_CROSS_FUN
-void* allocate_device_memory(size_t size) {
-    DeviceMemoryManager* mgr = HSHM_GET_GLOBAL_CROSS_PTR_VAR(DeviceMemoryManager, g_device_memory);
-    // Device-specific allocation
-    return nullptr; // Implementation specific
+CTP_CROSS_FUN
+void example() {
+  DeviceMemoryManager *mgr =
+      CTP_GET_GLOBAL_CROSS_PTR_VAR(DeviceMemoryManager, g_device_memory);
+  (void)mgr;
 }
 ```
 
@@ -274,79 +238,143 @@ void* allocate_device_memory(size_t size) {
 For frequently used singletons, create convenient macro wrappers to reduce code verbosity and provide cleaner API access:
 
 ```cpp
+#include "clio_ctp/util/singleton.h"
+
 // Define convenient macros for common singletons
-#define DATABASE_CONFIG hshm::Singleton<DatabaseConfig>::GetInstance()
-#define METRICS_COLLECTOR hshm::LockfreeSingleton<MetricsCollector>::GetInstance()
-#define GPU_MANAGER hshm::CrossSingleton<GPUManager>::GetInstance()
-#define LOGGER hshm::GlobalSingleton<Logger>::GetInstance()
-#define NETWORK_MANAGER hshm::GlobalCrossSingleton<NetworkManager>::GetInstance()
+#define DATABASE_CONFIG ctp::Singleton<DatabaseConfig>::GetInstance()
+#define METRICS_COLLECTOR ctp::LockfreeSingleton<MetricsCollector>::GetInstance()
+#define GPU_MANAGER ctp::CrossSingleton<GPUManager>::GetInstance()
+#define LOGGER ctp::GlobalSingleton<Logger>::GetInstance()
+#define NETWORK_MANAGER ctp::GlobalCrossSingleton<NetworkManager>::GetInstance()
 
 // Global variable style macros
-#define MEMORY_POOL HSHM_GET_GLOBAL_VAR(SharedMemoryPool, g_memory_pool)
-#define TASK_SCHEDULER HSHM_GET_GLOBAL_PTR_VAR(TaskScheduler, g_task_scheduler)
-#define DEVICE_MEMORY HSHM_GET_GLOBAL_CROSS_PTR_VAR(DeviceMemoryManager, g_device_memory)
+#define MEMORY_POOL CTP_GET_GLOBAL_VAR(SharedMemoryPool, g_memory_pool)
+#define TASK_SCHEDULER CTP_GET_GLOBAL_PTR_VAR(TaskScheduler, g_task_scheduler)
+#define DEVICE_MEMORY \
+  CTP_GET_GLOBAL_CROSS_PTR_VAR(DeviceMemoryManager, g_device_memory)
 ```
 
 ### Usage Examples with Macros
 
 **Before** - Verbose singleton access:
 ```cpp
-void configure_system() {
-    // Verbose and repetitive
-    hshm::Singleton<DatabaseConfig>::GetInstance()->Configure("prod:5432", 500);
-    hshm::LockfreeSingleton<MetricsCollector>::GetInstance()->Increment();
-    hshm::GlobalSingleton<Logger>::GetInstance()->Log("System configured");
-    
-    // Long variable declarations
-    auto* gpu_mgr = hshm::CrossSingleton<GPUManager>::GetInstance();
-    auto* net_mgr = hshm::GlobalCrossSingleton<NetworkManager>::GetInstance();
+#include <cstddef>
+#include <string>
+
+#include "clio_ctp/util/singleton.h"
+
+struct DatabaseConfig {
+  std::string connection_string_;
+  int max_connections_ = 0;
+  void Configure(const std::string &host, int max_conn) {
+    connection_string_ = host;
+    max_connections_ = max_conn;
+  }
+};
+struct MetricsCollector {
+  size_t count_ = 0;
+  void Increment() { ++count_; }
+};
+struct Logger {
+  std::string last_message_;
+  void Log(const std::string &msg) { last_message_ = msg; }
+};
+struct GPUManager {
+  int device_count = 0;
+};
+struct NetworkManager {
+  std::string local_hostname;
+};
+
+void example() {
+  // Verbose and repetitive: the fully-qualified type is repeated everywhere.
+  ctp::Singleton<DatabaseConfig>::GetInstance()->Configure("prod:5432", 500);
+  ctp::LockfreeSingleton<MetricsCollector>::GetInstance()->Increment();
+  ctp::GlobalSingleton<Logger>::GetInstance()->Log("System configured");
+
+  // Long variable declarations
+  auto *gpu_mgr = ctp::CrossSingleton<GPUManager>::GetInstance();
+  auto *net_mgr = ctp::GlobalCrossSingleton<NetworkManager>::GetInstance();
+  (void)gpu_mgr;
+  (void)net_mgr;
 }
 ```
 
 **After** - Clean macro access:
 ```cpp
-void configure_system() {
-    // Clean and concise
-    DATABASE_CONFIG->Configure("prod:5432", 500);
-    METRICS_COLLECTOR->Increment();
-    LOGGER->Log("System configured");
-    
-    // Short, readable access
-    GPU_MANAGER->device_count;
-    NETWORK_MANAGER->local_hostname;
+#include <string>
+
+#include "clio_ctp/util/singleton.h"
+
+struct DatabaseConfig {
+  void Configure(const std::string &, int) {}
+};
+struct MetricsCollector {
+  void Increment() {}
+};
+struct Logger {
+  void Log(const std::string &) {}
+};
+struct GPUManager {
+  int device_count = 0;
+};
+struct NetworkManager {
+  std::string local_hostname;
+};
+
+// Define the access macros once...
+#define DATABASE_CONFIG ctp::Singleton<DatabaseConfig>::GetInstance()
+#define METRICS_COLLECTOR ctp::LockfreeSingleton<MetricsCollector>::GetInstance()
+#define LOGGER ctp::GlobalSingleton<Logger>::GetInstance()
+#define GPU_MANAGER ctp::CrossSingleton<GPUManager>::GetInstance()
+#define NETWORK_MANAGER ctp::GlobalCrossSingleton<NetworkManager>::GetInstance()
+
+void example() {
+  // Clean and concise
+  DATABASE_CONFIG->Configure("prod:5432", 500);
+  METRICS_COLLECTOR->Increment();
+  LOGGER->Log("System configured");
+
+  // Short, readable access
+  (void)GPU_MANAGER->device_count;
+  (void)NETWORK_MANAGER->local_hostname;
 }
 ```
 
 ### Recommended Macro Naming Conventions
 
 ```cpp
+#include "clio_ctp/util/singleton.h"
+
 // 1. SCREAMING_SNAKE_CASE for singleton instances
-#define CONFIG_MANAGER hshm::Singleton<ConfigManager>::GetInstance()
-#define CACHE_MANAGER hshm::LockfreeSingleton<CacheManager>::GetInstance()
+#define CONFIG_MANAGER ctp::Singleton<ConfigManager>::GetInstance()
+#define CACHE_MANAGER ctp::LockfreeSingleton<CacheManager>::GetInstance()
 
 // 2. Prefix with component name for large applications
-#define DB_CONNECTION_POOL hshm::Singleton<ConnectionPool>::GetInstance()
-#define DB_QUERY_CACHE hshm::LockfreeSingleton<QueryCache>::GetInstance()
+#define DB_CONNECTION_POOL ctp::Singleton<ConnectionPool>::GetInstance()
+#define DB_QUERY_CACHE ctp::LockfreeSingleton<QueryCache>::GetInstance()
 
 // 3. Use descriptive names that match functionality
-#define THREAD_POOL hshm::GlobalSingleton<ThreadPoolManager>::GetInstance()
-#define ERROR_REPORTER hshm::CrossSingleton<ErrorReporter>::GetInstance()
+#define THREAD_POOL ctp::GlobalSingleton<ThreadPoolManager>::GetInstance()
+#define ERROR_REPORTER ctp::CrossSingleton<ErrorReporter>::GetInstance()
 
 // 4. For global variables, match the variable name pattern
-#define SHARED_BUFFER HSHM_GET_GLOBAL_VAR(SharedBuffer, g_shared_buffer)
-#define TEMP_ALLOCATOR HSHM_GET_GLOBAL_PTR_VAR(TempAllocator, g_temp_alloc)
+#define SHARED_BUFFER CTP_GET_GLOBAL_VAR(SharedBuffer, g_shared_buffer)
+#define TEMP_ALLOCATOR CTP_GET_GLOBAL_PTR_VAR(TempAllocator, g_temp_alloc)
 ```
 
 ### Advanced Macro Patterns
 
 **Conditional Access Macros:**
 ```cpp
+#include "clio_ctp/util/singleton.h"
+
 // Macro with null check for optional singletons
 #define SAFE_LOGGER (LOGGER ? LOGGER : &null_logger_instance)
 
 // Debug-only singleton access
 #ifdef DEBUG
-#define DEBUG_PROFILER hshm::Singleton<Profiler>::GetInstance()
+#define DEBUG_PROFILER ctp::Singleton<Profiler>::GetInstance()
 #else
 #define DEBUG_PROFILER (&null_profiler_instance)
 #endif
@@ -354,18 +382,23 @@ void configure_system() {
 
 **Functional Macros:**
 ```cpp
+#include "clio_ctp/util/singleton.h"
+
 // Macro that performs common operations
-#define LOG_INFO(msg) LOGGER->Log(LogLevel::INFO, msg)
-#define LOG_ERROR(msg) LOGGER->Log(LogLevel::ERROR, msg)
+#define LOG_INFO(msg) LOGGER->Log(LogLevel::kInfo, msg)
+#define LOG_ERROR(msg) LOGGER->Log(LogLevel::kError, msg)
 #define INCREMENT_COUNTER(name) METRICS_COLLECTOR->IncrementCounter(name)
-#define RECORD_LATENCY(name, duration) METRICS_COLLECTOR->RecordLatency(name, duration)
+#define RECORD_LATENCY(name, duration) \
+  METRICS_COLLECTOR->RecordLatency(name, duration)
 ```
 
 **Type-Safe Wrapper Macros:**
 ```cpp
+#include "clio_ctp/util/singleton.h"
+
 // Wrapper with type checking
 #define GET_CONFIG(type) \
-    (static_cast<type*>(hshm::Singleton<ConfigRegistry>::GetInstance()->Get(#type)))
+  (static_cast<type *>(ctp::Singleton<ConfigRegistry>::GetInstance()->Get(#type)))
 
 // Usage: auto* db_cfg = GET_CONFIG(DatabaseConfig);
 ```
@@ -387,22 +420,23 @@ void configure_system() {
 #ifndef PROJECT_SINGLETONS_H
 #define PROJECT_SINGLETONS_H
 
-#include "hermes_shm/util/singleton.h"
-#include "config/database_config.h"
-#include "metrics/metrics_collector.h"
-#include "logging/logger.h"
+#include "clio_ctp/util/singleton.h"
+// Project headers that declare the singleton payload types:
+// #include "config/config_manager.h"
+// #include "metrics/metrics_collector.h"
+// #include "logging/logger.h"
 
 // Define all singleton access macros
-#define DATABASE_CONFIG hshm::Singleton<DatabaseConfig>::GetInstance()
-#define METRICS_COLLECTOR hshm::LockfreeSingleton<MetricsCollector>::GetInstance()
-#define LOGGER hshm::GlobalSingleton<Logger>::GetInstance()
+#define CONFIG_MANAGER ctp::Singleton<ConfigManager>::GetInstance()
+#define METRICS_COLLECTOR ctp::LockfreeSingleton<MetricsCollector>::GetInstance()
+#define APP_LOGGER ctp::GlobalSingleton<Logger>::GetInstance()
 
 // Functional convenience macros
-#define LOG_INFO(msg) LOGGER->Info(msg)
-#define LOG_ERROR(msg) LOGGER->Error(msg)
+#define LOG_INFO_MSG(msg) APP_LOGGER->Info(msg)
+#define LOG_ERROR_MSG(msg) APP_LOGGER->Error(msg)
 #define COUNT(metric) METRICS_COLLECTOR->Increment(metric)
 
-#endif // PROJECT_SINGLETONS_H
+#endif  // PROJECT_SINGLETONS_H
 ```
 
 ## Best Practices
@@ -419,3 +453,4 @@ void configure_system() {
 10. **Documentation**: Document singleton lifetime and thread safety guarantees for each singleton class
 11. **Macro Wrappers**: Create convenient macro wrappers for frequently accessed singletons to improve code readability
 12. **Naming Conventions**: Use consistent SCREAMING_SNAKE_CASE naming for singleton access macros
+```

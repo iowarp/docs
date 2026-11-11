@@ -19,14 +19,22 @@ Every backend supports two operations:
 Wraps `malloc` for private (non-shared) in-process memory. Useful for single-process tests and allocators that don't need cross-process sharing.
 
 ```cpp
-#include "hermes_shm/memory/backend/malloc_backend.h"
+#include "clio_ctp/memory/allocator/buddy_allocator.h"
+#include "clio_ctp/memory/backend/malloc_backend.h"
 
-hipc::MallocBackend backend;
-size_t heap_size = 128 * 1024 * 1024;  // 128 MB
-backend.shm_init(hipc::MemoryBackendId(0, 0), heap_size);
+void example() {
+  ctp::ipc::MallocBackend backend;
+  size_t heap_size = 128 * 1024 * 1024;  // 128 MB
+  // Reserve room for the allocator object plus the heap it manages.
+  size_t backend_size = sizeof(ctp::ipc::BuddyAllocator) + heap_size;
+  backend.shm_init(ctp::ipc::MemoryBackendId(0, 0), backend_size);
 
-// Create an allocator on top of this backend
-auto *alloc = backend.MakeAlloc<hipc::BuddyAllocator>();
+  // Create an allocator on top of this backend
+  auto *alloc = backend.MakeAlloc<ctp::ipc::BuddyAllocator>();
+  (void)alloc;
+
+  backend.shm_destroy();
+}
 ```
 
 ## PosixShmMmap
@@ -34,15 +42,21 @@ auto *alloc = backend.MakeAlloc<hipc::BuddyAllocator>();
 The primary backend for cross-process shared memory. Uses `shm_open` and `mmap` to create memory-mapped regions accessible by multiple processes.
 
 ```cpp
-#include "hermes_shm/memory/backend/posix_shm_mmap.h"
+#include "clio_ctp/memory/backend/posix_shm_mmap.h"
 
-PosixShmMmap backend;
+void example() {
+  // Process 0 (owner): create the shared-memory region by name
+  ctp::ipc::PosixShmMmap owner;
+  owner.shm_init(ctp::ipc::MemoryBackendId::GetRoot(),
+                 512 * 1024 * 1024, "my_shm_region");
 
-// Process 0: Create shared memory
-backend.shm_init(MemoryBackendId(0, 0), 512 * 1024 * 1024, "/my_shm_region");
+  // Process 1+ : attach to the existing region using the same name
+  ctp::ipc::PosixShmMmap client;
+  client.shm_attach("my_shm_region");
 
-// Process 1+: Attach to existing shared memory
-backend.shm_attach("/my_shm_region");
+  client.shm_detach();   // non-owner releases its mapping
+  owner.shm_destroy();   // owner unmaps and unlinks the region
+}
 ```
 
 **Ownership model:** The process that calls `shm_init()` is the owner and is responsible for cleanup. Use `SetOwner()` / `UnsetOwner()` to transfer ownership between processes.
@@ -52,9 +66,18 @@ backend.shm_attach("/my_shm_region");
 Allocates memory directly on the GPU using `cudaMalloc` (CUDA) or `hipMalloc` (ROCm).
 
 ```cpp
-// Only available when HSHM_ENABLE_CUDA or HSHM_ENABLE_ROCM is set
-GpuMalloc backend;
-backend.shm_init(backend_id, data_capacity);
+// Only available when CTP_ENABLE_CUDA or CTP_ENABLE_ROCM is set
+#include "clio_ctp/memory/backend/gpu_malloc.h"
+
+void example() {
+#if CTP_ENABLE_CUDA || CTP_ENABLE_ROCM
+  ctp::ipc::GpuMalloc backend;
+  size_t data_capacity = 1024 * 1024;  // 1 MB (enforced minimum)
+  backend.shm_init(ctp::ipc::MemoryBackendId(0, 0), data_capacity,
+                   "gpu_region", /*gpu_id=*/0);
+  backend.shm_destroy();
+#endif
+}
 ```
 
 **Memory Layout:**
@@ -67,16 +90,25 @@ GPU Memory: [MemoryBackendHeader | GpuMallocPrivateHeader | Data...]
 - Creates an IPC handle (`GpuIpcMemHandle`) for cross-process GPU memory sharing
 - Enforces minimum 1MB data size
 - Freed via `GpuApi::Free()`
-- Conditionally compiled: `#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM`
+- Conditionally compiled: `#if CTP_ENABLE_CUDA || CTP_ENABLE_ROCM`
 
 ## GpuShmMmap
 
 GPU-accessible POSIX shared memory. Combines host shared memory with GPU registration for zero-copy GPU access.
 
 ```cpp
-// Only available when HSHM_ENABLE_CUDA or HSHM_ENABLE_ROCM is set
-GpuShmMmap backend;
-backend.shm_init(backend_id, url, data_capacity);
+// Only available when CTP_ENABLE_CUDA, CTP_ENABLE_ROCM, or CTP_ENABLE_SYCL is set
+#include "clio_ctp/memory/backend/gpu_shm_mmap.h"
+
+void example() {
+#if CTP_ENABLE_CUDA || CTP_ENABLE_ROCM || CTP_ENABLE_SYCL
+  ctp::ipc::GpuShmMmap backend;
+  size_t backend_size = 1024 * 1024;  // 1 MB (enforced minimum)
+  backend.shm_init(ctp::ipc::MemoryBackendId(0, 0), backend_size,
+                   "gpu_shm_region", /*gpu_id=*/0);
+  backend.shm_destroy();
+#endif
+}
 ```
 
 **Memory Layout:**
@@ -92,7 +124,7 @@ Virtual Memory:  [4KB private header | 4KB shared header | Data...]
 - GPU can access the memory directly without explicit transfers
 - Supports `shm_attach()` for other processes to join
 - Enforces minimum 1MB backend size
-- Conditionally compiled: `#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM`
+- Conditionally compiled: `#if CTP_ENABLE_CUDA || CTP_ENABLE_ROCM`
 
 **Key Difference from GpuMalloc:**
 - Memory lives on the host (CPU) but is GPU-accessible
@@ -119,15 +151,15 @@ The `GpuApi` class provides an abstraction over CUDA and ROCm:
 GPU backends are only compiled when CUDA or ROCm is enabled:
 
 ```cpp
-#if HSHM_ENABLE_CUDA || HSHM_ENABLE_ROCM
+#if CTP_ENABLE_CUDA || CTP_ENABLE_ROCM
   // GPU-specific code
 #endif
 
-#if HSHM_IS_HOST
+#if CTP_IS_HOST
   // Host-only operations (initialization, IPC setup)
 #endif
 
-#if HSHM_IS_GPU
+#if CTP_IS_GPU
   // GPU kernel operations
 #endif
 ```

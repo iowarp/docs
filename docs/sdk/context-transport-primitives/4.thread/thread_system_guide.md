@@ -21,16 +21,23 @@ The HSHM thread system supports multiple backend implementations:
 The system automatically selects appropriate thread models based on the platform:
 
 ```cpp
-// Default thread models (configured at compile time):
-// Host: HSHM_DEFAULT_THREAD_MODEL = hshm::thread::Pthread
-// GPU:  HSHM_DEFAULT_THREAD_MODEL_GPU = hshm::thread::StdThread
+#include "clio_ctp/thread/thread_model_manager.h"
 
-// Access the current thread model
-auto* thread_model = HSHM_THREAD_MODEL;
-printf("Using thread model: %s\n", GetThreadTypeName(thread_model->GetType()));
+#include <cstdio>
 
-// Get thread model type
-HSHM_THREAD_MODEL_T thread_model_ptr = HSHM_THREAD_MODEL;
+void thread_model_overview() {
+    // Default thread models are configured at compile time via CMake defines:
+    //   Host: CTP_DEFAULT_THREAD_MODEL     = ctp::thread::Pthread (POSIX) or
+    //                                        ctp::thread::StdThread (Windows)
+    //   GPU:  CTP_DEFAULT_THREAD_MODEL_GPU = ctp::thread::StdThread
+
+    // Access the current thread model (a process-wide singleton pointer).
+    auto* thread_model = CTP_THREAD_MODEL;
+
+    // The active backend is reported through the ctp::ThreadType enum.
+    ctp::ThreadType type = thread_model->GetType();
+    printf("Using thread model type: %d\n", static_cast<int>(type));
+}
 ```
 
 ## Basic Threading Operations
@@ -38,31 +45,35 @@ HSHM_THREAD_MODEL_T thread_model_ptr = HSHM_THREAD_MODEL;
 ### Thread Creation and Management
 
 ```cpp
-#include "hermes_shm/thread/thread_model_manager.h"
+#include "clio_ctp/thread/thread_model_manager.h"
+
+#include <cstdio>
+#include <utility>
+#include <vector>
 
 void basic_threading_example() {
     // Get the current thread model
-    auto* tm = HSHM_THREAD_MODEL;
+    auto* tm = CTP_THREAD_MODEL;
     
     // Create a thread group (optional context for organizing threads)
-    hshm::ThreadGroupContext group_ctx;
-    hshm::ThreadGroup group = tm->CreateThreadGroup(group_ctx);
+    ctp::ThreadGroupContext group_ctx{};
+    ctp::ThreadGroup group = tm->CreateThreadGroup(group_ctx);
     
     // Define work function
     auto worker_function = [](int thread_id, int iterations) {
         for (int i = 0; i < iterations; ++i) {
             printf("Thread %d: iteration %d\n", thread_id, i);
-            HSHM_THREAD_MODEL->SleepForUs(100000);  // Sleep for 100ms
+            CTP_THREAD_MODEL->SleepForUs(100000);  // Sleep for 100ms
         }
         printf("Thread %d completed\n", thread_id);
     };
     
     // Spawn threads
     const int num_threads = 4;
-    std::vector<hshm::Thread> threads;
+    std::vector<ctp::Thread> threads;
     
     for (int i = 0; i < num_threads; ++i) {
-        hshm::Thread thread = tm->Spawn(group, worker_function, i, 10);
+        ctp::Thread thread = tm->Spawn(group, worker_function, i, 10);
         threads.push_back(std::move(thread));
     }
     
@@ -78,63 +89,62 @@ void basic_threading_example() {
 ### Thread Local Storage
 
 ```cpp
-class ThreadLocalData : public hshm::thread::ThreadLocalData {
+#include "clio_ctp/thread/thread_model_manager.h"
+
+#include <cstdio>
+#include <string>
+#include <vector>
+
+// User TLS payloads derive from ctp::thread::ThreadLocalData.
+class WorkerTls : public ctp::thread::ThreadLocalData {
 public:
     int thread_id;
     std::string thread_name;
     size_t operation_count;
-    
-    ThreadLocalData(int id, const std::string& name) 
+
+    WorkerTls(int id, const std::string& name)
         : thread_id(id), thread_name(name), operation_count(0) {
         printf("TLS created for thread %d (%s)\n", thread_id, thread_name.c_str());
     }
-    
-    ~ThreadLocalData() {
-        printf("TLS destroyed for thread %d, operations: %zu\n", 
+
+    ~WorkerTls() {
+        printf("TLS destroyed for thread %d, operations: %zu\n",
                thread_id, operation_count);
     }
 };
 
 void thread_local_storage_example() {
-    auto* tm = HSHM_THREAD_MODEL;
-    
-    // Create TLS key
-    hshm::ThreadLocalKey tls_key;
-    
+    auto* tm = CTP_THREAD_MODEL;
+
+    // Allocate a thread-local key (one slot, shared by all threads).
+    ctp::ThreadLocalKey tls_key;
+    tm->CreateTls<WorkerTls>(tls_key, nullptr);
+
     auto worker_with_tls = [&tls_key](int thread_id) {
-        // Create thread-local data
-        ThreadLocalData* tls_data = new ThreadLocalData(thread_id, 
-                                                        "Worker-" + std::to_string(thread_id));
-        
-        // Store in TLS
-        HSHM_THREAD_MODEL->SetTls(tls_key, tls_data);
-        
-        // Use TLS throughout thread execution
+        // Create per-thread data and store it under the key.
+        WorkerTls* tls_data =
+            new WorkerTls(thread_id, "Worker-" + std::to_string(thread_id));
+        CTP_THREAD_MODEL->SetTls(tls_key, tls_data);
+
+        // Use TLS throughout this thread's execution.
         for (int i = 0; i < 5; ++i) {
-            ThreadLocalData* my_data = HSHM_THREAD_MODEL->GetTls<ThreadLocalData>(tls_key);
+            WorkerTls* my_data = CTP_THREAD_MODEL->GetTls<WorkerTls>(tls_key);
             my_data->operation_count++;
-            
-            printf("Thread %s: operation %zu\n", 
+            printf("Thread %s: operation %zu\n",
                    my_data->thread_name.c_str(), my_data->operation_count);
-            
-            HSHM_THREAD_MODEL->SleepForUs(50000);
+            CTP_THREAD_MODEL->SleepForUs(50000);
         }
-        
-        // Cleanup is handled automatically by the thread model
+        delete tls_data;
     };
-    
-    // Initialize TLS key
-    tm->CreateTls<ThreadLocalData>(tls_key, nullptr);
-    
-    // Create threads
-    hshm::ThreadGroup group = tm->CreateThreadGroup(hshm::ThreadGroupContext{});
-    std::vector<hshm::Thread> threads;
-    
+
+    // Spawn worker threads.
+    ctp::ThreadGroup group = tm->CreateThreadGroup(ctp::ThreadGroupContext{});
+    std::vector<ctp::Thread> threads;
     for (int i = 0; i < 3; ++i) {
         threads.push_back(tm->Spawn(group, worker_with_tls, i));
     }
-    
-    // Wait for completion
+
+    // Wait for completion.
     for (auto& thread : threads) {
         tm->Join(thread);
     }
@@ -146,52 +156,62 @@ void thread_local_storage_example() {
 ### Thread Utilities
 
 ```cpp
+#include "clio_ctp/thread/thread_model_manager.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <thread>
+#include <utility>
+#include <vector>
+
 void thread_utilities_example() {
-    auto* tm = HSHM_THREAD_MODEL;
-    
-    // Get current thread ID
-    hshm::ThreadId current_tid = tm->GetTid();
-    printf("Current thread ID: %zu\n", current_tid.tid_);
-    
+    auto* tm = CTP_THREAD_MODEL;
+
+    // Get current thread ID (ctp::ThreadId wraps a u64 in .tid_).
+    ctp::ThreadId current_tid = tm->GetTid();
+    printf("Current thread ID: %llu\n",
+           static_cast<unsigned long long>(current_tid.tid_));
+
     // Yield current thread
     printf("Yielding thread...\n");
     tm->Yield();
-    
-    // Sleep for specific duration
+
+    // Sleep for a specific duration
     printf("Sleeping for 1 second...\n");
     tm->SleepForUs(1000000);  // 1 second in microseconds
-    
+
     printf("Sleep completed\n");
 }
 
 void cpu_affinity_example() {
-    auto* tm = HSHM_THREAD_MODEL;
-    hshm::ThreadGroup group = tm->CreateThreadGroup(hshm::ThreadGroupContext{});
-    
+    auto* tm = CTP_THREAD_MODEL;
+    ctp::ThreadGroup group = tm->CreateThreadGroup(ctp::ThreadGroupContext{});
+
     auto cpu_bound_worker = [](int cpu_id) {
         printf("Worker starting on CPU %d\n", cpu_id);
-        
+
         // CPU-intensive work
         volatile double result = 0.0;
         for (int i = 0; i < 1000000; ++i) {
-            result += sin(i * 0.001);
+            result += std::sin(i * 0.001);
         }
-        
+
         printf("Worker on CPU %d completed, result: %f\n", cpu_id, result);
     };
-    
-    const int num_cpus = std::thread::hardware_concurrency();
-    std::vector<hshm::Thread> threads;
-    
+
+    const int num_cpus = static_cast<int>(std::thread::hardware_concurrency());
+    std::vector<ctp::Thread> threads;
+
     for (int i = 0; i < std::min(4, num_cpus); ++i) {
-        hshm::Thread thread = tm->Spawn(group, cpu_bound_worker, i);
-        
-        // Set CPU affinity (if supported by thread model)
+        ctp::Thread thread = tm->Spawn(group, cpu_bound_worker, i);
+
+        // Set CPU affinity (a no-op for models that don't support pinning).
         tm->SetAffinity(thread, i);
-        
+
         threads.push_back(std::move(thread));
     }
-    
+
     for (auto& thread : threads) {
         tm->Join(thread);
     }
@@ -201,16 +221,22 @@ void cpu_affinity_example() {
 ## Producer-Consumer Pattern
 
 ```cpp
-#include "hermes_shm/types/atomic.h"
-#include <queue>
+#include "clio_ctp/thread/thread_model_manager.h"
+#include "clio_ctp/types/atomic.h"
+
+#include <condition_variable>
+#include <cstdio>
 #include <mutex>
+#include <queue>
+#include <utility>
+#include <vector>
 
 template<typename T>
 class ThreadSafeQueue {
     std::queue<T> queue_;
-    std::mutex mutex_;
+    mutable std::mutex mutex_;  // mutable so Size() const can lock it
     std::condition_variable condition_;
-    hshm::ipc::atomic<bool> shutdown_;
+    ctp::ipc::atomic<bool> shutdown_;
     
 public:
     ThreadSafeQueue() : shutdown_(false) {}
@@ -252,10 +278,10 @@ public:
 };
 
 void producer_consumer_example() {
-    auto* tm = HSHM_THREAD_MODEL;
+    auto* tm = CTP_THREAD_MODEL;
     ThreadSafeQueue<int> work_queue;
-    hshm::ipc::atomic<int> total_produced(0);
-    hshm::ipc::atomic<int> total_consumed(0);
+    ctp::ipc::atomic<int> total_produced(0);
+    ctp::ipc::atomic<int> total_consumed(0);
     
     // Producer function
     auto producer = [&](int producer_id, int items_to_produce) {
@@ -265,7 +291,7 @@ void producer_consumer_example() {
             total_produced.fetch_add(1);
             
             printf("Producer %d produced item %d\n", producer_id, item);
-            HSHM_THREAD_MODEL->SleepForUs(10000);  // 10ms
+            CTP_THREAD_MODEL->SleepForUs(10000);  // 10ms
         }
         printf("Producer %d finished\n", producer_id);
     };
@@ -277,7 +303,7 @@ void producer_consumer_example() {
         
         while (work_queue.Pop(item)) {
             // Process item
-            HSHM_THREAD_MODEL->SleepForUs(20000);  // 20ms processing time
+            CTP_THREAD_MODEL->SleepForUs(20000);  // 20ms processing time
             
             consumed_count++;
             total_consumed.fetch_add(1);
@@ -291,8 +317,8 @@ void producer_consumer_example() {
     };
     
     // Create thread group
-    hshm::ThreadGroup group = tm->CreateThreadGroup(hshm::ThreadGroupContext{});
-    std::vector<hshm::Thread> threads;
+    ctp::ThreadGroup group = tm->CreateThreadGroup(ctp::ThreadGroupContext{});
+    std::vector<ctp::Thread> threads;
     
     // Start producers
     const int num_producers = 2;
@@ -319,7 +345,7 @@ void producer_consumer_example() {
     
     // Shutdown queue and wait for consumers
     work_queue.Shutdown();
-    for (int i = num_producers; i < threads.size(); ++i) {
+    for (size_t i = num_producers; i < threads.size(); ++i) {
         tm->Join(threads[i]);
     }
     
@@ -331,92 +357,134 @@ void producer_consumer_example() {
 ## Thread Pool Implementation
 
 ```cpp
+#include "clio_ctp/thread/thread_model_manager.h"
+#include "clio_ctp/types/atomic.h"
+
+#include <condition_variable>
+#include <cstdio>
+#include <functional>
+#include <mutex>
+#include <queue>
+#include <utility>
+#include <vector>
+
+// Minimal blocking task queue used by the pool. Pop() returns false once the
+// queue has been shut down and drained, which lets workers exit cleanly.
+template<typename T>
+class TaskQueue {
+    std::queue<T> queue_;
+    std::mutex mutex_;
+    std::condition_variable condition_;
+    ctp::ipc::atomic<bool> shutdown_;
+
+public:
+    TaskQueue() : shutdown_(false) {}
+
+    void Push(T item) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        queue_.push(std::move(item));
+        condition_.notify_one();
+    }
+
+    bool Pop(T& item) {
+        std::unique_lock<std::mutex> lock(mutex_);
+        condition_.wait(lock,
+                        [this] { return !queue_.empty() || shutdown_.load(); });
+        if (shutdown_.load() && queue_.empty()) {
+            return false;
+        }
+        item = std::move(queue_.front());
+        queue_.pop();
+        return true;
+    }
+
+    void Shutdown() {
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            shutdown_.store(true);
+        }
+        condition_.notify_all();
+    }
+};
+
 class ThreadPool {
-    std::vector<hshm::Thread> workers_;
-    ThreadSafeQueue<std::function<void()>> task_queue_;
-    hshm::ipc::atomic<bool> running_;
-    hshm::ThreadGroup group_;
-    
+    std::vector<ctp::Thread> workers_;
+    TaskQueue<std::function<void()>> task_queue_;
+    ctp::ipc::atomic<bool> running_;
+    ctp::ThreadGroup group_;
+
 public:
     explicit ThreadPool(size_t num_threads) : running_(true) {
-        auto* tm = HSHM_THREAD_MODEL;
-        group_ = tm->CreateThreadGroup(hshm::ThreadGroupContext{});
-        
+        auto* tm = CTP_THREAD_MODEL;
+        group_ = tm->CreateThreadGroup(ctp::ThreadGroupContext{});
+
         // Create worker threads
         for (size_t i = 0; i < num_threads; ++i) {
             workers_.push_back(tm->Spawn(group_, [this, i]() {
                 WorkerLoop(i);
             }));
         }
-        
+
         printf("Thread pool started with %zu threads\n", num_threads);
     }
-    
+
     ~ThreadPool() {
         Shutdown();
     }
-    
+
     template<typename F>
     void Submit(F&& task) {
         if (running_.load()) {
-            task_queue_.Push(std::forward<F>(task));
+            task_queue_.Push(std::function<void()>(std::forward<F>(task)));
         }
     }
-    
+
     void Shutdown() {
         if (running_.load()) {
             running_.store(false);
             task_queue_.Shutdown();
-            
-            auto* tm = HSHM_THREAD_MODEL;
+
+            auto* tm = CTP_THREAD_MODEL;
             for (auto& worker : workers_) {
                 tm->Join(worker);
             }
-            
+
             printf("Thread pool shutdown complete\n");
         }
     }
-    
+
 private:
     void WorkerLoop(size_t worker_id) {
         printf("Worker %zu started\n", worker_id);
-        
+
         std::function<void()> task;
-        while (running_.load() || !task_queue_.Size() == 0) {
-            if (task_queue_.Pop(task)) {
-                try {
-                    task();
-                } catch (const std::exception& e) {
-                    printf("Worker %zu caught exception: %s\n", 
-                           worker_id, e.what());
-                }
-            }
+        while (task_queue_.Pop(task)) {
+            task();
         }
-        
+
         printf("Worker %zu finished\n", worker_id);
     }
 };
 
 void thread_pool_example() {
     ThreadPool pool(4);
-    
+
     // Submit various tasks
     for (int i = 0; i < 20; ++i) {
         pool.Submit([i]() {
-            printf("Executing task %d on thread %zu\n", 
-                   i, HSHM_THREAD_MODEL->GetTid().tid_);
-            
+            printf("Executing task %d on thread %llu\n", i,
+                   static_cast<unsigned long long>(
+                       CTP_THREAD_MODEL->GetTid().tid_));
+
             // Simulate work
-            HSHM_THREAD_MODEL->SleepForUs(100000 + (i % 5) * 50000);
-            
+            CTP_THREAD_MODEL->SleepForUs(100000 + (i % 5) * 50000);
+
             printf("Task %d completed\n", i);
         });
     }
-    
-    // Let tasks complete
-    HSHM_THREAD_MODEL->SleepForUs(2000000);  // 2 seconds
-    
-    // Pool automatically shuts down on destruction
+
+    // Let tasks run for a while; the pool shuts down on destruction.
+    CTP_THREAD_MODEL->SleepForUs(2000000);  // 2 seconds
 }
 ```
 
@@ -425,11 +493,15 @@ void thread_pool_example() {
 ### Pthread Implementation
 
 ```cpp
-#if HSHM_ENABLE_PTHREADS
+#include "clio_ctp/thread/thread_model_manager.h"
+
+#include <cstdio>
+
+#if CTP_ENABLE_PTHREADS
 
 void pthread_specific_example() {
     // Create a pthread-based thread model explicitly
-    hshm::thread::Pthread pthread_model;
+    ctp::thread::Pthread pthread_model;
     
     printf("Using pthread model\n");
     printf("Thread type: %d\n", static_cast<int>(pthread_model.GetType()));
@@ -438,20 +510,20 @@ void pthread_specific_example() {
     pthread_model.Init();
     
     // Create thread with pthread model
-    hshm::ThreadGroup group = pthread_model.CreateThreadGroup(hshm::ThreadGroupContext{});
+    ctp::ThreadGroup group = pthread_model.CreateThreadGroup(ctp::ThreadGroupContext{});
     
     auto pthread_worker = []() {
         printf("Running in pthread worker\n");
         
         // Get pthread-specific thread ID
-        auto tid = HSHM_THREAD_MODEL->GetTid();
+        auto tid = CTP_THREAD_MODEL->GetTid();
         printf("Pthread TID: %zu\n", tid.tid_);
         
         // Use pthread-specific sleep
-        HSHM_THREAD_MODEL->SleepForUs(500000);
+        CTP_THREAD_MODEL->SleepForUs(500000);
     };
     
-    hshm::Thread thread = pthread_model.Spawn(group, pthread_worker);
+    ctp::Thread thread = pthread_model.Spawn(group, pthread_worker);
     pthread_model.Join(thread);
 }
 
@@ -461,32 +533,41 @@ void pthread_specific_example() {
 ### Standard Thread Implementation
 
 ```cpp
+#include "clio_ctp/thread/thread_model_manager.h"
+
+#include <chrono>
+#include <iostream>
+#include <string>
+#include <thread>
+#include <vector>
+
 void std_thread_example() {
-    // Create std::thread-based model
-    hshm::thread::StdThread std_model;
-    
-    printf("Using std::thread model\n");
-    
+    // Create a std::thread-based model explicitly (always available).
+    ctp::thread::StdThread std_model;
+
+    std::cout << "Using std::thread model\n";
+
     // Standard thread operations
-    hshm::ThreadGroup group = std_model.CreateThreadGroup(hshm::ThreadGroupContext{});
-    
+    ctp::ThreadGroup group =
+        std_model.CreateThreadGroup(ctp::ThreadGroupContext{});
+
     auto std_worker = [](const std::string& message) {
-        printf("std::thread worker: %s\n", message.c_str());
-        
+        std::cout << "std::thread worker: " << message << "\n";
+
         // Use std::thread sleep mechanisms
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
-        
-        // Get thread ID
+
+        // Get the native std::thread id
         auto tid = std::this_thread::get_id();
         std::cout << "Thread ID: " << tid << std::endl;
     };
-    
-    std::vector<hshm::Thread> threads;
+
+    std::vector<ctp::Thread> threads;
     for (int i = 0; i < 3; ++i) {
         std::string msg = "Message from thread " + std::to_string(i);
         threads.push_back(std_model.Spawn(group, std_worker, msg));
     }
-    
+
     for (auto& thread : threads) {
         std_model.Join(thread);
     }
@@ -498,14 +579,18 @@ void std_thread_example() {
 ### Host and GPU Thread Coordination
 
 ```cpp
-HSHM_CROSS_FUN void cross_device_function() {
+#include "clio_ctp/thread/thread_model_manager.h"
+
+#include <cstdio>
+
+CTP_CROSS_FUN void cross_device_function() {
     // This function works on both host and GPU
-    auto* tm = HSHM_THREAD_MODEL;
+    auto* tm = CTP_THREAD_MODEL;
     
-#if HSHM_IS_HOST
+#if CTP_IS_HOST
     printf("Running on host with thread model: %d\n", 
            static_cast<int>(tm->GetType()));
-#elif HSHM_IS_GPU
+#elif CTP_IS_GPU
     // GPU-specific operations
     int thread_id = threadIdx.x + blockIdx.x * blockDim.x;
     printf("Running on GPU, thread %d\n", thread_id);
@@ -519,7 +604,7 @@ void cross_device_example() {
     // Host execution
     cross_device_function();
     
-#if HSHM_ENABLE_CUDA
+#if CTP_ENABLE_CUDA
     // Launch on GPU
     cross_device_function<<<1, 32>>>();
     cudaDeviceSynchronize();
@@ -532,6 +617,14 @@ void cross_device_example() {
 ### Barrier Implementation
 
 ```cpp
+#include "clio_ctp/thread/thread_model_manager.h"
+#include "clio_ctp/types/atomic.h"
+
+#include <condition_variable>
+#include <cstdio>
+#include <mutex>
+#include <vector>
+
 class ThreadBarrier {
     std::mutex mutex_;
     std::condition_variable condition_;
@@ -564,12 +657,12 @@ public:
 void barrier_example() {
     const int num_threads = 4;
     ThreadBarrier barrier(num_threads);
-    hshm::ipc::atomic<int> phase(0);
+    ctp::ipc::atomic<int> phase(0);
     
     auto barrier_worker = [&](int worker_id) {
         for (int i = 0; i < 3; ++i) {
             // Phase 1: Different amounts of work
-            HSHM_THREAD_MODEL->SleepForUs(100000 + worker_id * 50000);
+            CTP_THREAD_MODEL->SleepForUs(100000 + worker_id * 50000);
             printf("Worker %d completed phase %d work\n", worker_id, i + 1);
             
             // Synchronize at barrier
@@ -587,9 +680,9 @@ void barrier_example() {
         printf("Worker %d finished all phases\n", worker_id);
     };
     
-    auto* tm = HSHM_THREAD_MODEL;
-    hshm::ThreadGroup group = tm->CreateThreadGroup(hshm::ThreadGroupContext{});
-    std::vector<hshm::Thread> threads;
+    auto* tm = CTP_THREAD_MODEL;
+    ctp::ThreadGroup group = tm->CreateThreadGroup(ctp::ThreadGroupContext{});
+    std::vector<ctp::Thread> threads;
     
     for (int i = 0; i < num_threads; ++i) {
         threads.push_back(tm->Spawn(group, barrier_worker, i));
@@ -606,11 +699,23 @@ void barrier_example() {
 ## Performance Monitoring
 
 ```cpp
+#include "clio_ctp/thread/thread_model_manager.h"
+#include "clio_ctp/types/atomic.h"
+
+#include <chrono>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <memory>
+#include <mutex>
+#include <unordered_map>
+#include <vector>
+
 class ThreadPerformanceMonitor {
     struct ThreadStats {
-        hshm::ipc::atomic<size_t> tasks_completed{0};
-        hshm::ipc::atomic<size_t> total_execution_time_us{0};
-        hshm::ipc::atomic<size_t> max_execution_time_us{0};
+        ctp::ipc::atomic<size_t> tasks_completed{0};
+        ctp::ipc::atomic<size_t> total_execution_time_us{0};
+        ctp::ipc::atomic<size_t> max_execution_time_us{0};
         std::chrono::high_resolution_clock::time_point start_time;
     };
     
@@ -653,7 +758,7 @@ public:
         
         printf("\n=== Thread Performance Statistics ===\n");
         printf("%-10s %-10s %-15s %-15s %-15s\n", 
-               "ThreadID", "Tasks", "Total(μs)", "Avg(μs)", "Max(μs)");
+               "ThreadID", "Tasks", "Total(us)", "Avg(us)", "Max(us)");
         
         for (const auto& [thread_id, stats] : thread_stats_) {
             size_t tasks = stats->tasks_completed.load();
@@ -669,7 +774,7 @@ public:
 
 void performance_monitoring_example() {
     ThreadPerformanceMonitor monitor;
-    auto* tm = HSHM_THREAD_MODEL;
+    auto* tm = CTP_THREAD_MODEL;
     
     auto monitored_worker = [&](int worker_id) {
         size_t thread_id = tm->GetTid().tid_;
@@ -688,8 +793,8 @@ void performance_monitoring_example() {
         }
     };
     
-    hshm::ThreadGroup group = tm->CreateThreadGroup(hshm::ThreadGroupContext{});
-    std::vector<hshm::Thread> threads;
+    ctp::ThreadGroup group = tm->CreateThreadGroup(ctp::ThreadGroupContext{});
+    std::vector<ctp::Thread> threads;
     
     const int num_workers = 3;
     for (int i = 0; i < num_workers; ++i) {
@@ -706,8 +811,8 @@ void performance_monitoring_example() {
 
 ## Best Practices
 
-1. **Thread Model Selection**: Use `HSHM_THREAD_MODEL` for automatic platform-appropriate threading
-2. **Cross-Platform Code**: Use `HSHM_CROSS_FUN` for functions that work on both host and device
+1. **Thread Model Selection**: Use `CTP_THREAD_MODEL` for automatic platform-appropriate threading
+2. **Cross-Platform Code**: Use `CTP_CROSS_FUN` for functions that work on both host and device
 3. **Thread Local Storage**: Implement proper cleanup in TLS destructors
 4. **Resource Management**: Always join threads before destroying thread groups
 5. **Error Handling**: Wrap thread operations in try-catch blocks for robust error handling
@@ -721,8 +826,8 @@ void performance_monitoring_example() {
 
 The thread models are configured at compile time through CMake defines:
 
-- `HSHM_DEFAULT_THREAD_MODEL=hshm::thread::Pthread` (Host default)
-- `HSHM_DEFAULT_THREAD_MODEL_GPU=hshm::thread::StdThread` (GPU default)
-- Enable specific models: `HSHM_ENABLE_PTHREADS`, `HSHM_ENABLE_CUDA`, `HSHM_ENABLE_THALLIUM`
+- `CTP_DEFAULT_THREAD_MODEL=ctp::thread::Pthread` (Host default)
+- `CTP_DEFAULT_THREAD_MODEL_GPU=ctp::thread::StdThread` (GPU default)
+- Enable specific models: `CTP_ENABLE_PTHREADS`, `CTP_ENABLE_CUDA`, `CTP_ENABLE_THALLIUM`
 
 Different thread models can be enabled or disabled based on system capabilities and requirements.

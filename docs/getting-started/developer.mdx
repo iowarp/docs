@@ -2,37 +2,140 @@
 
 This guide covers setting up a development environment for building IOWarp Core from source.
 
-## Linux (DevContainer)
+## Dev Containers (recommended — Windows, macOS, Linux)
 
-The recommended way to develop on Linux is using the provided DevContainers, which come pre-configured with all dependencies via Conda.
+The recommended way to develop IOWarp Core is inside a **Dev Container**.
 
-### Prerequisites
+If you've never used one: a Dev Container is a Docker container that your editor
+(VS Code or Cursor) opens *as your development environment*. Instead of
+installing compilers, CMake, Boost, HDF5, ZeroMQ, CUDA, and dozens of other
+dependencies on your own machine, you open the repo and the editor builds a
+container that already has everything — then runs your terminal, builds, and
+debugger *inside* it. It's **zero host setup**, **reproducible** (everyone uses
+the same toolchain the CI does), and **disposable** (rebuild to get a clean
+state). Your cloned repo is mounted into the container, so your files and git
+history always persist.
 
-- Docker
-- VS Code or Cursor with the **Dev Containers** extension
+You need two things on your host: **Docker** and **VS Code / Cursor with the
+Dev Containers extension**.
 
-### Getting Started
+### 1. Install Docker
 
-1. Open the repository in VS Code/Cursor
-2. When prompted, select **Reopen in Container**
-3. Choose a configuration:
-   - **IOWarp Core (CPU-only)** — recommended for most development
-   - **IOWarp Core (NVIDIA GPU)** — for CUDA development (requires NVIDIA drivers + Container Toolkit)
+**Windows**
 
-### Building
+1. Install [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/).
+   It uses **WSL 2** as its backend; if prompted, install/update the WSL 2
+   kernel (or run `wsl --install` once in an admin PowerShell).
+2. Launch Docker Desktop and wait for **"Engine running"**.
+3. **Recommended:** clone the repo *inside* the WSL 2 filesystem (e.g.
+   `\\wsl$\Ubuntu\home\<you>\...`), not under `C:\Users\...`. Bind-mounts from
+   the Windows drive into a Linux container are dramatically slower and will
+   make builds crawl. Open the WSL folder (`code .` from inside WSL) and reopen
+   in the container from there.
+
+**macOS**
+
+1. Install [Docker Desktop for Mac](https://www.docker.com/products/docker-desktop/)
+   — pick the Apple Silicon or Intel build to match your Mac.
+2. Launch it and wait for **"Engine running"**. In **Settings → Resources**,
+   give Docker ≥ 6 GB RAM and several CPUs (the C++ build is memory-hungry).
+3. The GPU containers require an NVIDIA GPU and do **not** run on macOS — use
+   the CPU container.
+
+**Linux**
+
+1. Install [Docker Engine](https://docs.docker.com/engine/install/) (on
+   Ubuntu/Debian: `curl -fsSL https://get.docker.com | sh`).
+2. Run Docker without `sudo`:
+   ```bash
+   sudo usermod -aG docker "$USER" && newgrp docker
+   docker run --rm hello-world       # verify
+   ```
+3. For GPU containers, also install the NVIDIA Container Toolkit — see
+   [GPU setup](#gpu-setup) below.
+
+### 2. Install VS Code / Cursor + the Dev Containers extension
+
+1. Install [VS Code](https://code.visualstudio.com/) or
+   [Cursor](https://cursor.com/) (Cursor is VS Code-based and works the same).
+2. Install the **Dev Containers** extension (`ms-vscode-remote.remote-containers`):
+   open the Extensions view (`Ctrl+Shift+X`, or `Cmd+Shift+X` on macOS), search
+   **"Dev Containers"** (publisher: Microsoft), and click **Install**. Or from a
+   terminal: `code --install-extension ms-vscode-remote.remote-containers`.
+
+### 3. Open the project in a container
+
+```bash
+git clone --recurse-submodules https://github.com/iowarp/clio-core.git
+code clio-core        # or: cursor clio-core   (on Windows, run this from inside WSL)
+```
+
+The editor detects `.devcontainer/` and shows a **"Reopen in Container"** toast —
+click it. If you miss it, press `F1` (or `Ctrl/Cmd+Shift+P`) → **Dev Containers:
+Reopen in Container**. Pick a configuration (below). The first build pulls the
+image and provisions the container (a few minutes; cached afterwards), then
+drops you into a terminal *inside* the container at the repo root.
+
+**Switching containers:** `F1` → **Dev Containers: Rebuild and Reopen in
+Container** and choose another configuration. Your files are preserved.
+
+### The containers we provide
+
+All three live under `.devcontainer/` and build from a prebuilt `iowarp/deps-*`
+image, so the heavy dependency install is already done.
+
+| Container | Config | Use it for |
+| --- | --- | --- |
+| **IOWarp Core (CPU-only)** | `.devcontainer/cpu/` | Everyday development, CPU builds + tests. No GPU needed. **Start here.** |
+| **IOWarp Core (NVIDIA GPU)** | `.devcontainer/nvidia-gpu/` | CUDA kernel work + GPU features/tests. Adds the CUDA 12.6 toolkit, GPU libs, and Nsight. Needs an NVIDIA GPU on the host. |
+| **IOWarp ML Inference** | `.devcontainer/ml-inference/` | LLM / inference integration work — **llama.cpp, vLLM, SGLang, and PyTorch pre-installed**. GPU-based. |
+
+### Building & testing
+
+Inside the container:
 
 ```bash
 cmake --preset=debug
-cmake --build build -j$(nproc)
+cmake --build build -j"$(nproc)"
+cd build && ctest --output-on-failure
+
+# GPU build (nvidia-gpu / ml-inference containers only)
+cmake --preset=cuda-debug
+cmake --build build -j"$(nproc)"
 ```
 
-### Running Tests
+### GPU setup
 
-```bash
-cd build && ctest
-```
+The GPU containers need GPU support on the **host** (Linux, or Windows via
+WSL 2 — not macOS):
 
-See [`.devcontainer/README.md`](https://github.com/iowarp/clio-core/blob/main/.devcontainer/README.md) for full details on container options, GPU setup, and troubleshooting.
+1. **NVIDIA drivers** (525+ for CUDA 12.6): `nvidia-smi` should list your GPU.
+2. **NVIDIA Container Toolkit** so Docker can pass the GPU into the container:
+   ```bash
+   sudo apt-get install -y nvidia-container-toolkit
+   sudo nvidia-ctk runtime configure --runtime=docker
+   sudo systemctl restart docker
+   ```
+   (or run `.devcontainer/install-nvidia-container-toolkit.sh`). On Windows, a
+   recent NVIDIA driver with WSL 2 GPU support is enough — Docker Desktop
+   exposes the GPU automatically.
+
+Verify inside the container with `nvcc --version` and `nvidia-smi`. Detailed
+notes live in `.devcontainer/CUDA_SETUP.md`.
+
+### Troubleshooting
+
+- **No "Reopen in Container" prompt** — confirm the Dev Containers extension is
+  installed and you opened the repo *root* (the folder containing
+  `.devcontainer/`).
+- **Container build fails / can't pull the image** — make sure Docker is
+  running (`docker run --rm hello-world`) and you can reach Docker Hub.
+- **Very slow builds on Windows** — the repo is on the Windows drive; move it
+  into the WSL 2 filesystem and reopen from there.
+- **Out of memory while compiling** — raise Docker's RAM/CPU limits (Docker
+  Desktop → Settings → Resources).
+- **GPU not visible** — work through [GPU setup](#gpu-setup); the CPU container
+  needs none of it.
 
 ## Windows (Native Build)
 

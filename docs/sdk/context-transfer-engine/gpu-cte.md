@@ -1,325 +1,348 @@
+---
+sidebar_position: 3
+title: GPU CTE API
+description: Calling CTE blob operations from CUDA / ROCm / SYCL kernels via the producer-only GPU path.
+---
+
 # GPU CTE API
 
-This guide describes how to call `AsyncPutBlob`, `AsyncGetBlob`, and
-`AsyncGetOrCreateTag` from CUDA GPU kernels using the CTE (Context Transfer
-Engine) client API. Two usage patterns are covered:
+The Context Transfer Engine (CTE) has **no GPU-specific API surface**. Every CTE entry point — `AsyncPodPutBlob`, `AsyncPodGetBlob`, `AsyncGetOrCreateTag`, `AsyncRegisterTarget`, etc. — lives behind `#if CTP_IS_HOST` in `clio::cte::core::Client` (see `context-transfer-engine/core/include/clio_cte/core/core_client.h`). To drive CTE from a GPU kernel you use the same producer-only path the runtime exposes for any Module: pre-allocate `PodPutBlobTask` / `PodGetBlobTask` slots on the host, submit them from the kernel via `g_ipc_manager_ptr->Send`, and let the CPU runtime do the CTE work.
 
-1. **CPU-side with fork client** -- the simpler path where a CPU test process
-   launches a background Chimaera runtime and issues CTE calls from host code
-   using shared-memory buffers.
-2. **GPU kernel-side** -- the advanced path where a CUDA `__global__` kernel
-   allocates tasks, submits them through the GPU-to-CPU queue, and waits for
-   completion entirely on-device.
+For the full producer-only model — backend kinds, slot layout, `CLIO_GPU_INIT`, `Worker::ProcessNewTaskGpu`, removed APIs — start at the [GPU Client Kernels guide](../context-runtime/6.gpu_clients.md). This page only covers the CTE-specific pieces on top of that pattern.
 
 ## Headers
 
 ```cpp
-#include <chimaera/chimaera.h>
-#include <chimaera/pool_query.h>
-#include <chimaera/singletons.h>
-#include <wrp_cte/core/core_client.h>
-#include <wrp_cte/core/core_tasks.h>
-
-// GPU memory backends (GPU kernel path only)
-#include <hermes_shm/memory/backend/gpu_shm_mmap.h>
-#include <hermes_shm/memory/backend/gpu_malloc.h>
-#include <hermes_shm/util/gpu_api.h>
+#include <clio_runtime/clio_runtime.h>
+#include <clio_runtime/singletons.h>
+#include <clio_runtime/gpu/gpu_info.h>          // IpcManagerGpuInfo
+#include <clio_runtime/gpu/gpu_ipc_manager.h>
+#include <clio_runtime/gpu/future.h>
+#include <clio_runtime/bdev/bdev_client.h>      // to register a bdev target
+#include <clio_ctp/util/gpu_api.h>              // ctp::GpuApi::*
+#include <clio_cte/core/core_client.h>
+#include <clio_cte/core/core_tasks.h>
 ```
 
-## CPU-Side Usage (Fork Client)
+## Host-side setup
 
-This is the recommended starting point. A fork client spawns a background
-Chimaera runtime in a child process, then the parent issues CTE calls from
-normal host code. Blob data is allocated in shared memory so the runtime
-workers can access it directly.
-
-### 1. Initialize Chimaera
+The host bootstraps the runtime, creates the CTE pool, registers at least one storage target, and creates the tag the kernel will reference. This is identical to a non-GPU CTE program; the kernel is just an extra producer that issues task submissions later.
 
 ```cpp
-bool ok = chi::CHIMAERA_INIT(chi::ChimaeraMode::kClient, /*fork=*/true);
-```
+#include <clio_runtime/clio_runtime.h>
+#include <clio_runtime/singletons.h>
+#include <clio_runtime/bdev/bdev_client.h>
+#include <clio_cte/core/core_client.h>
+#include <clio_cte/core/core_tasks.h>
+#include <string>
 
-The second argument `true` forks a background runtime. Allow ~500 ms for the
-child process to start before issuing tasks.
+namespace cte = clio::cte::core;
 
-### 2. Create the CTE Pool
+void example() {
+  clio::run::CLIO_INIT(clio::run::RuntimeMode::kServer);
+  cte::CLIO_CTE_CLIENT_INIT();
 
-```cpp
-chi::PoolId core_pool_id = wrp_cte::core::kCtePoolId;
-wrp_cte::core::Client core_client(core_pool_id);
+  auto *cte_client = CLIO_CTE_CLIENT;
+  cte_client->Init(cte::kCtePoolId);
 
-wrp_cte::core::CreateParams params;
-auto create_task = core_client.AsyncCreate(
-    chi::PoolQuery::Dynamic(),
-    wrp_cte::core::kCtePoolName, core_pool_id, params);
-create_task.Wait();
-```
+  // 1. Create the CTE pool
+  cte::CreateParams params;
+  cte_client
+      ->AsyncCreate(clio::run::PoolQuery::Dynamic(), cte::kCtePoolName,
+                    cte::kCtePoolId, params)
+      .Wait();
 
-### 3. Register a Storage Target
+  // 2. Register a bdev storage target (kRam shown here)
+  const clio::run::u64 kRamCapacity = 64ULL << 20;
+  clio::run::PoolId bdev_pool_id(960, 0);
+  clio::run::bdev::Client bdev_client(bdev_pool_id);
+  bdev_client
+      .AsyncCreate(clio::run::PoolQuery::Dynamic(), std::string("cte_gpu_ram"),
+                   bdev_pool_id, clio::run::bdev::BdevType::kRam, kRamCapacity)
+      .Wait();
+  cte_client
+      ->AsyncRegisterTarget("cte_gpu_ram", clio::run::bdev::BdevType::kRam,
+                            kRamCapacity, clio::run::PoolQuery::Local(),
+                            bdev_pool_id)
+      .Wait();
 
-CTE needs at least one storage backend for blob data.
-
-```cpp
-auto reg_task = core_client.AsyncRegisterTarget(
-    "/tmp/cte_gpu_test.dat",         // path on disk
-    chimaera::bdev::BdevType::kFile, // file-backed target
-    16 * 1024 * 1024,                // 16 MB capacity
-    chi::PoolQuery::Local(),
-    chi::PoolId(700, 0));            // target pool ID
-reg_task.Wait();
-```
-
-### 4. Create a Tag
-
-Tags group blobs logically. The returned `tag_id_` is required by PutBlob
-and GetBlob.
-
-```cpp
-auto tag_task = core_client.AsyncGetOrCreateTag("my_gpu_tag");
-tag_task.Wait();
-wrp_cte::core::TagId tag_id = tag_task->tag_id_;
-```
-
-### 5. AsyncPutBlob
-
-Allocate a shared-memory buffer, fill it, then submit a PutBlob task.
-
-```cpp
-const size_t blob_size = 4096;
-
-// Allocate in shared memory (accessible to runtime workers)
-hipc::FullPtr<char> buf = CHI_IPC->AllocateBuffer(blob_size);
-std::memset(buf.ptr_, 0xAB, blob_size);
-
-// Cast to a void ShmPtr for the CTE API
-hipc::ShmPtr<> blob_data = buf.shm_.Cast<void>();
-
-auto put = core_client.AsyncPutBlob(
-    tag_id,
-    "my_blob",            // blob name
-    /*offset=*/0,
-    /*size=*/blob_size,
-    blob_data,
-    /*score=*/-1.0f,      // -1 = auto-place
-    wrp_cte::core::Context(),
-    /*flags=*/0,
-    chi::PoolQuery::Local());
-put.Wait();
-assert(put->GetReturnCode() == 0);
-```
-
-### 6. AsyncGetBlob
-
-Allocate an output buffer in shared memory and submit a GetBlob task.
-
-```cpp
-hipc::FullPtr<char> out_buf = CHI_IPC->AllocateBuffer(blob_size);
-std::memset(out_buf.ptr_, 0, blob_size);
-hipc::ShmPtr<> out_data = out_buf.shm_.Cast<void>();
-
-auto get = core_client.AsyncGetBlob(
-    tag_id,
-    "my_blob",
-    /*offset=*/0,
-    /*size=*/blob_size,
-    /*flags=*/0,
-    out_data,
-    chi::PoolQuery::Local());
-get.Wait();
-assert(get->GetReturnCode() == 0);
-// out_buf.ptr_ now contains the retrieved blob data
-```
-
-## GPU Kernel-Side Usage
-
-For submitting CTE tasks directly from a CUDA `__global__` kernel, additional
-setup is required. The GPU kernel uses `CHIMAERA_GPU_INIT` to set up per-thread
-allocators, then calls `CHI_IPC->NewTask<T>()` and `CHI_IPC->Send()` exactly
-like host code.
-
-### Memory Backend Setup (Host Side)
-
-Three GPU memory backends must be initialized before launching the kernel:
-
-```cpp
-// 1. Primary backend -- task object allocation (GpuShmMmap = UVM)
-hipc::MemoryBackendId backend_id(20, 0);
-hipc::GpuShmMmap gpu_backend;
-gpu_backend.shm_init(backend_id, 10 * 1024 * 1024, "/my_gpu_cte", 0);
-
-// Register with the IPC manager so the GPU kernel can allocate from it
-CHI_IPC->RegisterGpuAllocator(
-    backend_id, gpu_backend.data_, gpu_backend.data_capacity_);
-
-// 2. GPU-to-CPU backend -- FutureShm lives here (UVM, CPU+GPU visible)
-hipc::MemoryBackendId g2c_backend_id(21, 0);
-hipc::GpuShmMmap g2c_backend;
-g2c_backend.shm_init(g2c_backend_id, 4 * 1024 * 1024, "/my_gpu_g2c", 0);
-
-// 3. GPU heap backend -- device memory for serialization scratch
-hipc::MemoryBackendId heap_backend_id(22, 0);
-hipc::GpuMalloc gpu_heap_backend;
-gpu_heap_backend.shm_init(heap_backend_id, 4 * 1024 * 1024, "/my_gpu_heap", 0);
-```
-
-### IpcManagerGpuInfo Setup (Host Side)
-
-Pack the backends and queue pointer into a struct that the kernel receives
-by value:
-
-```cpp
-chi::IpcManagerGpuInfo gpu_info;
-gpu_info.backend =
-    static_cast<hipc::MemoryBackend &>(gpu_backend);
-gpu_info.gpu2cpu_queue =
-    CHI_IPC->GetGpuQueue(0);  // pre-existing GPU-to-CPU queue
-gpu_info.gpu2cpu_backend =
-    static_cast<hipc::MemoryBackend &>(g2c_backend);
-gpu_info.gpu_heap_backend =
-    static_cast<hipc::MemoryBackend &>(gpu_heap_backend);
-```
-
-### Kernel Launch (Host Side)
-
-Use a non-blocking CUDA stream to avoid serializing with the default stream
-(important when a persistent GPU orchestrator kernel is also running):
-
-```cpp
-cudaStream_t stream;
-cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
-
-my_cte_kernel<<<1, 1, 0, stream>>>(gpu_info, pool_id, tag_id);
-
-// Poll or synchronize as needed (see polling pattern below)
-```
-
-### GPU Kernel Implementation
-
-```cpp
-__global__ void my_cte_kernel(chi::IpcManagerGpu gpu_info,
-                              chi::PoolId pool_id,
-                              wrp_cte::core::TagId tag_id) {
-  // Initialize per-thread GPU allocators and IPC context
-  CHIMAERA_GPU_INIT(gpu_info);
-
-  // ---- GetOrCreateTag ----
-  auto tag_task = CHI_IPC->NewTask<wrp_cte::core::GetOrCreateTagTask<>>(
-      chi::CreateTaskId(),
-      pool_id,
-      chi::PoolQuery::ToLocalCpu(),  // route to CPU worker
-      "my_gpu_tag",
-      wrp_cte::core::TagId::GetNull());
-  auto tag_future = CHI_IPC->Send(tag_task);
-  tag_future.Wait();
-  wrp_cte::core::TagId result_tag_id = tag_future->tag_id_;
-
-  // ---- PutBlob ----
-  const size_t blob_size = 4096;
-  hipc::FullPtr<char> buf = CHI_IPC->AllocateBuffer(blob_size);
-  // Fill buffer on device...
-
-  auto put_task = CHI_IPC->NewTask<wrp_cte::core::PutBlobTask>(
-      chi::CreateTaskId(),
-      pool_id,
-      chi::PoolQuery::ToLocalCpu(),
-      result_tag_id,
-      "my_blob",
-      /*offset=*/0ULL,
-      /*size=*/(chi::u64)blob_size,
-      buf.shm_.Cast<void>(),
-      /*score=*/-1.0f,
-      wrp_cte::core::Context(),
-      /*flags=*/0U);
-  auto put_future = CHI_IPC->Send(put_task);
-  put_future.Wait();
-
-  // ---- GetBlob ----
-  hipc::FullPtr<char> out = CHI_IPC->AllocateBuffer(blob_size);
-  auto get_task = CHI_IPC->NewTask<wrp_cte::core::GetBlobTask>(
-      chi::CreateTaskId(),
-      pool_id,
-      chi::PoolQuery::ToLocalCpu(),
-      result_tag_id,
-      "my_blob",
-      /*offset=*/0ULL,
-      /*size=*/(chi::u64)blob_size,
-      /*flags=*/0U,
-      out.shm_.Cast<void>());
-  auto get_future = CHI_IPC->Send(get_task);
-  get_future.Wait();
-  // out.ptr_ now contains the retrieved data
+  // 3. Create the tag
+  auto tag_task = cte_client->AsyncGetOrCreateTag("my_gpu_tag");
+  tag_task.Wait();
+  cte::TagId tag_id = tag_task->tag_id_;
+  (void)tag_id;
 }
 ```
 
-### Routing from GPU Kernels
+## CTE-callable methods from GPU kernels
 
-| PoolQuery | Direction | Description |
-|-----------|-----------|-------------|
-| `PoolQuery::ToLocalCpu()` | GPU to CPU | Task enters the `gpu2cpu_queue` and is processed by a CPU worker. Use this for CTE blob operations. |
-| `PoolQuery::Local()` | GPU to GPU | Task stays on the GPU orchestrator. Use for GPU-native module methods. |
-| `PoolQuery::LocalGpuBcast()` | CPU to GPU | CPU pushes a task to GPU orchestrator. Used from host code, not inside kernels. |
+The kernel never sees `clio::cte::core::Client`. Instead the host placement-news a `PodPutBlobTask` (or `PodGetBlobTask`) into a registered GPU backend; the kernel submits its `FullPtr`. The two Module methods most often driven from a kernel are:
 
-For CTE blob I/O, always use `PoolQuery::ToLocalCpu()` because the CTE
-runtime (storage targets, metadata) runs on CPU workers.
+| Module method | Task struct | Role of the kernel |
+|---|---|---|
+| `clio::cte::core::Method::kPodPutBlob` | `clio::cte::core::PodPutBlobTask` | Producer of bytes already on the GPU |
+| `clio::cte::core::Method::kPodGetBlob` | `clio::cte::core::PodGetBlobTask` | Consumer that wants bytes landed in GPU memory |
 
-### GPU Wait with Stop Flag
+Other CTE methods (`AsyncDelBlob`, `AsyncListTargets`, `AsyncGetTagSize`, etc.) follow the same pattern; the host constructs the task POD, the kernel calls `g_ipc_manager_ptr->Send`. There is nothing GPU-specific about them.
 
-`future.Wait()` spins on the GPU until the CPU worker marks the future
-complete. For robustness, use a manual poll loop with a CPU-controlled stop
-flag so the host can terminate a stuck kernel:
+The POD task constructors are `CTP_CROSS_FUN`, so you can also construct the POD on the device if you prefer — but the host-construct + `ctp::GpuApi::Memcpy`-into-place idiom is simpler and is what the reference test uses.
+
+## Memory layout
+
+CTE tasks carry blob bytes by reference (`ctp::ipc::ShmPtr<>`), not by value. Each `PodPutBlobTask` / `PodGetBlobTask` is self-contained — it carries its own completion record in its `fut_` field, so there is no separately co-located `FutureShm`. You allocate two GPU backends:
+
+- A **task backend** holding one `PodPutBlobTask` slot plus one `PodGetBlobTask` slot. Either `kPinnedHost` or `kDeviceMem` works; the reference test uses `kDeviceMem` to exercise the D2H/H2D POD copy path.
+- A **blob-data backend** holding the actual bytes. For GPU producers `kDeviceMem` is the natural choice; the bdev runtime memcpys it via `DeviceAwareMemcpy`.
+
+```
+task_backend (kDeviceMem, capacity = put_slot + get_slot + slack)
++----------------------------------+----------------------------------+
+| PodPutBlobTask                   | PodGetBlobTask                   |
++----------------------------------+----------------------------------+
+^                                  ^
+task_dev_base                      task_dev_base + kPutSlot
+
+blob_backend (kDeviceMem, capacity = kBlobBytes)
++-----------------------------------------------------------+
+| blob payload (kernel writes for Put / reads after Get)    |
++-----------------------------------------------------------+
+```
+
+The blob `ShmPtr` you stamp into the task carries the raw device address in `off_` and a null `alloc_id` (the bdev path detects the device pointer at runtime).
+
+## End-to-end example: Put + Get with `kDeviceMem`
+
+The full reference is `context-transfer-engine/test/unit/gpu/test_cte_devmem_putget.cc` (CTest name `cte_devmem_putget_cuda`). This is a condensed version.
+
+### Host: allocate backends and stamp prototypes
 
 ```cpp
-__global__ void safe_kernel(chi::IpcManagerGpu gpu_info,
-                            /* ... */,
-                            volatile int *d_stop) {
-  CHIMAERA_GPU_INIT(gpu_info);
-  // ... NewTask + Send ...
-  auto fshm_full = future.GetFutureShm();
-  chi::FutureShm *fshm = fshm_full.ptr_;
-  while (fshm && !fshm->flags_.AnySystem(chi::FutureShm::FUTURE_COMPLETE)) {
-    // Bypass GPU L2 cache to see CPU-written stop flag
-    int stop = atomicAdd_system(const_cast<int *>(d_stop), 0);
-    if (stop) return;
-    HSHM_THREAD_MODEL->Yield();
-  }
+#include <clio_runtime/clio_runtime.h>
+#include <clio_runtime/singletons.h>
+#include <clio_runtime/gpu/gpu_info.h>
+#include <clio_runtime/gpu/gpu_ipc_manager.h>
+#include <clio_ctp/util/gpu_api.h>
+#include <clio_cte/core/core_client.h>
+#include <clio_cte/core/core_tasks.h>
+#include <cstring>
+#include <new>
+
+namespace cte = clio::cte::core;
+
+void example() {
+  auto *ipc = CLIO_CPU_IPC;
+  (void)ipc;
+
+  const clio::run::u32 kBlobBytes = 256;
+  const clio::run::u32 kPutSlot = sizeof(cte::PodPutBlobTask);
+  const clio::run::u32 kGetSlot = sizeof(cte::PodGetBlobTask);
+  const clio::run::u32 kTaskBackendBytes = kPutSlot + kGetSlot + 64;
+
+  // The host GPU IPC-manager API (backend alloc, GetGpuInfo, MemKind) is only
+  // compiled on a CUDA/ROCm build. The pointers below are filled there.
+  char *task_dev_base = nullptr;
+  char *blob_dev = nullptr;
+#if defined(CTP_ENABLE_CUDA) || defined(CTP_ENABLE_ROCM)
+  clio::run::IpcManagerGpuInfo gpu_info =
+      ipc->GetGpuIpcManager()->GetGpuInfo(/*gpu_id=*/0);
+  (void)gpu_info;
+  auto task_alloc_id = ipc->AllocateAndRegisterGpuBackend(
+      /*gpu_id=*/0, clio::run::gpu::IpcManager::MemKind::kDeviceMem,
+      kTaskBackendBytes, &task_dev_base);
+  auto blob_alloc_id = ipc->AllocateAndRegisterGpuBackend(
+      /*gpu_id=*/0, clio::run::gpu::IpcManager::MemKind::kDeviceMem,
+      kBlobBytes, &blob_dev);
+  (void)task_alloc_id;
+  (void)blob_alloc_id;
+#endif
+
+  // Build the blob ShmPtr (raw device address + null alloc_id).
+  ctp::ipc::ShmPtr<> blob_shm;
+  blob_shm.alloc_id_.SetNull();
+  blob_shm.off_ = reinterpret_cast<clio::run::u64>(blob_dev);
+
+  // tag_id comes from AsyncGetOrCreateTag() in the host-side setup above.
+  cte::TagId tag_id = cte::TagId::GetNull();
+
+  // PutBlob prototype constructed in host memory, then copied to device.
+  alignas(64) char put_proto[sizeof(cte::PodPutBlobTask)];
+  std::memset(put_proto, 0, sizeof(put_proto));
+  auto *put_proto_task = new (put_proto) cte::PodPutBlobTask(
+      clio::run::CreateTaskId(), cte::kCtePoolId,
+      clio::run::PoolQuery::ToLocalCpu(), tag_id, "blob_a",
+      /*offset=*/clio::run::u64(0), static_cast<clio::run::u64>(kBlobBytes),
+      blob_shm, /*score=*/-1.0f, cte::Context(), /*flags=*/clio::run::u32(0));
+  // The Task carries its own completion record; stamp its serialized size.
+  put_proto_task->fut_.task_size_ = sizeof(cte::PodPutBlobTask);
+  ctp::GpuApi::Memcpy(task_dev_base, put_proto, sizeof(put_proto));
+
+  // GetBlob prototype, occupying the second slot.
+  alignas(64) char get_proto[sizeof(cte::PodGetBlobTask)];
+  std::memset(get_proto, 0, sizeof(get_proto));
+  auto *get_proto_task = new (get_proto) cte::PodGetBlobTask(
+      clio::run::CreateTaskId(), cte::kCtePoolId,
+      clio::run::PoolQuery::ToLocalCpu(), tag_id, "blob_a",
+      /*offset=*/clio::run::u64(0), static_cast<clio::run::u64>(kBlobBytes),
+      /*flags=*/clio::run::u32(0), blob_shm);
+  get_proto_task->fut_.task_size_ = sizeof(cte::PodGetBlobTask);
+  ctp::GpuApi::Memcpy(task_dev_base + kPutSlot, get_proto, sizeof(get_proto));
+
+  // Kernel-visible FullPtrs (raw device addresses in off_).
+  ctp::ipc::FullPtr<cte::PodPutBlobTask> put_fp;
+  put_fp.shm_.alloc_id_.SetNull();
+  put_fp.shm_.off_ = reinterpret_cast<clio::run::u64>(task_dev_base);
+  put_fp.ptr_ = reinterpret_cast<cte::PodPutBlobTask *>(task_dev_base);
+
+  ctp::ipc::FullPtr<cte::PodGetBlobTask> get_fp;
+  get_fp.shm_.alloc_id_.SetNull();
+  get_fp.shm_.off_ = reinterpret_cast<clio::run::u64>(task_dev_base + kPutSlot);
+  get_fp.ptr_ =
+      reinterpret_cast<cte::PodGetBlobTask *>(task_dev_base + kPutSlot);
+  (void)put_fp;
+  (void)get_fp;
 }
 ```
 
-On the host side, allocate `d_stop` with `cudaMallocManaged` and set it to 1
-if the kernel times out.
+### Kernel: submit and wait
 
-## Context Structure
+```cpp
+#include <clio_runtime/clio_runtime.h>
+#include <clio_runtime/singletons.h>
+#include <clio_runtime/gpu/gpu_info.h>
+#include <clio_runtime/gpu/gpu_ipc_manager.h>
+#include <clio_cte/core/core_tasks.h>
 
-`wrp_cte::core::Context` controls compression and placement behavior. Pass a
-default-constructed `Context()` for standard uncompressed I/O.
+namespace cte = clio::cte::core;
 
-Key fields:
+// Kernel launches (`<<<>>>`) and __global__ are GPU-compiler only; the doctest
+// host harness compiles this to nothing.
+#if defined(CTP_ENABLE_CUDA) || defined(CTP_ENABLE_ROCM)
+__global__ void PutKernel(clio::run::IpcManagerGpuInfo info,
+                          ctp::ipc::FullPtr<cte::PodPutBlobTask> task) {
+  CLIO_GPU_INIT(info, /*ipc_ptr=*/nullptr);
+  if (threadIdx.x != 0) return;
+  auto fut = g_ipc_manager_ptr->Send(task);
+  fut.Wait();
+  (void)g_ipc_manager;
+}
 
-| Field | Default | Description |
-|-------|---------|-------------|
-| `dynamic_compress_` | 0 | 0=skip, 1=static, 2=dynamic compression |
-| `compress_lib_` | 0 | Compression library index (0-10) |
-| `compress_preset_` | 2 | 1=FAST, 2=BALANCED, 3=BEST |
-| `min_persistence_level_` | 0 | 0=volatile, 1=temp-nonvolatile, 2=long-term |
-| `score` (PutBlob param) | -1.0 | -1=auto, 0.0-1.0=explicit tier (higher=faster) |
-
-## CMake Integration
-
-GPU CTE kernels must be compiled with CUDA (`*.cu` files or
-`set_source_files_properties(... LANGUAGE CUDA)`). Link against:
-
-```cmake
-target_link_libraries(my_target
-  wrp_cte_core_client   # CTE client library
-  chimaera_cxx          # Chimaera runtime
-  hermes_shm_host       # Shared memory primitives
-)
+__global__ void GetKernel(clio::run::IpcManagerGpuInfo info,
+                          ctp::ipc::FullPtr<cte::PodGetBlobTask> task) {
+  CLIO_GPU_INIT(info, /*ipc_ptr=*/nullptr);
+  if (threadIdx.x != 0) return;
+  auto fut = g_ipc_manager_ptr->Send(task);
+  fut.Wait();
+  (void)g_ipc_manager;
+}
+#endif  // CTP_ENABLE_CUDA || CTP_ENABLE_ROCM
 ```
 
-Enable CUDA in the project:
+The kernel does not see `clio::cte::core::Client`. It only sees `g_ipc_manager_ptr->Send` and the pre-built `FullPtr`s.
 
-```cmake
-enable_language(CUDA)
-set(CMAKE_CUDA_STANDARD 17)
-set(CMAKE_CUDA_ARCHITECTURES 70 80 90)
+### Host: launch and verify
+
+```cpp
+#include <clio_runtime/clio_runtime.h>
+#include <clio_runtime/singletons.h>
+#include <clio_runtime/gpu/gpu_info.h>
+#include <clio_runtime/gpu/gpu_ipc_manager.h>
+#include <clio_ctp/util/gpu_api.h>
+#include <clio_cte/core/core_tasks.h>
+#include <vector>
+
+namespace cte = clio::cte::core;
+
+// Kernel launches are GPU-compiler only; compiled to nothing on the host.
+#if defined(CTP_ENABLE_CUDA) || defined(CTP_ENABLE_ROCM)
+__global__ void FillKernel(char *buf, clio::run::u32 size, clio::run::u32 seed);
+__global__ void PutKernel(clio::run::IpcManagerGpuInfo info,
+                          ctp::ipc::FullPtr<cte::PodPutBlobTask> task);
+__global__ void GetKernel(clio::run::IpcManagerGpuInfo info,
+                          ctp::ipc::FullPtr<cte::PodGetBlobTask> task);
+
+void example(clio::run::IpcManagerGpuInfo gpu_info, char *blob_dev,
+             char *task_dev_base,
+             ctp::ipc::FullPtr<cte::PodPutBlobTask> put_fp,
+             ctp::ipc::FullPtr<cte::PodGetBlobTask> get_fp,
+             ctp::ipc::AllocatorId blob_alloc_id,
+             ctp::ipc::AllocatorId task_alloc_id) {
+  auto *ipc = CLIO_CPU_IPC;
+  const clio::run::u32 kBlobBytes = 256;
+
+  // Fill blob_dev with a known pattern using a regular kernel,
+  // then submit the PutBlob.
+  FillKernel<<<1, 256>>>(blob_dev, kBlobBytes, /*seed=*/0xC3u);
+  ctp::GpuApi::Synchronize();
+
+  PutKernel<<<1, 32>>>(gpu_info, put_fp);
+  ctp::GpuApi::Synchronize();
+
+  // Pull the return code back from device memory.
+  cte::PodPutBlobTask put_after{};
+  ctp::GpuApi::Memcpy(reinterpret_cast<char *>(&put_after), task_dev_base,
+                      sizeof(put_after));
+  // Success when put_after.return_code_.load() == 0u.
+
+  // Zero the device buffer so GetBlob is provably observable.
+  std::vector<char> zeros(kBlobBytes, 0);
+  ctp::GpuApi::Memcpy(blob_dev, zeros.data(), kBlobBytes);
+
+  GetKernel<<<1, 32>>>(gpu_info, get_fp);
+  ctp::GpuApi::Synchronize();
+
+  // Verify the device buffer now matches the original pattern.
+
+  ipc->FreeGpuBackend(/*gpu_id=*/0, blob_alloc_id);
+  ipc->FreeGpuBackend(/*gpu_id=*/0, task_alloc_id);
+}
+#endif  // CTP_ENABLE_CUDA || CTP_ENABLE_ROCM
 ```
+
+## Routing
+
+Inside the kernel, `clio::run::PoolQuery::ToLocalCpu()` is the only meaningful routing mode for CTE — the CTE Module's containers run on CPU workers. Using any other mode from a kernel is not supported. From the host side you can use any standard pool query for CTE; the GPU path is irrelevant once you are submitting from CPU code.
+
+## `Context` quick reference
+
+`clio_cte::core::Context` controls compression and placement decisions. A default-constructed `Context{}` is the right starting point for uncompressed I/O. Key fields:
+
+| Field | Default | Meaning |
+|---|---|---|
+| `dynamic_compress_` | 0 | 0 = skip, 1 = static lib, 2 = dynamic selection |
+| `compress_lib_` | 0 | Compression library index |
+| `compress_preset_` | 2 | 1 = FAST, 2 = BALANCED, 3 = BEST |
+| `min_persistence_level_` | 0 | 0 = volatile, 1 = temp-nonvolatile, 2 = long-term |
+| `score` (PutBlob arg) | -1.0 | -1 = auto-place, 0.0-1.0 = explicit tier |
+
+## CMake integration
+
+CTE adds nothing GPU-specific on top of the runtime's CMake setup. You enable GPU support with the same options described in the [GPU Client Kernels guide](../context-runtime/6.gpu_clients.md#cmake-integration):
+
+```bash
+cmake -S . -B build -DCLIO_CORE_ENABLE_CUDA=ON      # CUDA
+cmake -S . -B build -DCLIO_CORE_ENABLE_ROCM=ON      # ROCm
+cmake -S . -B build -DCLIO_CORE_ENABLE_SYCL=ON \    # SYCL
+    -DCMAKE_CXX_COMPILER=icpx
+```
+
+A target that submits CTE tasks from a kernel needs to link both the CTE client library and the runtime; see the `add_cuda_executable(test_cte_devmem_putget ...)` block in `context-transfer-engine/test/unit/CMakeLists.txt` for a working setup.
+
+## Tests
+
+| File | Backend | CTest name |
+|---|---|---|
+| `context-transfer-engine/test/unit/gpu/test_cte_devmem_putget.cc` | CUDA | `cte_devmem_putget_cuda` |
+
+Run with:
+
+```bash
+cd build
+ctest -R cte_devmem_putget -V
+```
+
+## Related references
+
+- [GPU Client Kernels](../context-runtime/6.gpu_clients.md) — full producer-only model.
+- `context-transfer-engine/core/include/clio_cte/core/core_client.h` — every CTE entry point (host-only).
+- `context-transfer-engine/core/include/clio_cte/core/core_tasks.h` — `PodPutBlobTask`, `PodGetBlobTask`, `Context`, `TagId`.
+- `context-transfer-engine/test/unit/gpu/test_cte_devmem_putget.cc` — reference end-to-end test.

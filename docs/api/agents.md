@@ -1,7 +1,7 @@
 ---
 sidebar_position: 2
 title: Agent API
-description: API reference for integrating AI agents with the IOWarp runtime.
+description: API reference for integrating AI agents with the CLIO Runtime.
 ---
 
 # Agent API

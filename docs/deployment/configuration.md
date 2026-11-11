@@ -1,32 +1,34 @@
 ---
 sidebar_position: 1
 title: Configuration
-description: Complete configuration reference for IOWarp runtime and module deployments.
+description: Complete configuration reference for CLIO Runtime and module deployments.
 ---
 
 # Configuration Reference
 
 ## Overview
 
-IOWarp uses a single YAML file to configure the Chimaera runtime and any modules (ChiMods) that are created at startup via the `compose` section.
+IOWarp uses a single YAML file to configure the CLIO Runtime and any modules (ChiMods) that are created at startup via the `compose` section.
 
-When you install IOWarp, a default configuration is created at `~/.chimaera/chimaera.yaml`. You can edit this file directly or override it with an environment variable.
+When you install IOWarp, a default `~/.clio/clio.yaml` is seeded for you. You can edit it directly or override the path with `CLIO_SERVER_CONF`.
 
-The configuration file is located via (in priority order):
+The configuration file is located via (in priority order, first hit wins):
 
 | Source | Priority | Description |
 |--------|----------|-------------|
-| `CHI_SERVER_CONF` env var | **1st** | Checked first. |
-| `WRP_RUNTIME_CONF` env var | **2nd** | Legacy fallback. |
-| `~/.chimaera/chimaera.yaml` | **3rd** | Default created at install time. |
+| `CLIO_SERVER_CONF` env var | **1st** | Checked first. |
+| `~/.clio/clio.yaml` | **2nd** | Per-user default. Seeded at install time. |
+| Built-in defaults | **3rd** | Compiled-in fallback. |
+
+A handful of legacy paths (`~/.clio/chimaera.yaml`, `~/.chimaera/clio.yaml`, `~/.chimaera/chimaera.yaml`) are also accepted for backward compat — see [Deprecation Notes](../deprecation-notes) for the full lookup order.
 
 ```bash
 # Use the installed default
-chimaera runtime start
+clio_run start
 
 # Or override with a custom config
-export CHI_SERVER_CONF=/etc/iowarp/chimaera.yaml
-chimaera runtime start
+export CLIO_SERVER_CONF=/etc/iowarp/clio.yaml
+clio_run start
 ```
 
 Size values throughout the file accept: `B`, `KB`, `MB`, `GB`, `TB` (case-insensitive).
@@ -37,7 +39,7 @@ Size values throughout the file accept: `B`, `KB`, `MB`, `GB`, `TB` (case-insens
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `port` | `9413` | ZeroMQ RPC listener port. Must match across all cluster nodes. Can be overridden by `CHI_PORT` env var. |
+| `port` | `9413` | ZeroMQ RPC listener port. Must match across all cluster nodes. Can be overridden by `CLIO_PORT` env var. |
 | `neighborhood_size` | `32` | Maximum nodes queried when splitting range queries. |
 | `hostfile` | *(none)* | Path to a file listing cluster node IPs/hostnames, one per line. Required for multi-node deployments. |
 | `wait_for_restart` | `30` | Seconds to wait for peer nodes during startup. |
@@ -67,17 +69,17 @@ Logging is controlled by HLOG, which reads **environment variables** at process 
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `HSHM_LOG_LEVEL` | `info` (compile-time default) | Runtime log level threshold. Messages below this level are suppressed. Accepts: `debug` (0), `info` (1), `success` (2), `warning` (3), `error` (4), `fatal` (5). Case-insensitive strings or numeric values. |
-| `HSHM_LOG_OUT` | *(none — console only)* | Path to a log file. When set, all log messages are also written to this file (without ANSI color codes). |
+| `CTP_LOG_LEVEL` | `info` (compile-time default) | Runtime log level threshold. Messages below this level are suppressed. Accepts: `debug` (0), `info` (1), `success` (2), `warning` (3), `error` (4), `fatal` (5). Case-insensitive strings or numeric values. |
+| `CTP_LOG_OUT` | *(none — console only)* | Path to a log file. When set, all log messages are also written to this file (without ANSI color codes). |
 
 ```bash
 # Show debug-level output and write to a file
-export HSHM_LOG_LEVEL=debug
-export HSHM_LOG_OUT=/tmp/chimaera.log
-chimaera runtime start
+export CTP_LOG_LEVEL=debug
+export CTP_LOG_OUT=/tmp/clio.log
+clio_run start
 ```
 
-HLOG also applies a **compile-time** threshold (`HSHM_LOG_LEVEL` CMake define, default `kInfo`). Messages below the compile-time threshold are compiled out entirely and cannot be enabled at runtime. The runtime environment variable can only raise the threshold further (i.e., make output quieter), or match the compile-time level.
+HLOG also applies a **compile-time** threshold (`CTP_LOG_LEVEL` CMake define, default `kInfo`). Messages below the compile-time threshold are compiled out entirely and cannot be enabled at runtime. The runtime environment variable can only raise the threshold further (i.e., make output quieter), or match the compile-time level.
 
 Log routing:
 - `debug`, `info`, `success` messages go to **stdout**.
@@ -113,20 +115,20 @@ The `compose` section declaratively creates module pools at runtime startup. Eac
 
 ```yaml
 compose:
-  - mod_name: wrp_cte_core      # ChiMod shared-library name (e.g., libwrp_cte_core.so)
+  - mod_name: clio_cte_core      # Module shared-library name (e.g., libclio_cte_core.so)
     pool_name: cte_main          # User-defined pool name
     pool_query: local            # Routing: local, dynamic, broadcast
     pool_id: "512.0"             # Unique pool ID
     # ... module-specific parameters
 ```
 
-Only `chimaera_bdev` is required. CTE (`wrp_cte_core`) and CAE (`wrp_cae_core`) are optional — remove their entries if you do not need them.
+Only `clio_bdev` is required. CTE (`clio_cte_core`) and CAE (`clio_cae_core`) are optional — remove their entries if you do not need them.
 
 ### Common Compose Fields
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `mod_name` | Yes | Name of the ChiMod shared library (without `lib` prefix and `.so` suffix). |
+| `mod_name` | Yes | Name of the Module shared library (without `lib` prefix and `.so` suffix). |
 | `pool_name` | Yes | User-defined pool name. |
 | `pool_query` | Yes | Routing policy (see below). |
 | `pool_id` | Yes | Unique pool ID string (format: `"<major>.<minor>"`). |
@@ -175,7 +177,7 @@ moves their pools into the pool log; nothing is registered there any more.)
 
 ---
 
-## Block Device ChiMod (`chimaera_bdev`)
+## Block Device Module (`clio_bdev`)
 
 Block devices provide the shared memory allocator used by other modules. At least one DRAM block device is required.
 
@@ -188,7 +190,7 @@ Block devices provide the shared memory allocator used by other modules. At leas
 ```yaml
 compose:
   # DRAM block device (required)
-  - mod_name: chimaera_bdev
+  - mod_name: clio_bdev
     pool_name: "ram::chi_default_bdev"
     pool_query: local
     pool_id: "301.0"
@@ -196,7 +198,7 @@ compose:
     capacity: "512MB"
 
   # File-backed block device (optional — for NVMe, HDD, etc.)
-  # - mod_name: chimaera_bdev
+  # - mod_name: clio_bdev
   #   pool_name: "/mnt/nvme/chi_bdev"
   #   pool_query: local
   #   pool_id: "302.0"
@@ -210,7 +212,7 @@ A file-backed device records every allocation and free in its allocator log as i
 
 ---
 
-## Safe Block Device ChiMod (`clio_safe_bdev`)
+## Safe Block Device Module (`clio_safe_bdev`)
 
 An erasure-coded array over member bdevs: data members plus up to
 `max_failures` dedicated Reed-Solomon parity members. It starts on as few as
@@ -225,7 +227,7 @@ parity), and `RecoverBdev` rebuilds it onto a new disk.
 | `distributed` | `false` | `true`: each member is its pool's container on node `node_id` (disks on different nodes). The array runs on the first member's node; a member whose node dies is marked faulty. `false`: every member is this node's container of its pool. |
 | `members` | — | Initial members: `pool_name`, `node_id`, `pool_id_major`, `pool_id_minor` of existing bdev pools. |
 
-## CTE ChiMod Parameters (`wrp_cte_core`)
+## CTE Module Parameters (`clio_cte_core`)
 
 ### Storage Tiers (`storage`)
 
@@ -272,7 +274,7 @@ storage:
 | `neighborhood` | `1` | Number of storage nodes CTE can buffer to simultaneously. |
 | `default_target_timeout_ms` | `30000` | Timeout for storage target operations (ms). |
 | `poll_period_ms` | `5000` | How often to rescan targets for bandwidth/capacity stats (ms). |
-| `failover_to_successor` | `false` | While a blob's owner node is dead, route the blob to the first live successor container, which serves it from the replication ChiMod's remote copy (`remote_copies`) until the owner returns. |
+| `failover_to_successor` | `false` | While a blob's owner node is dead, route the blob to the first live successor container, which serves it from the replication Module's remote copy (`remote_copies`) until the owner returns. |
 
 ### Performance Tuning (`performance`)
 
@@ -292,9 +294,9 @@ All fields are optional and override compile-time defaults.
 
 ---
 
-## Replication ChiMod Parameters (`clio_cte_replication`)
+## Replication Module Parameters (`clio_cte_replication`)
 
-The replication ChiMod (pool `561.0`) sits in the data path below the cache
+The replication Module (pool `561.0`) sits in the data path below the cache
 and makes every put durable before it is acknowledged:
 
 - `num_replicas` copies on the same node's persistent tiers. A restart drops
@@ -322,9 +324,9 @@ stream sizes live in those modules' own state and are not yet covered.
 
 ---
 
-## Cache ChiMod Parameters (`clio_cte_cache`)
+## Cache Module Parameters (`clio_cte_cache`)
 
-The cache ChiMod (pool `563.0`) is the top of the interposition chain. By
+The cache Module (pool `563.0`) is the top of the interposition chain. By
 default it keeps a node-local raw copy of each blob, written with every put
 and filled on read, so a rank re-reading remote-owned data is served from its
 own node. Tag metadata is written through to every node in either mode.
@@ -345,9 +347,9 @@ for read-heavy workloads that re-read remote data locally.
 
 ---
 
-## Filesystem ChiMod Parameters (`clio_cte_filesystem`)
+## Filesystem Module Parameters (`clio_cte_filesystem`)
 
-The filesystem ChiMod (pool `560.0`) is the POSIX layer the FUSE, POSIX and
+The filesystem Module (pool `560.0`) is the POSIX layer the FUSE, POSIX and
 STDIO adapters drive. Its namespace is stored in the CTE and cached by every
 node; there is no metadata server. It has two parts:
 
@@ -375,7 +377,7 @@ Renaming a directory moves one row: its contents are keyed by the directory's
 id, not its path. File data pages are spread by the CTE core's per-page hash.
 
 If a node dies, its blocks and inodes are served by the next live node from
-their replicated CTE copies (with `remote_copies` on the replication ChiMod
+their replicated CTE copies (with `remote_copies` on the replication Module
 and `failover_to_successor` on the core). Handles open on the dead node are
 lost.
 
@@ -400,9 +402,9 @@ be recreated.
 
 ---
 
-## Stream ChiMod Parameters (`clio_cte_stream`)
+## Stream Module Parameters (`clio_cte_stream`)
 
-The stream ChiMod (pool `565.0`) turns a CTE tag into a byte stream. It owns
+The stream Module (pool `565.0`) turns a CTE tag into a byte stream. It owns
 the stream's page layout (1 MiB page blobs named by page index), its logical
 size, and **deferred appends**:
 
@@ -423,6 +425,13 @@ mounts. Set `CLIO_FUSE_APPEND` to `deferred`, `reserve` (reserve the end at
 the home before each write) or `kernel` (trust the kernel's cached size,
 the single-node default) to override.
 
+The FUSE adapter's attribute and name caches are also set per mount through
+environment variables: `CLIO_FUSE_ATTR_CACHE_S`, `CLIO_FUSE_ENTRY_CACHE_S`
+and `CLIO_FUSE_DIR_ATTR_CACHE_S`. The last one caches directory attributes
+in the adapter and is off by default on multi-node mounts; see
+[Directory attribute cache](./adapter#directory-attribute-cache) before
+turning it on.
+
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `next_pool_id` | `"512.0"` | Pool staged and merged bytes go through, usually the top of the interposition chain. |
@@ -440,7 +449,7 @@ the single-node default) to override.
 
 ---
 
-## CAE ChiMod Parameters (`wrp_cae_core`)
+## CAE Module Parameters (`clio_cae_core`)
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
@@ -449,8 +458,8 @@ the single-node default) to override.
 | `pool_id` | Yes | Unique pool ID. Default CAE pool ID is `"400.0"`. |
 
 ```yaml
-- mod_name: wrp_cae_core
-  pool_name: wrp_cae_core_pool
+- mod_name: clio_cae_core
+  pool_name: clio_cae_core_pool
   pool_query: local
   pool_id: "400.0"
 ```
@@ -469,14 +478,14 @@ runtime:
   num_threads: 4
 
 compose:
-  - mod_name: chimaera_bdev
+  - mod_name: clio_bdev
     pool_name: "ram::chi_default_bdev"
     pool_query: local
     pool_id: "301.0"
     bdev_type: ram
     capacity: "512MB"
 
-  - mod_name: wrp_cte_core
+  - mod_name: clio_cte_core
     pool_name: cte_main
     pool_query: local
     pool_id: "512.0"
@@ -500,14 +509,14 @@ runtime:
   queue_depth: 1024
 
 compose:
-  - mod_name: chimaera_bdev
+  - mod_name: clio_bdev
     pool_name: "ram::chi_default_bdev"
     pool_query: local
     pool_id: "301.0"
     bdev_type: ram
     capacity: "2GB"
 
-  - mod_name: wrp_cte_core
+  - mod_name: clio_cte_core
     pool_name: cte_main
     pool_query: local
     pool_id: "512.0"
@@ -545,14 +554,14 @@ runtime:
   queue_depth: 1024
 
 compose:
-  - mod_name: chimaera_bdev
+  - mod_name: clio_bdev
     pool_name: "ram::chi_default_bdev"
     pool_query: local
     pool_id: "301.0"
     bdev_type: ram
     capacity: "2GB"
 
-  - mod_name: wrp_cte_core
+  - mod_name: clio_cte_core
     pool_name: cte_main
     pool_query: dynamic
     pool_id: "512.0"
@@ -583,11 +592,11 @@ services:
     container_name: iowarp
     hostname: iowarp
     volumes:
-      - ./chimaera.yaml:/home/iowarp/.chimaera/chimaera.yaml:ro
+      - ./clio.yaml:/home/iowarp/.clio/clio.yaml:ro
     ports:
       - "9413:9413"
     mem_limit: 8g
-    command: ["chimaera", "runtime", "start"]
+    command: ["clio_run", "start"]
     restart: unless-stopped
 ```
 

@@ -9,61 +9,77 @@ The Environment Variables API in Hermes Shared Memory (HSHM) provides cross-plat
 ### Getting Environment Variables
 
 ```cpp
-#include "hermes_shm/introspect/system_info.h"
+#include "clio_ctp/introspect/system_info.h"
+#include <cstdio>
+#include <string>
 
-// Get environment variables with optional size limits
-std::string home_dir = hshm::SystemInfo::Getenv("HOME");
-std::string path = hshm::SystemInfo::Getenv("PATH", hshm::Unit<size_t>::Kilobytes(64));
-std::string user = hshm::SystemInfo::Getenv("USER");
+void example() {
+    // Get environment variables with optional size limits
+    std::string home_dir = ctp::SystemInfo::Getenv("HOME");
+    std::string path =
+        ctp::SystemInfo::Getenv("PATH", ctp::Unit<size_t>::Kilobytes(64));
+    std::string user = ctp::SystemInfo::Getenv("USER");
 
-// Check if variable exists
-std::string config_path = hshm::SystemInfo::Getenv("MY_APP_CONFIG");
-if (config_path.empty()) {
-    printf("MY_APP_CONFIG not set, using default\n");
-    config_path = "/etc/myapp/default.conf";
+    // Getenv returns an empty string when the variable is not set
+    std::string config_path = ctp::SystemInfo::Getenv("MY_APP_CONFIG");
+    if (config_path.empty()) {
+        printf("MY_APP_CONFIG not set, using default\n");
+        config_path = "/etc/myapp/default.conf";
+    }
+
+    // Get with size limit (important for potentially large variables)
+    size_t max_size = ctp::Unit<size_t>::Megabytes(1);
+    std::string large_var = ctp::SystemInfo::Getenv("LARGE_DATA", max_size);
 }
-
-// Get with size limit (important for potentially large variables)
-size_t max_size = hshm::Unit<size_t>::Megabytes(1);
-std::string large_var = hshm::SystemInfo::Getenv("LARGE_DATA", max_size);
 ```
 
 ### Setting Environment Variables
 
 ```cpp
-// Set environment variables with overwrite flag
-hshm::SystemInfo::Setenv("MY_APP_VERSION", "2.1.0", 1);        // overwrite=1 (always set)
-hshm::SystemInfo::Setenv("MY_APP_DEBUG", "true", 0);           // overwrite=0 (don't overwrite if exists)
-hshm::SystemInfo::Setenv("MY_APP_LOG_LEVEL", "INFO", 1);
+#include "clio_ctp/introspect/system_info.h"
+#include <string>
 
-// Setting paths
-std::string app_home = "/opt/myapp";
-hshm::SystemInfo::Setenv("MY_APP_HOME", app_home, 1);
-hshm::SystemInfo::Setenv("MY_APP_CONFIG", app_home + "/config", 1);
-hshm::SystemInfo::Setenv("MY_APP_DATA", app_home + "/data", 1);
+void example() {
+    // Set environment variables with overwrite flag
+    ctp::SystemInfo::Setenv("MY_APP_VERSION", "2.1.0", 1);   // overwrite=1 (always set)
+    ctp::SystemInfo::Setenv("MY_APP_DEBUG", "true", 0);      // overwrite=0 (keep existing)
+    ctp::SystemInfo::Setenv("MY_APP_LOG_LEVEL", "INFO", 1);
 
-// Setting numeric values
-hshm::SystemInfo::Setenv("MAX_THREADS", std::to_string(8), 1);
-hshm::SystemInfo::Setenv("BUFFER_SIZE", std::to_string(1024*1024), 1);
+    // Setting paths
+    std::string app_home = "/opt/myapp";
+    ctp::SystemInfo::Setenv("MY_APP_HOME", app_home, 1);
+    ctp::SystemInfo::Setenv("MY_APP_CONFIG", app_home + "/config", 1);
+    ctp::SystemInfo::Setenv("MY_APP_DATA", app_home + "/data", 1);
+
+    // Setting numeric values
+    ctp::SystemInfo::Setenv("MAX_THREADS", std::to_string(8), 1);
+    ctp::SystemInfo::Setenv("BUFFER_SIZE", std::to_string(1024 * 1024), 1);
+}
 ```
 
 ### Unsetting Environment Variables
 
 ```cpp
-// Remove environment variables
-hshm::SystemInfo::Unsetenv("TEMP_VAR");
-hshm::SystemInfo::Unsetenv("OLD_CONFIG");
-hshm::SystemInfo::Unsetenv("DEPRECATED_OPTION");
+#include "clio_ctp/introspect/system_info.h"
+#include <string>
+#include <vector>
 
-// Clean up temporary variables
-std::vector<std::string> temp_vars = {
-    "TMP_BUILD_DIR",
-    "TMP_CACHE",
-    "TMP_SESSION_ID"
-};
+void example() {
+    // Remove environment variables
+    ctp::SystemInfo::Unsetenv("TEMP_VAR");
+    ctp::SystemInfo::Unsetenv("OLD_CONFIG");
+    ctp::SystemInfo::Unsetenv("DEPRECATED_OPTION");
 
-for (const auto& var : temp_vars) {
-    hshm::SystemInfo::Unsetenv(var.c_str());
+    // Clean up temporary variables
+    std::vector<std::string> temp_vars = {
+        "TMP_BUILD_DIR",
+        "TMP_CACHE",
+        "TMP_SESSION_ID"
+    };
+
+    for (const auto& var : temp_vars) {
+        ctp::SystemInfo::Unsetenv(var.c_str());
+    }
 }
 ```
 
@@ -72,6 +88,11 @@ for (const auto& var : temp_vars) {
 ### Application Configuration Class
 
 ```cpp
+#include "clio_ctp/introspect/system_info.h"
+#include <cstdio>
+#include <string>
+#include <thread>
+
 class AppConfiguration {
 private:
     std::string config_dir_;
@@ -103,13 +124,13 @@ public:
 private:
     std::string GetConfigDirectory() {
         // Priority: APP_CONFIG_DIR > XDG_CONFIG_HOME > HOME/.config
-        std::string dir = hshm::SystemInfo::Getenv("APP_CONFIG_DIR");
+        std::string dir = ctp::SystemInfo::Getenv("APP_CONFIG_DIR");
         if (!dir.empty()) return dir;
         
-        dir = hshm::SystemInfo::Getenv("XDG_CONFIG_HOME");
+        dir = ctp::SystemInfo::Getenv("XDG_CONFIG_HOME");
         if (!dir.empty()) return dir + "/myapp";
         
-        std::string home = hshm::SystemInfo::Getenv("HOME");
+        std::string home = ctp::SystemInfo::Getenv("HOME");
         if (!home.empty()) return home + "/.config/myapp";
         
         return "/etc/myapp";  // System fallback
@@ -117,13 +138,13 @@ private:
     
     std::string GetDataDirectory() {
         // Priority: APP_DATA_DIR > XDG_DATA_HOME > HOME/.local/share
-        std::string dir = hshm::SystemInfo::Getenv("APP_DATA_DIR");
+        std::string dir = ctp::SystemInfo::Getenv("APP_DATA_DIR");
         if (!dir.empty()) return dir;
         
-        dir = hshm::SystemInfo::Getenv("XDG_DATA_HOME");
+        dir = ctp::SystemInfo::Getenv("XDG_DATA_HOME");
         if (!dir.empty()) return dir + "/myapp";
         
-        std::string home = hshm::SystemInfo::Getenv("HOME");
+        std::string home = ctp::SystemInfo::Getenv("HOME");
         if (!home.empty()) return home + "/.local/share/myapp";
         
         return "/var/lib/myapp";  // System fallback
@@ -131,9 +152,9 @@ private:
     
     void ConfigureLogging() {
         // Log file location
-        log_file_ = hshm::SystemInfo::Getenv("APP_LOG_FILE");
+        log_file_ = ctp::SystemInfo::Getenv("APP_LOG_FILE");
         if (log_file_.empty()) {
-            std::string log_dir = hshm::SystemInfo::Getenv("APP_LOG_DIR");
+            std::string log_dir = ctp::SystemInfo::Getenv("APP_LOG_DIR");
             if (log_dir.empty()) {
                 log_dir = "/var/log";
             }
@@ -141,25 +162,25 @@ private:
         }
         
         // Log level parsing
-        std::string level_str = hshm::SystemInfo::Getenv("APP_LOG_LEVEL");
+        std::string level_str = ctp::SystemInfo::Getenv("APP_LOG_LEVEL");
         log_level_ = ParseLogLevel(level_str);
         
         // Debug mode
-        std::string debug_str = hshm::SystemInfo::Getenv("APP_DEBUG");
+        std::string debug_str = ctp::SystemInfo::Getenv("APP_DEBUG");
         debug_mode_ = IsTrue(debug_str);
     }
     
     void ConfigureRuntime() {
         // Memory limit
-        std::string mem_str = hshm::SystemInfo::Getenv("APP_MAX_MEMORY");
+        std::string mem_str = ctp::SystemInfo::Getenv("APP_MAX_MEMORY");
         if (!mem_str.empty()) {
             max_memory_ = ParseSize(mem_str);
         } else {
-            max_memory_ = hshm::Unit<size_t>::Gigabytes(1);  // Default 1GB
+            max_memory_ = ctp::Unit<size_t>::Gigabytes(1);  // Default 1GB
         }
         
         // Thread count
-        std::string thread_str = hshm::SystemInfo::Getenv("APP_THREADS");
+        std::string thread_str = ctp::SystemInfo::Getenv("APP_THREADS");
         if (!thread_str.empty()) {
             thread_count_ = std::stoi(thread_str);
         } else {
@@ -219,6 +240,10 @@ public:
 ### Basic Variable Expansion
 
 ```cpp
+#include "clio_ctp/introspect/system_info.h"
+#include <cctype>
+#include <string>
+
 class EnvironmentExpander {
 public:
     // Expand ${VAR} patterns in strings
@@ -231,7 +256,7 @@ public:
             if (end == std::string::npos) break;
             
             std::string var_name = result.substr(pos + 2, end - pos - 2);
-            std::string var_value = hshm::SystemInfo::Getenv(var_name);
+            std::string var_value = ctp::SystemInfo::Getenv(var_name);
             
             result.replace(pos, end - pos + 1, var_value);
             pos += var_value.length();
@@ -259,7 +284,7 @@ public:
             
             if (end > pos + 1) {
                 std::string var_name = result.substr(pos + 1, end - pos - 1);
-                std::string var_value = hshm::SystemInfo::Getenv(var_name);
+                std::string var_value = ctp::SystemInfo::Getenv(var_name);
                 result.replace(pos, end - pos, var_value);
                 pos += var_value.length();
             } else {
@@ -272,13 +297,20 @@ public:
 };
 
 // Usage examples
-std::string path1 = EnvironmentExpander::ExpandVariables("${HOME}/data/${USER}/files");
-std::string path2 = EnvironmentExpander::ExpandSimpleVariables("$HOME/data/$USER/files");
+void example() {
+    std::string path1 =
+        EnvironmentExpander::ExpandVariables("${HOME}/data/${USER}/files");
+    std::string path2 =
+        EnvironmentExpander::ExpandSimpleVariables("$HOME/data/$USER/files");
+}
 ```
 
 ### Advanced Expansion with Defaults
 
 ```cpp
+#include "clio_ctp/introspect/system_info.h"
+#include <string>
+
 class AdvancedEnvironmentExpander {
 public:
     // Expand with default values: ${VAR:-default}
@@ -301,7 +333,7 @@ public:
                 var_name = var_expr;
             }
             
-            std::string var_value = hshm::SystemInfo::Getenv(var_name);
+            std::string var_value = ctp::SystemInfo::Getenv(var_name);
             if (var_value.empty() && !default_value.empty()) {
                 var_value = default_value;
             }
@@ -333,7 +365,7 @@ public:
                 var_name = var_expr;
             }
             
-            std::string var_value = hshm::SystemInfo::Getenv(var_name);
+            std::string var_value = ctp::SystemInfo::Getenv(var_name);
             if (!var_value.empty() && !alt_value.empty()) {
                 var_value = alt_value;  // Use alternative if var is set
             }
@@ -347,12 +379,14 @@ public:
 };
 
 // Usage examples
-std::string config = AdvancedEnvironmentExpander::ExpandWithDefaults(
-    "${CONFIG_DIR:-/etc/myapp}/config.yaml"
-);
-std::string message = AdvancedEnvironmentExpander::ExpandWithAlternative(
-    "${DEBUG:+Debug mode is enabled}"
-);
+void example() {
+    std::string config = AdvancedEnvironmentExpander::ExpandWithDefaults(
+        "${CONFIG_DIR:-/etc/myapp}/config.yaml"
+    );
+    std::string message = AdvancedEnvironmentExpander::ExpandWithAlternative(
+        "${DEBUG:+Debug mode is enabled}"
+    );
+}
 ```
 
 ## Environment Setup Patterns
@@ -360,13 +394,19 @@ std::string message = AdvancedEnvironmentExpander::ExpandWithAlternative(
 ### Application Environment Initialization
 
 ```cpp
+#include "clio_ctp/introspect/system_info.h"
+#include <chrono>
+#include <cstdio>
+#include <string>
+
 class EnvironmentSetup {
 public:
     static void InitializeApplicationEnvironment(const std::string& app_name) {
         // Set application identification
-        hshm::SystemInfo::Setenv("APP_NAME", app_name, 1);
-        hshm::SystemInfo::Setenv("APP_VERSION", GetVersion(), 1);
-        hshm::SystemInfo::Setenv("APP_PID", std::to_string(getpid()), 1);
+        ctp::SystemInfo::Setenv("APP_NAME", app_name, 1);
+        ctp::SystemInfo::Setenv("APP_VERSION", GetVersion(), 1);
+        ctp::SystemInfo::Setenv("APP_PID",
+                                std::to_string(ctp::SystemInfo::GetPid()), 1);
         
         // Set up directory structure
         SetupDirectories(app_name);
@@ -390,16 +430,16 @@ private:
     }
     
     static void SetupDirectories(const std::string& app_name) {
-        std::string home = hshm::SystemInfo::Getenv("HOME");
+        std::string home = ctp::SystemInfo::Getenv("HOME");
         if (home.empty()) home = "/tmp";
         
         std::string app_home = home + "/." + app_name;
-        hshm::SystemInfo::Setenv("APP_HOME", app_home, 1);
-        hshm::SystemInfo::Setenv("APP_CONFIG_DIR", app_home + "/config", 0);
-        hshm::SystemInfo::Setenv("APP_DATA_DIR", app_home + "/data", 0);
-        hshm::SystemInfo::Setenv("APP_CACHE_DIR", app_home + "/cache", 0);
-        hshm::SystemInfo::Setenv("APP_LOG_DIR", app_home + "/logs", 0);
-        hshm::SystemInfo::Setenv("APP_TMP_DIR", app_home + "/tmp", 0);
+        ctp::SystemInfo::Setenv("APP_HOME", app_home, 1);
+        ctp::SystemInfo::Setenv("APP_CONFIG_DIR", app_home + "/config", 0);
+        ctp::SystemInfo::Setenv("APP_DATA_DIR", app_home + "/data", 0);
+        ctp::SystemInfo::Setenv("APP_CACHE_DIR", app_home + "/cache", 0);
+        ctp::SystemInfo::Setenv("APP_LOG_DIR", app_home + "/logs", 0);
+        ctp::SystemInfo::Setenv("APP_TMP_DIR", app_home + "/tmp", 0);
     }
     
     static void ConfigureRuntimePaths() {
@@ -407,20 +447,20 @@ private:
         std::string exe_path = GetExecutablePath();
         std::string exe_dir = GetDirectoryFromPath(exe_path);
         
-        hshm::SystemInfo::Setenv("APP_BIN_DIR", exe_dir, 1);
-        hshm::SystemInfo::Setenv("APP_LIB_DIR", exe_dir + "/../lib", 1);
-        hshm::SystemInfo::Setenv("APP_SHARE_DIR", exe_dir + "/../share", 1);
+        ctp::SystemInfo::Setenv("APP_BIN_DIR", exe_dir, 1);
+        ctp::SystemInfo::Setenv("APP_LIB_DIR", exe_dir + "/../lib", 1);
+        ctp::SystemInfo::Setenv("APP_SHARE_DIR", exe_dir + "/../share", 1);
         
         // Update library path
         UpdateLibraryPath(exe_dir + "/../lib");
     }
     
     static void ConfigureLocale() {
-        if (hshm::SystemInfo::Getenv("LANG").empty()) {
-            hshm::SystemInfo::Setenv("LANG", "en_US.UTF-8", 1);
+        if (ctp::SystemInfo::Getenv("LANG").empty()) {
+            ctp::SystemInfo::Setenv("LANG", "en_US.UTF-8", 1);
         }
-        if (hshm::SystemInfo::Getenv("LC_ALL").empty()) {
-            hshm::SystemInfo::Setenv("LC_ALL", "C", 0);
+        if (ctp::SystemInfo::Getenv("LC_ALL").empty()) {
+            ctp::SystemInfo::Setenv("LC_ALL", "C", 0);
         }
     }
     
@@ -429,17 +469,13 @@ private:
         auto now = std::chrono::system_clock::now();
         auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(
             now.time_since_epoch()).count();
-        hshm::SystemInfo::Setenv("APP_START_TIME", std::to_string(timestamp), 1);
+        ctp::SystemInfo::Setenv("APP_START_TIME", std::to_string(timestamp), 1);
         
-        // Set hostname
-        char hostname[256];
-        if (gethostname(hostname, sizeof(hostname)) == 0) {
-            hshm::SystemInfo::Setenv("APP_HOSTNAME", hostname, 1);
+        // Set hostname (cross-platform via SystemInfo)
+        std::string hostname = ctp::SystemInfo::GetHostname();
+        if (!hostname.empty()) {
+            ctp::SystemInfo::Setenv("APP_HOSTNAME", hostname, 1);
         }
-        
-        // Set user info
-        hshm::SystemInfo::Setenv("APP_UID", std::to_string(getuid()), 1);
-        hshm::SystemInfo::Setenv("APP_GID", std::to_string(getgid()), 1);
     }
     
     static std::string GetExecutablePath() {
@@ -469,21 +505,21 @@ private:
     }
     
     static void UpdateLibraryPath(const std::string& new_path) {
-        std::string current_ld_path = hshm::SystemInfo::Getenv("LD_LIBRARY_PATH");
+        std::string current_ld_path = ctp::SystemInfo::Getenv("LD_LIBRARY_PATH");
         std::string updated_path = new_path;
         if (!current_ld_path.empty()) {
             updated_path += ":" + current_ld_path;
         }
-        hshm::SystemInfo::Setenv("LD_LIBRARY_PATH", updated_path, 1);
+        ctp::SystemInfo::Setenv("LD_LIBRARY_PATH", updated_path, 1);
         
 #ifdef __APPLE__
         // Also update DYLD_LIBRARY_PATH on macOS
-        std::string current_dyld = hshm::SystemInfo::Getenv("DYLD_LIBRARY_PATH");
+        std::string current_dyld = ctp::SystemInfo::Getenv("DYLD_LIBRARY_PATH");
         std::string updated_dyld = new_path;
         if (!current_dyld.empty()) {
             updated_dyld += ":" + current_dyld;
         }
-        hshm::SystemInfo::Setenv("DYLD_LIBRARY_PATH", updated_dyld, 1);
+        ctp::SystemInfo::Setenv("DYLD_LIBRARY_PATH", updated_dyld, 1);
 #endif
     }
 };
@@ -492,6 +528,12 @@ private:
 ## Environment Variable Security
 
 ```cpp
+#include "clio_ctp/introspect/system_info.h"
+#include <map>
+#include <set>
+#include <string>
+#include <vector>
+
 class SecureEnvironment {
 public:
     // Remove sensitive variables
@@ -509,7 +551,7 @@ public:
             // Check for common prefixes
             for (const auto& prefix : {"", "APP_", "MY_", "SYSTEM_"}) {
                 std::string full_var = prefix + var;
-                hshm::SystemInfo::Unsetenv(full_var.c_str());
+                ctp::SystemInfo::Unsetenv(full_var.c_str());
             }
         }
     }
@@ -520,7 +562,7 @@ public:
         std::map<std::string, std::string> saved;
         
         for (const auto& var : vars) {
-            std::string value = hshm::SystemInfo::Getenv(var);
+            std::string value = ctp::SystemInfo::Getenv(var);
             if (!value.empty()) {
                 saved[var] = value;
             }
@@ -532,7 +574,7 @@ public:
     static void RestoreEnvironment(
         const std::map<std::string, std::string>& saved) {
         for (const auto& [var, value] : saved) {
-            hshm::SystemInfo::Setenv(var.c_str(), value, 1);
+            ctp::SystemInfo::Setenv(var.c_str(), value, 1);
         }
     }
     
@@ -555,14 +597,14 @@ public:
             }
             
             for (const auto& var : to_remove) {
-                hshm::SystemInfo::Unsetenv(var.c_str());
+                ctp::SystemInfo::Unsetenv(var.c_str());
             }
         }
         
         // Set minimal environment
-        hshm::SystemInfo::Setenv("PATH", "/usr/bin:/bin", 1);
-        hshm::SystemInfo::Setenv("HOME", "/tmp", 1);
-        hshm::SystemInfo::Setenv("USER", "nobody", 1);
+        ctp::SystemInfo::Setenv("PATH", "/usr/bin:/bin", 1);
+        ctp::SystemInfo::Setenv("HOME", "/tmp", 1);
+        ctp::SystemInfo::Setenv("USER", "nobody", 1);
     }
     
 private:
@@ -579,9 +621,27 @@ private:
 ## Complete Example: Environment-Driven Application
 
 ```cpp
-#include "hermes_shm/introspect/system_info.h"
+#include "clio_ctp/introspect/system_info.h"
+#include <cstdio>
+#include <exception>
+#include <filesystem>
 #include <iostream>
 #include <map>
+#include <string>
+#include <vector>
+
+// Minimal configuration loaded directly from environment variables.
+struct AppConfiguration {
+    std::string config_dir;
+    std::string data_dir;
+    bool debug_mode = false;
+
+    void LoadFromEnvironment() {
+        config_dir = ctp::SystemInfo::Getenv("APP_CONFIG_DIR");
+        data_dir = ctp::SystemInfo::Getenv("APP_DATA_DIR");
+        debug_mode = (ctp::SystemInfo::Getenv("APP_DEBUG") == "1");
+    }
+};
 
 class EnvironmentDrivenApp {
     AppConfiguration config_;
@@ -622,7 +682,7 @@ private:
         };
         
         for (const auto& var : important_vars) {
-            std::string value = hshm::SystemInfo::Getenv(var);
+            std::string value = ctp::SystemInfo::Getenv(var);
             if (!value.empty()) {
                 original_env_[var] = value;
             }
@@ -630,8 +690,16 @@ private:
     }
     
     void InitializeEnvironment() {
-        // Set application-specific environment
-        EnvironmentSetup::InitializeApplicationEnvironment("myapp");
+        // Set application-specific environment (inlined for a self-contained
+        // example; see the "Environment Setup Patterns" section above).
+        std::string home = ctp::SystemInfo::Getenv("HOME");
+        if (home.empty()) home = "/tmp";
+        std::string app_home = home + "/.myapp";
+        ctp::SystemInfo::Setenv("APP_HOME", app_home, 1);
+        ctp::SystemInfo::Setenv("APP_CONFIG_DIR", app_home + "/config", 0);
+        ctp::SystemInfo::Setenv("APP_DATA_DIR", app_home + "/data", 0);
+        ctp::SystemInfo::Setenv("APP_PID",
+                                std::to_string(ctp::SystemInfo::GetPid()), 1);
         
         // Set feature flags from command line or config
         SetFeatureFlags();
@@ -642,22 +710,22 @@ private:
     
     void SetFeatureFlags() {
         // Enable features based on environment
-        std::string features = hshm::SystemInfo::Getenv("APP_FEATURES");
+        std::string features = ctp::SystemInfo::Getenv("APP_FEATURES");
         if (features.find("experimental") != std::string::npos) {
-            hshm::SystemInfo::Setenv("ENABLE_EXPERIMENTAL", "1", 1);
+            ctp::SystemInfo::Setenv("ENABLE_EXPERIMENTAL", "1", 1);
         }
         if (features.find("verbose") != std::string::npos) {
-            hshm::SystemInfo::Setenv("VERBOSE_LOGGING", "1", 1);
+            ctp::SystemInfo::Setenv("VERBOSE_LOGGING", "1", 1);
         }
         if (features.find("profiling") != std::string::npos) {
-            hshm::SystemInfo::Setenv("ENABLE_PROFILING", "1", 1);
+            ctp::SystemInfo::Setenv("ENABLE_PROFILING", "1", 1);
         }
     }
     
     void ConfigureDebugging() {
-        if (config_.IsDebugMode()) {
-            hshm::SystemInfo::Setenv("MALLOC_CHECK_", "3", 1);  // glibc malloc debugging
-            hshm::SystemInfo::Setenv("G_DEBUG", "fatal-warnings", 1);  // GLib debugging
+        if (config_.debug_mode) {
+            ctp::SystemInfo::Setenv("MALLOC_CHECK_", "3", 1);  // glibc malloc debugging
+            ctp::SystemInfo::Setenv("G_DEBUG", "fatal-warnings", 1);  // GLib debugging
         }
     }
     
@@ -668,15 +736,15 @@ private:
         };
         
         for (const auto& var : required) {
-            if (hshm::SystemInfo::Getenv(var).empty()) {
+            if (ctp::SystemInfo::Getenv(var).empty()) {
                 std::cerr << "Required variable " << var << " not set\n";
                 return false;
             }
         }
         
         // Validate paths exist
-        std::string config_dir = hshm::SystemInfo::Getenv("APP_CONFIG_DIR");
-        if (!DirectoryExists(config_dir)) {
+        std::string config_dir = ctp::SystemInfo::Getenv("APP_CONFIG_DIR");
+        if (!config_dir.empty() && !DirectoryExists(config_dir)) {
             std::cerr << "Config directory does not exist: " << config_dir << "\n";
             return false;
         }
@@ -686,11 +754,9 @@ private:
     
     int RunApplication() {
         printf("Application running with configuration:\n");
-        printf("  Config Dir: %s\n", config_.GetConfigDir().c_str());
-        printf("  Data Dir: %s\n", config_.GetDataDir().c_str());
-        printf("  Debug Mode: %s\n", config_.IsDebugMode() ? "ON" : "OFF");
-        printf("  Max Memory: %zu MB\n", config_.GetMaxMemory() / (1024*1024));
-        printf("  Threads: %d\n", config_.GetThreadCount());
+        printf("  Config Dir: %s\n", config_.config_dir.c_str());
+        printf("  Data Dir: %s\n", config_.data_dir.c_str());
+        printf("  Debug Mode: %s\n", config_.debug_mode ? "ON" : "OFF");
         
         // Main application logic here...
         
@@ -698,15 +764,16 @@ private:
     }
     
     bool DirectoryExists(const std::string& path) {
-        struct stat st;
-        return stat(path.c_str(), &st) == 0 && S_ISDIR(st.st_mode);
+        // std::filesystem is portable across MSVC/Linux/macOS.
+        std::error_code ec;
+        return std::filesystem::is_directory(path, ec);
     }
     
 public:
     ~EnvironmentDrivenApp() {
         // Restore original environment if needed
         for (const auto& [var, value] : original_env_) {
-            hshm::SystemInfo::Setenv(var.c_str(), value, 1);
+            ctp::SystemInfo::Setenv(var.c_str(), value, 1);
         }
     }
 };

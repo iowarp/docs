@@ -193,40 +193,40 @@ transfers:
 
 ## Using OMNI Files
 
-### Using the wrp_cae_omni Utility
+### Using the clio_cae Utility
 
-The `wrp_cae_omni` utility is the primary tool for processing OMNI files. It loads the OMNI configuration and schedules assimilation tasks with the CAE runtime.
+The `clio_cae` utility is the primary tool for processing OMNI files. It loads the OMNI configuration and schedules assimilation tasks with the CAE runtime.
 
 #### Prerequisites
 
-1. **Chimaera runtime must be running**
-2. **CAE container must be created** using `chimaera compose` (see [Configuration](../../deployment/configuration))
+1. **CLIO Runtime must be running**
+2. **CAE container must be created** using `clio_run compose` (see [Configuration](../../deployment/configuration))
 3. **CTE container must be configured** for blob storage
 
 #### Basic Usage
 
 ```bash
-wrp_cae_omni <omni_file_path>
+clio_cae <omni_file_path>
 ```
 
 **Example:**
 ```bash
-wrp_cae_omni /path/to/transfer_config.yaml
+clio_cae /path/to/transfer_config.yaml
 ```
 
 #### Complete Workflow
 
 ```bash
 # 1. Start runtime
-export WRP_RUNTIME_CONF=/etc/iowarp/config.yaml
-chimaera runtime start &
+export CLIO_SERVER_CONF=/etc/iowarp/config.yaml
+clio_run start &
 sleep 2
 
 # 2. Create CAE container (if not already created)
-chimaera compose /path/to/cae_config.yaml
+clio_run compose /path/to/cae_config.yaml
 
 # 3. Process OMNI file
-wrp_cae_omni /path/to/omni_file.yaml
+clio_cae /path/to/omni_file.yaml
 ```
 
 #### Expected Output
@@ -262,9 +262,9 @@ ParseOmni completed successfully!
 
 #### Common Errors
 
-**Error: "Chimaera IPC not initialized. Is the runtime running?"**
+**Error: "CLIO Runtime IPC not initialized. Is the runtime running?"**
 - **Cause**: Runtime not started
-- **Solution**: Start runtime with `chimaera runtime start`
+- **Solution**: Start runtime with `clio_run start`
 
 **Error: "Failed to load OMNI file"**
 - **Cause**: Invalid YAML syntax or missing file
@@ -279,19 +279,32 @@ ParseOmni completed successfully!
 For programmatic access, use the `LoadOmni` function to parse an OMNI file:
 
 ```cpp
-#include <wrp_cae/core/factory/assimilation_ctx.h>
-#include <yaml-cpp/yaml.h>
+#include <clio_cae/core/core_client.h>
+#include <clio_cae/core/constants.h>
+#include <clio_cae/core/factory/assimilation_ctx.h>
+#include <string>
 #include <vector>
+#include <iostream>
 
-std::vector<wrp_cae::core::AssimilationCtx> LoadOmni(const std::string& omni_path);
+using namespace clio::cae::core;
 
-// Usage
-try {
-  auto contexts = LoadOmni("/path/to/config.yaml");
-  // Pass to ParseOmni
-  cae_client.ParseOmni(contexts, num_tasks_scheduled);
-} catch (const std::exception& e) {
-  std::cerr << "Failed to load OMNI: " << e.what() << std::endl;
+// LoadOmni parses an OMNI YAML file into a vector of AssimilationCtx. The
+// clio_cae utility provides an implementation; it is declared here to show
+// how the parsed contexts feed into the CAE client.
+std::vector<AssimilationCtx> LoadOmni(const std::string& omni_path);
+
+void example() {
+  Client cae_client(kCaePoolId);
+  try {
+    std::vector<AssimilationCtx> contexts = LoadOmni("/path/to/config.yaml");
+    // Schedule the transfers described by the OMNI file.
+    auto task = cae_client.AsyncParseOmni(contexts);
+    task.Wait();
+    clio::run::u32 num_tasks_scheduled = task->num_tasks_scheduled_;
+    std::cout << "Scheduled " << num_tasks_scheduled << " task(s)" << std::endl;
+  } catch (const std::exception& e) {
+    std::cerr << "Failed to load OMNI: " << e.what() << std::endl;
+  }
 }
 ```
 
@@ -376,10 +389,10 @@ Planned enhancements to the OMNI format:
 
 ## Related Documentation
 
-- [Deployment Configuration](../../deployment/configuration) - How to launch CAE using chimaera compose
+- [Deployment Configuration](../../deployment/configuration) - How to launch CAE using clio_run compose
 - [CTE Documentation](../context-transfer-engine/cte) - CTE storage documentation
-- [Chimaera Compose](../context-runtime/2.module_dev_guide.md) - Compose configuration format
-- [Module Development Guide](../context-runtime/2.module_dev_guide.md) - ChiMod development
+- [CLIO Runtime Compose](../context-runtime/2.module_dev_guide.md) - Compose configuration format
+- [Module Development Guide](../context-runtime/2.module_dev_guide.md) - Module development
 
 ---
 

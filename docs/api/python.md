@@ -8,13 +8,13 @@ description: API reference for data assimilation, querying, retrieval, and clean
 
 ## Overview
 
-The `wrp_cee` Python module provides a high-level API for managing and exploring data contexts in IOWarp. It offers a simple interface for data assimilation, querying, retrieval, and cleanup operations.
+The `clio_cee` Python module provides a high-level API for managing and exploring data contexts in IOWarp. It offers a simple interface for data assimilation, querying, retrieval, and cleanup operations.
 
-**Key Feature:** The API automatically initializes the IOWarp runtime when you create a `ContextInterface` instance. You don't need to manually initialize Chimaera, CTE, or CAE — the `ContextInterface` constructor handles all of this internally.
+**Key Feature:** The API automatically initializes the CLIO Runtime when you create a `ContextInterface` instance. You don't need to manually initialize the CLIO Runtime, CTE, or CAE — the `ContextInterface` constructor handles all of this internally.
 
-## Module: `wrp_cee`
+## Module: `clio_cee`
 
-The `wrp_cee` module provides two main classes:
+The `clio_cee` module provides two main classes:
 
 1. **`AssimilationCtx`** - Configuration for data assimilation operations
 2. **`ContextInterface`** - Main API for context management
@@ -29,14 +29,14 @@ Configuration object that defines how data should be assimilated into IOWarp.
 
 #### Default Constructor
 ```python
-ctx = wrp_cee.AssimilationCtx()
+ctx = clio_cee.AssimilationCtx()
 ```
 
 Creates an empty AssimilationCtx with default values.
 
 #### Full Constructor
 ```python
-ctx = wrp_cee.AssimilationCtx(
+ctx = clio_cee.AssimilationCtx(
     src="file::/path/to/source",
     dst="iowarp::tag_name",
     format="binary",
@@ -86,7 +86,7 @@ ctx = wrp_cee.AssimilationCtx(
 All constructor parameters are accessible as read/write attributes:
 
 ```python
-ctx = wrp_cee.AssimilationCtx()
+ctx = clio_cee.AssimilationCtx()
 ctx.src = "file::/my/data.bin"
 ctx.dst = "iowarp::dataset"
 ctx.format = "binary"
@@ -97,7 +97,7 @@ ctx.range_size = 10485760  # Read 10MB
 ### String Representation
 
 ```python
-ctx = wrp_cee.AssimilationCtx(
+ctx = clio_cee.AssimilationCtx(
     src="file::/data.bin",
     dst="iowarp::tag",
     format="binary"
@@ -109,7 +109,7 @@ print(ctx)
 ### Example Usage
 
 ```python
-import wrp_cee as cee
+import clio_cee as cee
 
 # Assimilate entire file
 ctx1 = cee.AssimilationCtx(
@@ -141,35 +141,35 @@ ctx3 = cee.AssimilationCtx(
 
 Main API for context exploration and management operations.
 
-**Important:** The `ContextInterface` constructor automatically initializes the IOWarp runtime (Chimaera + CTE + CAE). This initialization happens once when you create the first `ContextInterface` instance. Subsequent instances will use the already-initialized runtime.
+**Important:** The `ContextInterface` constructor automatically initializes the CLIO Runtime (runtime core + CTE + CAE). This initialization happens once when you create the first `ContextInterface` instance. Subsequent instances will use the already-initialized runtime.
 
 ### Constructor
 
 ```python
-ctx_interface = wrp_cee.ContextInterface()
+ctx_interface = clio_cee.ContextInterface()
 ```
 
 **Parameters:** None
 
 **Notes:**
-- Automatically initializes the full IOWarp runtime stack
-- Requires runtime configuration via environment variables (e.g., `CHI_SERVER_CONF`)
+- Automatically initializes the full CLIO Runtime stack
+- Requires runtime configuration via environment variables (e.g., `CLIO_SERVER_CONF`)
 
 **Typical Environment Setup:**
 
 The runtime needs to know where to find its configuration. This is typically set via environment variable:
 
 ```bash
-export CHI_SERVER_CONF=/path/to/config.yaml
+export CLIO_SERVER_CONF=/path/to/config.yaml
 ```
 
 Or in Python:
 ```python
 import os
-os.environ['CHI_SERVER_CONF'] = '/path/to/config.yaml'
+os.environ['CLIO_SERVER_CONF'] = '/path/to/config.yaml'
 
-import wrp_cee
-ctx_interface = wrp_cee.ContextInterface()
+import clio_cee
+ctx_interface = clio_cee.ContextInterface()
 ```
 
 ### Methods
@@ -198,7 +198,7 @@ Assimilates one or more data objects into IOWarp. Each `AssimilationCtx` in the 
 **Example:**
 
 ```python
-import wrp_cee as cee
+import clio_cee as cee
 
 # Create interface
 ctx_interface = cee.ContextInterface()
@@ -387,7 +387,7 @@ else:
 #!/usr/bin/env python3
 """Complete Python API example"""
 
-import wrp_cee as cee
+import clio_cee as cee
 import os
 import tempfile
 
@@ -452,11 +452,11 @@ dst="iowarp://my_tag"              # Wrong! Don't use ://
 
 The Python API assumes:
 
-1. **Runtime is Started:** The IOWarp runtime should be running, or will be started by the `ContextInterface` constructor.
+1. **Runtime is Started:** The CLIO Runtime should be running, or will be started by the `ContextInterface` constructor.
 
 2. **Configuration Available:** Runtime configuration is available via environment variable:
    ```bash
-   export CHI_SERVER_CONF=/path/to/config.yaml
+   export CLIO_SERVER_CONF=/path/to/config.yaml
    ```
 
 3. **Proper Permissions:** Your Python process has permission to access shared memory segments and connect to the runtime.
