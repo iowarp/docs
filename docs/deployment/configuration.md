@@ -322,6 +322,29 @@ stream sizes live in those modules' own state and are not yet covered.
 
 ---
 
+## Cache ChiMod Parameters (`clio_cte_cache`)
+
+The cache ChiMod (pool `563.0`) is the top of the interposition chain. By
+default it keeps a node-local raw copy of each blob, written with every put
+and filled on read, so a rank re-reading remote-owned data is served from its
+own node. Tag metadata is written through to every node in either mode.
+
+Set `md_only` to `true` for metadata-only mode. The cache then keeps no
+node-local copy of blob data: no cache-replica writes, reads, populates or
+size probes. Every blob read and write goes straight to the authoritative
+owner chain. Use it when the node-local copies cost more than they save,
+for example write-heavy runs where every byte owned by another node is
+otherwise written twice and the copies crowd the fast tiers. Leave it off
+for read-heavy workloads that re-read remote data locally.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `next_pool_id` | — | Pool below (usually the compressor or replication, for example `562.0` or `561.0`). |
+| `min_score` | `0.5` | Score floor for the cache copies. The organizer will not rescore a cache copy below it; only capacity pressure evicts one. Unused in `md_only` mode. |
+| `md_only` | `false` | Metadata-only mode, as described above. Set at pool creation. |
+
+---
+
 ## Filesystem ChiMod Parameters (`clio_cte_filesystem`)
 
 The filesystem ChiMod (pool `560.0`) is the POSIX layer the FUSE, POSIX and
@@ -335,7 +358,10 @@ node; there is no metadata server. It has two parts:
   the WAL, replication (`remote_copies`) and failover protect them like any
   other data. A block splits in two once it holds more than
   `dir_split_entries` rows, so a large directory spreads over the cluster
-  while a small one stays a single block on one node.
+  while a small one stays a single block on one node. A block's blob is a
+  log: a create, unlink or rename appends the small delta it made, and the
+  blob is rewritten whole only when the log grows past `dir_log_compact_bytes`
+  (or when a block is split, sealed, or reloaded by a new home).
 - An **inode record** holds one inode's attributes (mode, owner, times, link
   count) -- for files, symlinks and directories alike. It lives on the node
   its id names and is one key of the xattr section of the inode's own tag. A
@@ -368,6 +394,7 @@ be recreated.
 | `next_pool_id` | — | Pool the page blobs go through, usually the top of the interposition chain (for example `561.0` for replication, or `512.0` for the bare core). |
 | `metadata_log_path` | unset | Base path for this node's metadata: `<path>.dirs.<container>` journals the table blocks this node is home for, and `<path>.stream` is the stream log (file sizes and pending appends). Unset, table blocks are stored as CTE blobs instead. Keep it on node-local storage, never on shared NFS. |
 | `dir_split_entries` | `1024` | Rows a table block holds before it splits in two. Smaller values spread large directories over more nodes sooner. |
+| `dir_log_compact_bytes` | `256KB` | Bytes of appended changes a table block's CTE blob may hold past its last full image before the next commit rewrites the blob whole. Larger values cut image rewrites and make each reload replay more deltas; `0` rewrites the whole block on every commit (the earlier behaviour, useful for an A/B comparison). |
 | `case_insensitive` | `false` | Compare names case-insensitively while keeping their spelling, as NTFS does. Fixed for the life of the volume. |
 | `stream_pool_id` | `"565.0"` | Stream pool that holds every file's size and merges deferred appends (see below). Created with defaults if not composed. |
 

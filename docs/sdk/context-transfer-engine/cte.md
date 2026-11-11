@@ -133,6 +133,18 @@ target_link_libraries(my_cte_app
 
 ### Core Client Class
 
+**Routing.** A `PoolQuery::Dynamic()` request is never routed to a broadcast.
+The core resolves it by hashing its key to the owner container (tag names
+and by-name deletes, blob operations) or by running it on the local container
+(per-container scans and answers: `GetTagSize`, `GetContainedBlobs`,
+`TagQuery`, `BlobQuery`, `Evict`, `ReorganizeHint`, `UpdateTagNames`, and
+`DelTag` by id). To get the cluster-wide answer, pass
+`chi::PoolQuery::Broadcast()` explicitly, or `Broadcast(0.0f)` for
+`AsyncGetTagSize` (which skips nodes already declared dead). The
+`AsyncTagQuery` and `AsyncBlobQuery` defaults are already `Broadcast()`.
+Tag-name publication from clio-fs is `Local()`: each filesystem container
+publishes the names it owns into its own node's CTE.
+
 The main entry point for CTE Core functionality is the `wrp_cte::core::Client` class.
 
 #### Class Definition
@@ -927,6 +939,35 @@ if (put->GetReturnCode() == clio::cte::core::kPutVersionMismatchRc) {
 
 Conditions apply to single primary puts (`replica_ == 0`); `MultiPutBlob`
 ignores them.
+
+### Append Puts
+
+Pass `clio::cte::core::kCtePutAppend` in the put's `flags` argument to add
+bytes to the end of a blob without knowing its current size, like a journal
+record. The put's `offset` is ignored. Under the blob's write lock the bytes
+are written at the blob's current size (0 for a blob the put creates), so
+concurrent appenders land in the order their puts acquire the lock, and
+nothing else is promised about their order. An append never shrinks the blob
+and never zero-fills.
+
+The offset the bytes landed at comes back in the completed task's `offset_`
+field. Read it only when the return code is 0.
+
+```cpp
+auto put = cte->AsyncPutBlob(tag, "journal", 0, rec.size(), rec.data(),
+                             -1.0f, clio::cte::core::Context(),
+                             clio::cte::core::kCtePutAppend);
+put.Wait();
+if (put->GetReturnCode() == 0) {
+  uint64_t record_offset = put->offset_;  // where this record starts
+}
+```
+
+Appends are refused with `kCtePutAppendInvalidRc` when combined with
+`kCtePutReplace`, on a replica-targeted put (`context.replica_ != 0`), or on
+a vectored put. Deferred puts (`AsyncPutBlobDefer`) refuse them with -3,
+because a deferred put returns no future to read the offset from. An append
+is not idempotent, so the write-behind resend never repeats one.
 
 ### Performance Monitoring
 
