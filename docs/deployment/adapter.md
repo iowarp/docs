@@ -142,6 +142,46 @@ workload can accept the staleness below.
 - `0` disables it. On single-node mounts it follows `CLIO_FUSE_ATTR_CACHE_S`
   unless set.
 
+### Directory offsets
+
+Every entry of a directory has an **offset** computed from its name alone: a
+hash of the name, spread evenly over the 63-bit offset range. A listing is
+returned in ascending offset order (so in hash order, not by name or by
+creation time), and the adapter honours the offset `readdir` is called with.
+
+- **Stable.** An entry's offset is the same on every node, in every process
+  and across `opendir` calls, for as long as the entry keeps its name. An
+  offset from `telldir` in one process can be passed to `seekdir` in another,
+  and `seekdir` accepts any offset, not only ones `telldir` returned: the
+  listing continues with the first entry at or after it. A walker can
+  therefore split one large directory across processes by cutting the offset
+  range into pieces (IO500 `pfind` with
+  `pfind-parallelize-single-dir-access-using-hashing`).
+- **What `d_off` / `telldir` report.** `.` and `..` come first (offsets 1 and
+  2 follow them). After any other entry the reported position is the offset
+  of the **next** entry in the listing, and `INT64_MAX` after the last one. A
+  reader that owns the range `[a, b)` starts with `seekdir(a)` and stops when
+  the position reaches `b`.
+- **Chunked.** The adapter fetches a directory from the runtime in chunks of
+  about 8,192 entries, in offset order, and keeps the current chunk in the
+  open directory handle. A directory of any size is listed with bounded
+  memory and bounded reply size; a seek fetches only the chunk at the target
+  offset. A directory small enough for one reply is fetched whole.
+- **Changes during a walk.** Offsets do not move when the directory changes,
+  so a walk never skips or repeats an entry that existed for the whole walk.
+  An entry created or removed during the walk is seen or not depending on
+  whether its offset lies before or after the walk's position, and on whether
+  its chunk had already been fetched. A rename during the walk of a large
+  directory moves the entry to its new name's offset: the walk can see it
+  under both names, or under neither. `rewinddir` (or a new `opendir`)
+  re-reads the directory.
+- **Equal offsets.** Two names can hash to the same offset (rare: the offset
+  has 63 bits). Such entries are listed next to each other, in name order,
+  and the position reported between them is their shared offset. The open
+  handle that listed some of them remembers how many it returned and resumes
+  after them; a `seekdir` to that offset from another handle, or after
+  moving elsewhere in the directory, returns all of them again.
+
 ### 3. Use it
 
 Any application can read and write files on the mount point with standard tools:
@@ -276,7 +316,8 @@ Set `WRP_CTE_FUSE_SINGLE_THREAD=1` to force the legacy single-threaded loop when
 | FUSE Operation | Behavior |
 |----------------|----------|
 | `getattr` | Sentinel tags → directories; regular tags → files; prefix matches → implicit directories |
-| `readdir` | Lists direct child tags, implicit subdirectories, and explicit empty directories (sentinel tags) |
+| `readdir` | Lists direct child tags, implicit subdirectories, and explicit empty directories (sentinel tags). Seekable, in chunks of about 8,192 entries; see [Directory offsets](#directory-offsets) |
+| `opendir` / `releasedir` | Allocate / free the per-open listing state (the current chunk) |
 | `create` | Creates a new CTE tag with `AsyncGetOrCreateTag` |
 | `open` | Looks up existing tag |
 | `read` | Page-based `AsyncGetBlob` loop (1 MB pages) |
