@@ -237,7 +237,7 @@ Array of storage targets. At least one entry is required when CTE is enabled.
 | `bdev_type` | Yes | `"ram"`, `"hbm"` or `"pinned"` for memory-backed, `"file"` for filesystem-backed. |
 | `capacity_limit` | Yes | Maximum capacity (e.g., `"512MB"`, `"200GB"`). |
 | `score` | No | Placement priority (0.0–1.0). Higher = preferred. `-1.0` = automatic scoring. |
-| `persistence_level` | No | `"volatile"` (default), `"temporary"` or `"long_term"`. Memory bdevs can only be `"volatile"`. |
+| `persistence_level` | No | `"volatile"` (default), `"temporary"` or `"long_term"`. The device's durability label: it decides the core's class when `durability` is omitted, and a persistent core refuses a `"volatile"` device. `bdev_type` is not consulted. |
 
 Bdev pools are named `<core pool major + device index>.<1 + node>`, so two
 CTE cores on one runtime never share a device. Give every device its own
@@ -245,20 +245,29 @@ CTE cores on one runtime never share a device. Give every device its own
 
 ### Durability class (`durability`)
 
-A CTE core is **either entirely volatile or entirely persistent**. Moving
-data between the two is the job of a cache module above them (see
+Every CTE core is either volatile or persistent. Moving data between a
+volatile and a persistent core is the job of a cache module above them (see
 [Policy caches](#policy-cache-chimods-clio_cte_write_back_cache-clio_cte_write_thru_cache)),
 never of a core.
 
-| Value | Devices | Behavior |
-|-------|---------|----------|
-| `volatile` | every device `persistence_level: volatile` | No write-ahead log: `metadata_log_path` is ignored with a warning, and the core is empty after every start. A put may be refused when the core is full. |
-| `persistent` | every device `temporary` or `long_term` | WAL on (when `metadata_log_path` is set); a blob it accepts is durable. |
+| Value | Behavior |
+|-------|----------|
+| `volatile` | No write-ahead log (`metadata_log_path` is unused while volatile), and the core is empty after every start. A put may be refused when the core is full. |
+| `persistent` | WAL on (when `metadata_log_path` is set); a blob it accepts is durable. Refuses volatile devices. |
+| omitted | Inferred when the core is created: `persistent` if every device has `persistence_level` `temporary` or `long_term`, otherwise `volatile` (a device without `persistence_level` is volatile). |
 
-`durability` is optional; when omitted it is inferred from the devices. A
-core whose devices mix `volatile` with `temporary`/`long_term`, or whose
-stated `durability` contradicts a device, fails to start with an error naming
-the device.
+Each device is checked as it registers, at create time or later through
+`RegisterTarget` (which carries the device's `persistence_level`):
+
+- a volatile device in a persistent core is refused with return code 16
+  (`kCteVolatileTargetRc`); the core runs without it;
+- a persistent device in a volatile core is accepted with a warning: its data
+  does not survive a restart.
+
+`Client::AsyncSetDurability` switches a running core between the two classes
+until its next restart. Switching to `persistent` is refused (code 16) while
+a volatile device is registered; otherwise the WAL opens and a full metadata
+snapshot is written. Switching to `volatile` stops the WAL.
 
 ```yaml
 storage:
