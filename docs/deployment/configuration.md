@@ -391,6 +391,44 @@ to start the filesystem pool, so recreate the volume to change it. Volumes
 written by clio-fs releases before the inode table cannot be opened and must
 be recreated.
 
+**Keeping metadata on the fastest tier.** By default every blob the
+filesystem writes -- directory blocks, xattrs and file data pages alike -- is
+placed with the same score (1.0 for a new blob), so the placement engine
+cannot tell them apart: bulk file data fills the fastest target first, and
+directory blocks and small files written later land on a slower one. Setting
+`data_score` separates them. File data pages are then written with that
+score, while metadata and the first `data_score_head_pages` pages of every
+file (1 MiB each) keep the default. Pair it with a storage list that has a
+small target above the data score and a bulk target at it:
+
+```yaml
+storage:
+  - path: "ram::cte_ram_meta"   # metadata and the first MiB of each file
+    bdev_type: "ram"
+    capacity_limit: "2GB"
+    score: 1.0
+  - path: "ram::cte_ram_data"   # bulk file data
+    bdev_type: "ram"
+    capacity_limit: "32GB"
+    score: 0.9
+  - path: "/mnt/slow/cte_tier.dat"
+    bdev_type: "file"
+    capacity_limit: "500GB"
+    score: 0.6
+# ...and in the clio_cte_filesystem entry:
+#   data_score: 0.9
+```
+
+The trade-off: metadata and file heads share the small target, and its size
+is a guess about the workload. When it fills they spill to the next tier down
+(here the bulk DRAM target, then the slow tier), exactly as all data does
+without the setting; bulk data only uses the small target once every tier at
+or below its score is full. The score applies when a page's bytes are
+allocated. Rewriting a page that already exists does not move it, so changing
+`data_score` on a live volume affects new pages only. The FUSE adapter writes
+pages itself and reads both settings from the filesystem pool at mount; they
+are not environment variables.
+
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `next_pool_id` | — | Pool the page blobs go through, usually the top of the interposition chain (for example `561.0` for replication, or `512.0` for the bare core). |
@@ -398,6 +436,8 @@ be recreated.
 | `dir_split_entries` | `1024` | Rows a table block holds before it splits in two. Smaller values spread large directories over more nodes sooner. |
 | `dir_log_compact_bytes` | `256KB` | Bytes of appended changes a table block's CTE blob may hold past its last full image before the next commit rewrites the blob whole. Larger values cut image rewrites and make each reload replay more deltas; `0` rewrites the whole block on every commit (the earlier behaviour, useful for an A/B comparison). |
 | `case_insensitive` | `false` | Compare names case-insensitively while keeping their spelling, as NTFS does. Fixed for the life of the volume. |
+| `data_score` | `-1.0` | Placement score for file data pages. `-1.0` (off) places file data with the same default score as metadata. A value in `(0, 1]` places data pages with that score; any other value is ignored. See "Keeping metadata on the fastest tier" above. |
+| `data_score_head_pages` | `1` | Leading 1 MiB pages of each file that keep the default score when `data_score` is set, so small files and file heads stay with the metadata. `0` gives every page `data_score`. |
 | `stream_pool_id` | `"565.0"` | Stream pool that holds every file's size and merges deferred appends (see below). Created with defaults if not composed. |
 
 ---
