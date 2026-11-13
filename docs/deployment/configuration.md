@@ -234,9 +234,31 @@ Array of storage targets. At least one entry is required when CTE is enabled.
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `path` | Yes | `ram::<name>` for DRAM storage, or a filesystem path for disk. |
-| `bdev_type` | Yes | `"ram"` for memory-backed, `"file"` for filesystem-backed. |
+| `bdev_type` | Yes | `"ram"`, `"hbm"` or `"pinned"` for memory-backed, `"file"` for filesystem-backed. |
 | `capacity_limit` | Yes | Maximum capacity (e.g., `"512MB"`, `"200GB"`). |
 | `score` | No | Placement priority (0.0–1.0). Higher = preferred. `-1.0` = automatic scoring. |
+| `persistence_level` | No | `"volatile"` (default), `"temporary"` or `"long_term"`. Memory bdevs can only be `"volatile"`. |
+
+Bdev pools are named `<core pool major + device index>.<1 + node>`, so two
+CTE cores on one runtime never share a device. Give every device its own
+`path`.
+
+### Durability class (`durability`)
+
+A CTE core is **either entirely volatile or entirely persistent**. Moving
+data between the two is the job of a cache module above them (see
+[Policy caches](#policy-cache-chimods-clio_cte_write_back_cache-clio_cte_write_thru_cache)),
+never of a core.
+
+| Value | Devices | Behavior |
+|-------|---------|----------|
+| `volatile` | every device `persistence_level: volatile` | No write-ahead log: `metadata_log_path` is ignored with a warning, and the core is empty after every start. A put may be refused when the core is full. |
+| `persistent` | every device `temporary` or `long_term` | WAL on (when `metadata_log_path` is set); a blob it accepts is durable. |
+
+`durability` is optional; when omitted it is inferred from the devices. A
+core whose devices mix `volatile` with `temporary`/`long_term`, or whose
+stated `durability` contradicts a device, fails to start with an error naming
+the device.
 
 ```yaml
 storage:
@@ -285,10 +307,56 @@ All fields are optional and override compile-time defaults.
 | `score_threshold` | `0.7` | Score above which blobs are reorganized. |
 | `score_difference_threshold` | `0.05` | Min score delta to trigger reorganization. |
 | `flush_metadata_period_ms` | `5000` | Metadata flush interval (ms). Each period syncs the metadata write-ahead log, which is what makes metadata changes durable. The full metadata snapshot (a pass over every blob) is rebuilt only when the log grows past `transaction_log_capacity` and must be compacted, or at most once a minute to persist blob score changes the log does not record. |
-| `flush_data_period_ms` | `10000` | Data flush interval (ms). |
-| `flush_data_min_persistence` | `1` | Min persistence level (1 = temp-nonvolatile). |
 | `transaction_log_capacity` | `"32MB"` | Write-ahead log capacity. |
-| `fsync_mode` | `"durable"` | What `fsync(2)` on clio-fs guarantees. `"durable"`: it returns once the file's bytes sit on a tier at `flush_data_min_persistence` or above (moving them off RAM first) and are synced to the device, together with the metadata WAL and the namespace log, so they survive power loss. `"deferred"`: it returns at once and the periodic flushes make the data durable, so a crash can lose up to `flush_data_period_ms` of fsync'd data. `fsync` on a directory syncs the namespace log (creates, renames and unlinks). A graceful `clio_run stop` also moves RAM-tier data to a persistent tier before exiting, bounded by `--grace-period`; a crash or power loss keeps only what was fsync'd or already flushed. |
+| `fsync_mode` | `"durable"` | What `fsync(2)` on clio-fs guarantees. `"durable"`: it returns once the write-back cache has flushed the file's dirty copies to the persistent core and the devices holding its bytes are synced, together with the metadata WAL and the namespace log, so they survive power loss. `"deferred"`: it returns at once and the cache's periodic flush makes the data durable, so a crash can lose up to `flush_period_ms` of fsync'd data. `fsync` on a directory syncs the namespace log (creates, renames and unlinks). A graceful `clio_run stop` makes the write-back cache flush every dirty copy before exiting, bounded by `--grace-period`; a crash or power loss keeps only what was fsync'd or already flushed. |
+
+The core no longer moves data between tiers of different durability, so
+`flush_data_period_ms` and `flush_data_min_persistence` are gone; they are
+ignored with a warning. Use the write-back cache's `flush_period_ms`.
+
+---
+
+## Policy Cache ChiMods (`clio_cte_write_back_cache`, `clio_cte_write_thru_cache`)
+
+A policy cache sits over two disconnected CTE cores: a volatile core and a
+persistent chain (usually replication over the persistent core). It speaks
+the CTE core's task interface, so clients and the filesystem point at it (or
+at a module above it) like any other chain pool. It owns every durability
+decision: which blobs have a copy in the volatile core, which copies are
+dirty, when to flush, and what to evict. Eviction is an ordinary `DelBlob`
+on the volatile core; a dirty copy is always flushed first.
+
+| Policy | Put | Get |
+|--------|-----|-----|
+| `clio_cte_write_back_cache` | Lands in the volatile core and is acked; the copy is dirty until flushed. A partial write to a blob the cache does not hold goes straight to persistent. | Volatile copy when present, else persistent (then filled per `fill`). |
+| `clio_cte_write_thru_cache` | Persistent first; the ack follows it. A copy, if present, is updated in place; a whole-blob put creates one. | Same. |
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `next_volatile` | required | Pool id of the volatile core (e.g. `"540.0"`). |
+| `next_persistent` | none | Pool id of the persistent chain (e.g. `"561.0"`). Omit for a volatile-only deployment: everything then lives in the volatile core. |
+| `fill` | `on_read_miss` | When a read miss copies the blob into the volatile core: `on_read_miss`, `on_hit_count:N` (the Nth miss), or `none`. |
+| `evict` | `lru` | Which copies go first when the volatile core is full: `lru` or `lfu`. |
+| `flush_period_ms` | `10000` | Write-back only: how often every dirty copy is flushed to persistent. `0` = only on `fsync`/`FlushData`/eviction/stop. |
+| `fallback_to_persistent` | `true` | Write-back only: when the volatile core refuses a put even after eviction, write it straight to persistent. `false` fails the put with ENOSPC (`kPutNoSpaceRc`). |
+
+Dirty copies are also flushed on `fsync` (`SyncTag`), on `FlushData`, before
+they are evicted, and when the runtime stops (bounded by `--grace-period`).
+
+```yaml
+  - mod_name: clio_cte_write_back_cache
+    pool_name: clio_cte_write_back_cache
+    pool_query: local
+    pool_id: "567.0"
+    next_volatile: "540.0"
+    next_persistent: "561.0"
+    fill: on_read_miss
+    evict: lru
+    flush_period_ms: 10000
+    fallback_to_persistent: true
+```
+
+Compose the cache after both pools it names.
 
 ---
 
@@ -324,8 +392,17 @@ stream sizes live in those modules' own state and are not yet covered.
 
 ## Filesystem ChiMod Parameters (`clio_cte_filesystem`)
 
-The filesystem ChiMod (pool `560.0`) is the POSIX layer the FUSE, POSIX and
-STDIO adapters drive. Its namespace is stored in the CTE and cached by every
+The filesystem ChiMod (pool `560.0` in the stock config) is the POSIX layer
+the FUSE, POSIX and STDIO adapters drive.
+
+**clio-fs assumes no pool id.** Clients and adapters find the filesystem
+pool by its `pool_name` (`clio_cte_filesystem` by default; set
+`CLIO_CFS_POOL` to another name, or to a `major.minor` id), and learn the
+data chain (`next_pool_id`) and stream pool (`stream_pool_id`) from that
+pool's config. Every CTE call they make -- page I/O, `fsync`, `statfs` --
+goes through that chain, so a write-back cache in it flushes on `fsync`.
+Clients create no pools: compose the filesystem pool (and the pools it
+names) in the server config. Its namespace is stored in the CTE and cached by every
 node; there is no metadata server. It has two parts:
 
 - The **inode table** maps names to inodes. It is keyed by (parent directory,
@@ -365,17 +442,18 @@ be recreated.
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `next_pool_id` | — | Pool the page blobs go through, usually the top of the interposition chain (for example `561.0` for replication, or `512.0` for the bare core). |
+| `next_pool_id` | required | Pool the page blobs go through, usually the top of the interposition chain (for example the indexer, a write-back cache, replication, or a bare core). The pool fails to start without it. |
 | `metadata_log_path` | unset | Base path for this node's metadata: `<path>.dirs.<container>` journals the table blocks this node is home for, and `<path>.stream` is the stream log (file sizes and pending appends). Unset, table blocks are stored as CTE blobs instead. Keep it on node-local storage, never on shared NFS. |
 | `dir_split_entries` | `1024` | Rows a table block holds before it splits in two. Smaller values spread large directories over more nodes sooner. |
 | `case_insensitive` | `false` | Compare names case-insensitively while keeping their spelling, as NTFS does. Fixed for the life of the volume. |
-| `stream_pool_id` | `"565.0"` | Stream pool that holds every file's size and merges deferred appends (see below). Created with defaults if not composed. |
+| `stream_pool_id` | unset | Stream pool that holds every file's size and merges deferred appends (see below). Unset, the filesystem creates its own, named `<pool_name>_stream`, at the id one minor above its own pool id, over `next_pool_id`. |
 
 ---
 
 ## Stream ChiMod Parameters (`clio_cte_stream`)
 
-The stream ChiMod (pool `565.0`) turns a CTE tag into a byte stream. It owns
+The stream ChiMod (pool `565.0` in the stock config; it has no fixed id)
+turns a CTE tag into a byte stream. It owns
 the stream's page layout (1 MiB page blobs named by page index), its logical
 size, and **deferred appends**:
 
@@ -398,7 +476,7 @@ the single-node default) to override.
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `next_pool_id` | `"512.0"` | Pool staged and merged bytes go through, usually the top of the interposition chain. |
+| `next_pool_id` | required | Pool staged and merged bytes go through, usually the top of the interposition chain. |
 | `staging_pool_id` | `next_pool_id` | Pool staged (not yet merged) appends are written to. They are written once and read at most once, after a restart, so point it below any cache (for example `561.0`). |
 | `log_path` | unset | Node-local log of the sizes, merge plans and merged-append names of the streams this node homes. The container id is appended. Without it, file sizes do not survive a stop and `clio_run start`. |
 
@@ -464,6 +542,9 @@ compose:
 
 ### Multi-Tier RAM + NVMe + HDD
 
+A volatile core (RAM) and a persistent core (NVMe + HDD) behind a write-back
+cache. Point clients at the cache (`CLIO_CTE_POOL=567.0`).
+
 ```yaml
 networking:
   port: 9413
@@ -484,25 +565,44 @@ compose:
     pool_name: cte_main
     pool_query: local
     pool_id: "512.0"
+    durability: persistent
     storage:
-      - path: "ram::cte_cache"
-        bdev_type: ram
-        capacity_limit: 512MB
-        score: 1.0
       - path: /mnt/nvme/cte
         bdev_type: file
         capacity_limit: 200GB
         score: 0.9
+        persistence_level: temporary
       - path: /mnt/hdd/cte
         bdev_type: file
         capacity_limit: 2TB
         score: 0.3
+        persistence_level: long_term
+    performance:
+      metadata_log_path: /mnt/nvme/cte_metadata_log
     dpe:
       dpe_type: max_bw
     targets:
       neighborhood: 1
       default_target_timeout_ms: 30000
       poll_period_ms: 5000
+
+  - mod_name: wrp_cte_core
+    pool_name: cte_volatile
+    pool_query: local
+    pool_id: "540.0"
+    durability: volatile
+    storage:
+      - path: "ram::cte_cache"
+        bdev_type: ram
+        capacity_limit: 512MB
+        score: 1.0
+
+  - mod_name: clio_cte_write_back_cache
+    pool_name: clio_cte_write_back_cache
+    pool_query: local
+    pool_id: "567.0"
+    next_volatile: "540.0"
+    next_persistent: "512.0"
 ```
 
 ### Multi-Node Cluster (4 nodes)
