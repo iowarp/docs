@@ -347,6 +347,27 @@ for read-heavy workloads that re-read remote data locally.
 
 ---
 
+## Persistent-Tier Cache Parameters (`clio_cte_core_persist_write_back`, `clio_cte_core_persist_write_thru`)
+
+A policy cache over a volatile CTE core (`next_volatile`) and a persistent
+chain (`next_persistent`). Write-back acknowledges a put once it is in the
+volatile core and flushes it later; write-through acknowledges after the
+persistent write.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `next_volatile` | pool id | required | The volatile core that holds the cached copies. |
+| `next_persistent` | pool id | none | The persistent chain; omit for a volatile-only cache. |
+| `fill` | string | `on_hit_count:2` | When a read miss copies a blob in: `on_hit_count:N`, `on_read_miss` or `none`. |
+| `evict` | string | `lru` | `lru` or `lfu`. |
+| `flush_period_ms` | int | 10000 | Write-back: period of the flush of every dirty copy; 0 = no periodic flush. |
+| `flush_fill_pct` | int | 80 | Write-back: also start a flush as soon as the volatile core is at least this full (percent of its capacity) and holds unflushed data; 0 = timer only. Flushed copies stay cached but are clean, and clean copies are what a full cache drops to keep absorbing writes. |
+| `flush_dirty_mb` | int | 256 | Write-back: continuous flushing. Start a flush whenever this many MiB of new dirty data were written since the last one started, so flushing keeps pace with the writes and an `fsync` finds little left to do; 0 = off. |
+| `fallback_to_persistent` | bool | true | Write-back: when the volatile core cannot hold a put even after dropping clean copies, write it straight to persistent (`true`) or fail it with ENOSPC (`false`). |
+
+Dirty copies are also flushed on `fsync` of their file (on every node) and at
+a graceful stop.
+
 ## Filesystem Module Parameters (`clio_cte_filesystem`)
 
 The filesystem Module (pool `560.0`) is the POSIX layer the FUSE, POSIX and
