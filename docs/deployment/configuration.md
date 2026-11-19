@@ -118,6 +118,7 @@ Log routing:
 | `conf_dir` | `/tmp/clio` | Directory for persistent runtime state written by the daemon. |
 | `main_segment_size` | `0` (auto) | Size of the main task-data segment (`Future` + task payload allocations). Accepts a byte count or a size string (`"512m"`, `"1g"`). Overridden by `CLIO_MAIN_SEGMENT_SIZE`. |
 | `metadata_segment_size` | `0` (auto) | Size of the runtime-wide metadata segment backing CTE's shared-memory tag/blob maps. Auto default is the host's RAM capacity; the reservation is lazy, so only touched pages cost anything. |
+| `client_data_segment_size` | `512m` | Size of each client process's first data segment (`clio_<pid>_0`, plus 32 MB of allocator metadata). More segments are added when it fills, so desktop embeddings can start small. Byte count or size string; `0` restores the default. Overridden by `CLIO_CLIENT_DATA_SEGMENT_SIZE`. |
 
 ```yaml
 runtime:
@@ -129,6 +130,7 @@ runtime:
   # task_progress_interval_ms: 5000
   # main_segment_size: "1g"
   # metadata_segment_size: "8g"
+  # client_data_segment_size: "256m"
 ```
 
 **Recommendation**: Set `num_threads` to the number of CPU cores on the node.
@@ -894,9 +896,10 @@ concerns). The old `CHI_` prefix is **no longer recognized** — see
 | `CLIO_EPHEMERAL` | `0` | `1` starts the runtime **bare** — the `compose` section is skipped and pools are created explicitly. Equivalent to `clio_run start --ephemeral`. |
 | `CLIO_NUM_THREADS` | *(from YAML)* | Worker-thread count. Last word after the config file — useful for forcing a single worker to test whether a failure depends on cross-thread task migration. |
 | `CLIO_MAIN_SEGMENT_SIZE` | *(auto)* | Bounds the main task-data segment. Byte count or size string (`"512m"`); `0` restores the auto default. |
+| `CLIO_CLIENT_DATA_SEGMENT_SIZE` | `512m` | Size of each client's first data segment. Byte count or size string; `0` restores the default. |
 | `CLIO_TASK_PROGRESS_INTERVAL_MS` | `5000` | Cross-node task-validity check interval. |
 | `CLIO_REPO_PATH` | *(none)* | Where the runtime looks for ChiMod shared libraries. |
-| `CLIO_MEMFD_DIR` | `/tmp/clio_$USER` | Per-user directory holding the shared-memory segment files. |
+| `CLIO_MEMFD_DIR` | `/tmp/clio_$USER` | Per-user directory holding the shared-memory segment files and the local IPC socket. Keep it short: a Unix-domain socket path is limited to about 107 bytes, and a longer one now fails to bind instead of being truncated. On Windows a verbatim path (`\\?\C:\...`) is accepted and normalized. |
 
 ### Client and transport
 
