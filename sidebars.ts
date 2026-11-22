@@ -26,6 +26,7 @@ const sidebars: SidebarsConfig = {
       items: [
         'deployment/configuration',
         'deployment/adapter',
+        'deployment/s3',
         'deployment/hpc-cluster',
         'deployment/deltaai',
         'deployment/performance',

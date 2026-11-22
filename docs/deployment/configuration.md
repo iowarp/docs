@@ -149,7 +149,7 @@ Block devices provide the shared memory allocator used by other modules. At leas
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `bdev_type` | Yes | `"ram"` for DRAM-backed, `"file"` for filesystem-backed. |
+| `bdev_type` | Yes | `"ram"` for DRAM-backed, `"file"` for filesystem-backed, `"s3"` for an Amazon S3 bucket (see [Amazon S3 Storage](./s3.md)). |
 | `capacity` | Yes | Maximum capacity (e.g., `"512MB"`, `"100GB"`). |
 
 ```yaml
@@ -183,8 +183,8 @@ Array of storage targets. At least one entry is required when CTE is enabled.
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `path` | Yes | `ram::<name>` for DRAM storage, or a filesystem path for disk. |
-| `bdev_type` | Yes | `"ram"` for memory-backed, `"file"` for filesystem-backed. |
+| `path` | Yes | `ram::<name>` for DRAM storage, a filesystem path for disk, or `s3://<bucket>/<prefix>` for S3. |
+| `bdev_type` | Yes | `"ram"` for memory-backed, `"file"` for filesystem-backed, `"s3"` for an Amazon S3 bucket (see [Amazon S3 Storage](./s3.md)). |
 | `capacity_limit` | Yes | Maximum capacity (e.g., `"512MB"`, `"200GB"`). |
 | `score` | No | Placement priority (0.0–1.0). Higher = preferred. `-1.0` = automatic scoring. |
 
