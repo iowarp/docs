@@ -69,7 +69,12 @@ const sidebars: SidebarsConfig = {
       ],
     },
     'faq',
-    'tutorials',
+    {
+      type: 'category',
+      label: 'Tutorials',
+      link: {type: 'doc', id: 'tutorials'},
+      items: ['tutorials/persistent-clio-fs'],
+    },
     'deprecation-notes',
   ],
 };

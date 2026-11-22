@@ -8,6 +8,14 @@ description: Step-by-step tutorials for using IOWarp in scientific computing wor
 
 Step-by-step guides for using IOWarp in scientific computing workflows.
 
+## Available Tutorials
+
+- [Persistent clio-fs on Delta: volatile + persistent CTE](./tutorials/persistent-clio-fs) —
+  RAM and node-local NVMe as volatile tiers, the SSD and HDD Lustre
+  filesystems as persistent tiers; keep the filesystem after the Slurm job
+  ends and open it again on one node through FUSE, the POSIX adapter or the
+  C++ API.
+
 :::info Coming Soon
 Tutorials are being developed. Check back soon for:
 
